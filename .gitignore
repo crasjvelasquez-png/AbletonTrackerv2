@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# macOS app bundle (compiled output — don't commit this)
+*.app
+
+# Logs
+*.log
+
+# Claude tool settings
+.claude/
+
+# Placeholder files
+.does-not-exist
