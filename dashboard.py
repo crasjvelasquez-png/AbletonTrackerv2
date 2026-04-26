@@ -911,13 +911,23 @@ header{
   font-size:13px;color:var(--ink-4);margin-top:10px;
 }
 
-.chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px}
+.chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
 .chart-card{
   border-radius:var(--radius);
   padding:24px 26px 20px;
 }
 .chart-card-wide{margin-bottom:28px}
 .chart-wrap{position:relative;min-height:240px}
+.target-stack{
+  display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;
+  align-self:stretch;
+}
+.target-card{
+  display:grid;grid-template-rows:auto 1fr;
+}
+.target-card .chart-wrap{
+  min-height:0;height:100%;
+}
 .chart-empty{
   height:240px;display:flex;align-items:center;justify-content:center;
   color:var(--ink-4);font-size:13px;
@@ -1113,6 +1123,55 @@ header{
 .goal-stat-value{
   margin-top:6px;font-family:var(--font-display);font-size:22px;
   font-weight:670;color:var(--ink);letter-spacing:-.04em;
+}
+.target-card .goal-shell{
+  grid-template-columns:minmax(128px,154px) minmax(0,1fr);
+  align-items:center;gap:14px 16px;
+}
+.target-card .goal-range{
+  grid-column:1 / -1;
+}
+.target-card .goal-ring{
+  width:min(154px,100%);
+  padding:12px;
+}
+.target-card .goal-ring-core{
+  padding:14px;
+}
+.target-card .goal-value{
+  font-size:28px;
+}
+.target-card .goal-value small{
+  display:block;
+  margin-top:4px;
+}
+.target-card .goal-status{
+  font-size:11px;
+}
+.target-card .goal-controls{
+  gap:10px;
+}
+.target-card .goal-input-wrap{
+  padding:8px 10px;
+}
+.target-card .goal-input{
+  width:56px;
+  font-size:21px;
+}
+.target-card .goal-presets{
+  gap:6px;
+}
+.target-card .goal-chip{
+  padding:7px 10px;
+}
+.target-card .goal-summary{
+  gap:8px;
+}
+.target-card .goal-stat{
+  padding:10px 12px;
+}
+.target-card .goal-stat-value{
+  font-size:18px;
 }
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
@@ -1570,6 +1629,8 @@ tbody tr:hover .row-del{opacity:1}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
   .goal-input-row{grid-template-columns:1fr}
+  .target-card .goal-shell{grid-template-columns:1fr}
+  .target-card .goal-ring{width:min(200px,100%)}
 }
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
@@ -1684,7 +1745,8 @@ const PROJECT_COLORS = [
 ];
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
-const GOAL_STORAGE_KEY = 'ableton_tracker_weekly_goal_hours';
+const WEEKLY_GOAL_STORAGE_KEY = 'ableton_tracker_weekly_goal_hours';
+const DAILY_GOAL_STORAGE_KEY = 'ableton_tracker_daily_goal_hours';
 const THEME_STORAGE_KEY = 'ableton_tracker_theme';
 const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
 const CATEGORY_COLOR_PRESETS = [
@@ -2049,13 +2111,13 @@ function heatmapGlowColor(value, maxValue) {
   ], Math.pow(value / Math.max(maxValue, 1), 1.5)), 0.52);
 }
 
-function getStoredGoalHours() {
-  const raw = Number(localStorage.getItem(GOAL_STORAGE_KEY));
-  return Number.isFinite(raw) && raw > 0 ? raw : 12;
+function getStoredGoalHours(storageKey, fallbackHours) {
+  const raw = Number(localStorage.getItem(storageKey));
+  return Number.isFinite(raw) && raw > 0 ? raw : fallbackHours;
 }
 
-function setStoredGoalHours(hours) {
-  localStorage.setItem(GOAL_STORAGE_KEY, String(hours));
+function setStoredGoalHours(storageKey, hours) {
+  localStorage.setItem(storageKey, String(hours));
 }
 
 // ── Toast ──
@@ -2580,12 +2642,21 @@ function render(data) {
         </div>
         <div class="chart-wrap"><div id="activityHeatmap"></div></div>
       </div>
-      <div class="chart-card">
-        <div class="section-head">
-          <h3 class="section-title">Weekly <em>target</em></h3>
-          <span class="section-meta">set your hours goal</span>
+      <div class="target-stack">
+        <div class="chart-card target-card">
+          <div class="section-head">
+            <h3 class="section-title">Weekly <em>target</em></h3>
+            <span class="section-meta">set your hours goal</span>
+          </div>
+          <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
         </div>
-        <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
+        <div class="chart-card target-card">
+          <div class="section-head">
+            <h3 class="section-title">Daily <em>target</em></h3>
+            <span class="section-meta">shape today’s session</span>
+          </div>
+          <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
+        </div>
       </div>
     </div>
 
@@ -2714,6 +2785,7 @@ function render(data) {
 
   renderActivityHeatmap(year_daily, year_hourly);
   renderWeeklyGoal(summary);
+  renderDailyGoal(summary);
   renderProjectChart(projects);
   renderCategoryChart(projects);
 }
@@ -2902,13 +2974,20 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
   renderWeek();
 }
 
-function renderWeeklyGoal(summary) {
-  const mount = document.getElementById('weeklyGoalCard');
+function renderGoalCard({
+  mountId,
+  storageKey,
+  fallbackGoalHours,
+  completedSeconds,
+  rangeLabel,
+  goalLabel,
+  helperLabel,
+  presets,
+}) {
+  const mount = document.getElementById(mountId);
   if (!mount) return;
 
-  const presets = [5, 10, 15, 20];
-  const completedHours = Math.round(((summary.week_seconds || 0) / 3600) * 10) / 10;
-  const weekLabel = shortRange(summary.goal_week_start, summary.goal_week_end);
+  const completedHours = Math.round(((completedSeconds || 0) / 3600) * 10) / 10;
 
   function paint(goalHours) {
     const safeGoalHours = clamp(Math.round(goalHours * 10) / 10, 1, 100);
@@ -2924,7 +3003,7 @@ function renderWeeklyGoal(summary) {
 
     mount.innerHTML = `
       <div class="goal-shell">
-        <div class="goal-range">${weekLabel} · resets Friday</div>
+        <div class="goal-range">${rangeLabel}</div>
         <div class="goal-ring-wrap">
           <div class="goal-ring" style="background:${ringBackground}">
             <div class="goal-ring-core">
@@ -2940,12 +3019,12 @@ function renderWeeklyGoal(summary) {
         </div>
         <div class="goal-controls">
           <div class="goal-input-row">
-            <label class="goal-label" for="goalHoursInput">
-              <span>Weekly goal</span>
-              <span>Saved locally in this browser.</span>
+            <label class="goal-label" for="${mountId}Input">
+              <span>${goalLabel}</span>
+              <span>${helperLabel}</span>
             </label>
             <div class="goal-input-wrap">
-              <input class="goal-input" id="goalHoursInput" type="number" min="1" max="100" step="0.5" value="${safeGoalHours}">
+              <input class="goal-input" id="${mountId}Input" type="number" min="1" max="100" step="0.5" value="${safeGoalHours}">
               <span class="goal-unit">hours</span>
             </div>
           </div>
@@ -2968,11 +3047,11 @@ function renderWeeklyGoal(summary) {
       </div>
     `;
 
-    const input = mount.querySelector('#goalHoursInput');
+    const input = mount.querySelector(`#${mountId}Input`);
     if (input) {
       const commit = () => {
         const nextValue = clamp(Number(input.value) || safeGoalHours, 1, 100);
-        setStoredGoalHours(nextValue);
+        setStoredGoalHours(storageKey, nextValue);
         paint(nextValue);
       };
       input.addEventListener('change', commit);
@@ -2984,13 +3063,44 @@ function renderWeeklyGoal(summary) {
     mount.querySelectorAll('[data-goal-hours]').forEach(button => {
       button.addEventListener('click', () => {
         const nextValue = Number(button.dataset.goalHours);
-        setStoredGoalHours(nextValue);
+        setStoredGoalHours(storageKey, nextValue);
         paint(nextValue);
       });
     });
   }
 
-  paint(getStoredGoalHours());
+  paint(getStoredGoalHours(storageKey, fallbackGoalHours));
+}
+
+function renderWeeklyGoal(summary) {
+  renderGoalCard({
+    mountId: 'weeklyGoalCard',
+    storageKey: WEEKLY_GOAL_STORAGE_KEY,
+    fallbackGoalHours: 12,
+    completedSeconds: summary.week_seconds || 0,
+    rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets Friday`,
+    goalLabel: 'Weekly goal',
+    helperLabel: 'Saved locally in this browser.',
+    presets: [5, 10, 15, 20],
+  });
+}
+
+function renderDailyGoal(summary) {
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+  renderGoalCard({
+    mountId: 'dailyGoalCard',
+    storageKey: DAILY_GOAL_STORAGE_KEY,
+    fallbackGoalHours: 3,
+    completedSeconds: summary.today_seconds || 0,
+    rangeLabel: `${todayLabel} · resets tomorrow`,
+    goalLabel: 'Daily goal',
+    helperLabel: 'Saved locally in this browser.',
+    presets: [1, 2, 3, 5],
+  });
 }
 
 function renderProjectChart(projects) {
