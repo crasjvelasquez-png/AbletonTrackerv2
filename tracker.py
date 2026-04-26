@@ -345,6 +345,8 @@ def _parse_audio_level_probe(output: str) -> bool | None:
             return True
         if parts[0] == "quiet":
             return False
+        if parts[0] == "unavailable":
+            return None
     return None
 
 
@@ -433,7 +435,9 @@ try await Task.sleep(nanoseconds: UInt64({AUDIO_LEVEL_POLL_SECONDS} * 1_000_000_
 try await stream.stopCapture()
 
 let rms = probe.sampleCount > 0 ? sqrt(probe.sumOfSquares / Double(probe.sampleCount)) : 0
-if rms >= Double({AUDIO_LEVEL_ACTIVE_THRESHOLD}) {{
+if probe.sampleCount == 0 {{
+    print("unavailable samples=0")
+}} else if rms >= Double({AUDIO_LEVEL_ACTIVE_THRESHOLD}) {{
     print("active rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
 }} else {{
     print("quiet rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
@@ -482,30 +486,34 @@ if rms >= Double({AUDIO_LEVEL_ACTIVE_THRESHOLD}) {{
         )
         _set_audio_probe_error(error)
         return None
-    parsed = _parse_audio_level_probe(r.stdout)
-    if parsed is None:
-        _set_audio_probe_error("no audio level result")
-        return None
-    _set_audio_probe_error(None)
     raw_line = next(
         (line.strip() for line in (r.stdout or "").splitlines() if line.strip()),
         "",
     )
+    parsed = _parse_audio_level_probe(r.stdout)
+    if parsed is None:
+        if raw_line.startswith("unavailable"):
+            _set_audio_probe_error(raw_line)
+        else:
+            _set_audio_probe_error("no audio level result")
+        return None
+    _set_audio_probe_error(None)
     if raw_line:
         print(f"[{_ts()}] audio probe: {raw_line}")
     return parsed
 
 
-def is_audio_active() -> bool:
-    """True when audible output is present while Ableton Live is open."""
+def is_audio_active() -> bool | None:
+    """True when audible output is present while Ableton Live is open.
+
+    Returns None when the audio probe ran but could not produce a reliable
+    signal. That is different from quiet: treating an unavailable probe as
+    silence can falsely pause long passive listens.
+    """
     if _live_pid() is None:
         return False
 
-    level_active = _system_audio_level_active()
-    if level_active is not None:
-        return level_active
-
-    return False
+    return _system_audio_level_active()
 
 
 _last_title_error = None
@@ -819,15 +827,18 @@ class Tracker:
             or self.last_state == STATE_IDLE_PAUSED
         )
         if should_check_audio:
-            self.last_audio_is_active = is_audio_active()
-            if self.last_audio_is_active:
+            audio_active = is_audio_active()
+            audio_known = audio_active is not None
+            self.last_audio_is_active = audio_active is True
+            if audio_active is True:
                 self.last_audio_active = now
         else:
+            audio_known = True
             self.last_audio_is_active = False
         self.last_audio_idle = (
             now - self.last_audio_active if self.last_audio_active else float("inf")
         )
-        idle_paused = should_check_audio and (
+        idle_paused = should_check_audio and audio_known and (
             self.last_hid_idle >= IDLE_THRESHOLD
             and self.last_audio_idle >= IDLE_THRESHOLD
         )
@@ -836,9 +847,12 @@ class Tracker:
                 "inf" if self.last_audio_idle == float("inf")
                 else f"{int(self.last_audio_idle)}s"
             )
+            audio_label = (
+                str(self.last_audio_is_active) if audio_known else "unknown"
+            )
             print(
                 f"[{_ts()}] check  hid_idle={int(self.last_hid_idle)}s  "
-                f"audio_active={self.last_audio_is_active}  "
+                f"audio_active={audio_label}  "
                 f"audio_idle={audio_idle_label}  "
                 f"→ {'pause' if idle_paused else 'continue'}"
             )
