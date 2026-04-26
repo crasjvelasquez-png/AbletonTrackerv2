@@ -25,8 +25,10 @@ POLL_INTERVAL = 30  # seconds between checks
 IDLE_THRESHOLD = 30  # seconds of HID + audio idle before tracking pauses
 AUDIO_POLL_TIMEOUT = 3  # seconds before giving up on the audio probe subprocess
 AUDIO_LEVEL_POLL_SECONDS = 1.0
-# ~-40 dBFS — above noise floor / plugin residue, well below normal listening level.
-AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.01
+# -70 dBFS peak (≈0.000316 linear) — low enough to clear plugin white-noise
+# residue without missing real playback. RMS uses the same floor; the probe
+# treats audio as active when either peak or RMS crosses it.
+AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
@@ -451,7 +453,7 @@ try await stream.stopCapture()
 let rms = probe.sampleCount > 0 ? sqrt(probe.sumOfSquares / Double(probe.sampleCount)) : 0
 if probe.sampleCount == 0 {
     print("unavailable samples=0")
-} else if rms >= activeThreshold {
+} else if rms >= activeThreshold || Double(probe.peak) >= activeThreshold {
     print("active rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
 } else {
     print("quiet rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")

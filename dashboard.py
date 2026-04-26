@@ -784,7 +784,8 @@ body{
 header{
   position:sticky;top:0;z-index:20;
   background:var(--header-bg);
-  backdrop-filter:saturate(180%) blur(18px);
+  backdrop-filter:saturate(180%) 
+(18px);
   -webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--border);
   padding:0 36px;height:68px;
@@ -873,7 +874,7 @@ header{
 }
 .intro .sub span{color:var(--ink-2)}
 
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:28px}
 .card,
 .chart-card,
 .table-card{
@@ -912,6 +913,7 @@ header{
 }
 
 .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
+.rings-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px;align-items:stretch}
 .chart-card{
   border-radius:var(--radius);
   padding:24px 26px 20px;
@@ -999,9 +1001,10 @@ header{
   padding-top:38px;gap:1px;
 }
 .heatmap-yaxis-label{
-  height:13px;font-size:9px;line-height:13px;
-  text-align:right;padding-right:7px;
-  color:rgba(244,247,239,.5);white-space:nowrap;
+  height:13px;font-size:10px;line-height:13px;font-weight:600;
+  text-align:right;padding-right:7px;letter-spacing:.02em;
+  color:rgba(244,247,239,.92);white-space:nowrap;
+  text-shadow:0 1px 2px rgba(19,42,21,.45);
 }
 .heatmap-grid-body{
   flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;
@@ -1029,6 +1032,11 @@ header{
   display:flex;flex-direction:column;gap:0;
   overflow:hidden;border-radius:8px;
   isolation:isolate;
+  background-image:
+    linear-gradient(to right, rgba(244,247,239,.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244,247,239,.06) 1px, transparent 1px);
+  background-size:calc(100%/7) 100%, 100% calc(100%/24);
+  background-position:0 0, 0 0;
 }
 .heatmap-canvas{
   position:absolute;inset:0;
@@ -1048,46 +1056,71 @@ header{
 .heatmap-foot{
   font-size:12px;color:var(--ink-4);
 }
-.goal-shell{display:grid;gap:18px}
+.goal-shell{display:grid;gap:16px}
 .goal-range{
-  font-size:12px;color:var(--ink-4);
+  font-size:12px;color:var(--ink-4);font-weight:600;
 }
 .goal-ring-wrap{display:grid;place-items:center}
 .goal-ring{
   width:min(220px,100%);aspect-ratio:1;border-radius:50%;
-  padding:14px;position:relative;
-  box-shadow:0 18px 40px rgba(27,51,88,.10);
+  --goal-progress:0deg;
+  --goal-progress-mid:0deg;
+  --goal-progress-hot:0deg;
+  --goal-track:rgba(77,97,126,.14);
+  --goal-dial:conic-gradient(from -90deg, #ffe96d 0deg, #ffc246 var(--goal-progress-mid), #ff7a42 var(--goal-progress-hot), #ef3a38 var(--goal-progress), var(--goal-track) var(--goal-progress) 360deg);
+  padding:9px;position:relative;
+  background:var(--goal-dial);
+  box-shadow:0 18px 44px rgba(239,58,56,.13), 0 8px 24px rgba(255,194,70,.1);
+  isolation:isolate;
+}
+.goal-ring::before{
+  content:"";position:absolute;inset:-18px;border-radius:inherit;
+  background:var(--goal-dial);
+  filter:blur(24px);opacity:.34;z-index:-1;
+}
+.goal-ring::after{
+  content:"";position:absolute;inset:8px;border-radius:inherit;
+  background:linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,0) 42%);
+  opacity:.4;pointer-events:none;
+}
+.goal-ring.is-complete{
+  --goal-track:rgba(239,58,56,.18);
 }
 .goal-ring-core{
   width:100%;height:100%;border-radius:50%;
-  background:var(--control-inner);
+  background:color-mix(in srgb, var(--control-inner) 88%, transparent);
   border:1px solid var(--border);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  backdrop-filter:blur(18px) saturate(150%);
+  -webkit-backdrop-filter:blur(18px) saturate(150%);
+  display:flex;align-items:center;justify-content:center;
   text-align:center;padding:18px;
 }
 .goal-kicker{
-  font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-  color:var(--ink-4);font-weight:700;
+  display:none;
 }
 .goal-value{
-  margin-top:6px;
-  font-family:var(--font-display);font-size:34px;font-weight:690;
-  line-height:1;color:var(--ink);letter-spacing:-.05em;
+  font-family:var(--font-display);font-size:42px;font-weight:720;
+  line-height:1;color:var(--ink);letter-spacing:-.06em;
+  font-variant-numeric:tabular-nums;
 }
 .goal-value small{
-  font-family:var(--font-body);font-size:14px;font-weight:600;color:var(--ink-4);
+  font-family:var(--font-body);font-size:.5em;font-weight:750;color:var(--ink-3);
+  letter-spacing:-.04em;margin-left:1px;
 }
 .goal-status{
-  margin-top:7px;font-size:12px;color:var(--ink-3);line-height:1.4;
+  display:none;
 }
 .goal-controls{
-  display:grid;gap:12px;
+  display:grid;gap:10px;
 }
 .goal-input-row{
-  display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;
+  display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
 }
 .goal-label{
-  display:grid;gap:6px;font-size:12px;color:var(--ink-4);
+  display:grid;gap:4px;font-size:12px;color:var(--ink-4);
+}
+.goal-label strong{
+  font-size:13px;color:var(--ink-2);font-weight:700;
 }
 .goal-input-wrap{
   display:inline-flex;align-items:center;gap:8px;
@@ -1106,50 +1139,39 @@ header{
 .goal-presets{display:flex;gap:8px;flex-wrap:wrap}
 .goal-chip{
   border:none;border-radius:999px;padding:8px 12px;cursor:pointer;
-  background:rgba(0,122,255,.08);color:var(--ink-2);
+  background:var(--control-bg);border:1px solid var(--border);color:var(--ink-2);
   font-size:12px;font-weight:600;transition:all .18s ease;
 }
-.goal-chip:hover{background:rgba(0,122,255,.14);color:var(--ink)}
-.goal-summary{
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
-}
-.goal-stat{
-  padding:12px 14px;border-radius:16px;
-  background:var(--control-bg);border:1px solid var(--border);
-}
-.goal-stat-label{
-  font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;
-}
-.goal-stat-value{
-  margin-top:6px;font-family:var(--font-display);font-size:22px;
-  font-weight:670;color:var(--ink);letter-spacing:-.04em;
-}
+.goal-chip:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink)}
 .target-card .goal-shell{
-  grid-template-columns:minmax(128px,154px) minmax(0,1fr);
-  align-items:center;gap:14px 16px;
+  grid-template-columns:minmax(126px,150px) minmax(0,1fr);
+  align-items:center;gap:12px 16px;
 }
 .target-card .goal-range{
   grid-column:1 / -1;
 }
 .target-card .goal-ring{
-  width:min(154px,100%);
-  padding:12px;
+  width:min(150px,100%);
+  padding:9px;
 }
 .target-card .goal-ring-core{
-  padding:14px;
+  padding:13px;
+}
+.target-card .goal-kicker{
+  font-size:10px;
 }
 .target-card .goal-value{
-  font-size:28px;
+  font-size:30px;
 }
 .target-card .goal-value small{
   display:block;
   margin-top:4px;
 }
 .target-card .goal-status{
-  font-size:11px;
+  font-size:11px;padding:6px 9px;
 }
 .target-card .goal-controls{
-  gap:10px;
+  gap:9px;
 }
 .target-card .goal-input-wrap{
   padding:8px 10px;
@@ -1163,15 +1185,6 @@ header{
 }
 .target-card .goal-chip{
   padding:7px 10px;
-}
-.target-card .goal-summary{
-  gap:8px;
-}
-.target-card .goal-stat{
-  padding:10px 12px;
-}
-.target-card .goal-stat-value{
-  font-size:18px;
 }
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
@@ -1455,6 +1468,9 @@ header{
   display:grid;gap:10px;padding:16px;border-radius:18px;
   background:var(--control-bg);border:1px solid var(--border);
 }
+.category-library-card.is-editing{
+  background:var(--control-bg-strong);border-color:var(--border-strong);
+}
 .category-library-head{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
 }
@@ -1478,6 +1494,9 @@ header{
   display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
   font-size:12px;color:var(--ink-4);
 }
+.category-library-edit-toggle[aria-expanded="true"]{
+  color:var(--ink);background:var(--control-bg-strong);border-color:var(--border-strong);
+}
 .category-library-actions{
   display:flex;gap:8px;flex-wrap:wrap;
 }
@@ -1493,6 +1512,9 @@ header{
 .category-editor{
   display:grid;gap:12px;padding:14px;border-radius:16px;
   background:var(--surface-hover);border:1px solid var(--border);
+}
+.category-editor[hidden]{
+  display:none;
 }
 .category-editor-head{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -1624,6 +1646,7 @@ tbody tr:hover .row-del{opacity:1}
 @media(max-width:960px){
   .cards{grid-template-columns:repeat(2,1fr)}
   .chart-row{grid-template-columns:1fr}
+  .rings-row{grid-template-columns:1fr}
   .settings-grid{grid-template-columns:1fr}
   .settings-kpis{grid-template-columns:1fr}
   .bar-bg{display:none}
@@ -1648,7 +1671,6 @@ tbody tr:hover .row-del{opacity:1}
   .heatmap-stage-values{gap:6px}
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
-  .goal-summary{grid-template-columns:1fr}
   .field-grid{grid-template-columns:1fr}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
@@ -1799,7 +1821,7 @@ function normalizeHexColor(value) {
   return /^#[0-9A-F]{6}$/.test(text) ? text : null;
 }
 
-function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false } = {}) {
+function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, showPresets = true } = {}) {
   const safeValue = normalizeHexColor(value) || '#7C5CFF';
   return `
     <div class="color-field" data-color-field>
@@ -1821,7 +1843,7 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false } 
           <span>Browse</span>
         </label>
       </div>
-      <div class="color-presets" role="list" aria-label="Suggested colors">
+      ${showPresets ? `<div class="color-presets" role="list" aria-label="Suggested colors">
         ${CATEGORY_COLOR_PRESETS.map(color => `
           <button
             class="color-preset ${color === safeValue ? 'is-active' : ''}"
@@ -1832,7 +1854,7 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false } 
             ${disabled ? 'disabled' : ''}
           ></button>
         `).join('')}
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
@@ -2075,8 +2097,8 @@ function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
 
   const cw = W / 7;
   const ch = H / 24;
-  // Tighter radius = less blur; still enough for adjacent glows to kiss.
-  const radius = Math.max(cw, ch) * 1.55;
+  // Tighter radius + faster falloff = sharper, less hazy cells.
+  const radius = Math.max(cw, ch) * 1.05;
 
   for (let col = 0; col < days.length; col++) {
     const day = days[col];
@@ -2090,9 +2112,9 @@ function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
       const intensity = Math.pow(secs / 3600, 0.4);
       const [r, g, b] = heatmapColorParts(secs, 3600);
       const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      g2.addColorStop(0,    `rgba(${r},${g},${b},${Math.min(1, 1.05 * intensity)})`);
-      g2.addColorStop(0.3,  `rgba(${r},${g},${b},${0.7 * intensity})`);
-      g2.addColorStop(0.65, `rgba(${r},${g},${b},${0.22 * intensity})`);
+      g2.addColorStop(0,    `rgba(${r},${g},${b},${Math.min(1, 1.1 * intensity)})`);
+      g2.addColorStop(0.45, `rgba(${r},${g},${b},${0.55 * intensity})`);
+      g2.addColorStop(0.8,  `rgba(${r},${g},${b},${0.1 * intensity})`);
       g2.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = g2;
       ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
@@ -2347,7 +2369,6 @@ function renderSettings(data) {
                     <span class="category-library-name">${escapeHtml(option.label)}</span>
                   </div>
                 </div>
-                <div class="category-library-code">${escapeHtml(option.color)}</div>
                 <div class="category-library-meta">
                   <span>${option.assignment_count || 0} assigned project${option.assignment_count === 1 ? '' : 's'}</span>
                   <div class="category-library-actions">
@@ -2374,11 +2395,12 @@ function renderSettings(data) {
                     </label>
                     <label class="field">
                       <span class="field-label">Color</span>
-                      ${renderColorField({ value: option.color })}
+                      ${renderColorField({ value: option.color, showPresets: false })}
                     </label>
                   </div>
                   <div class="category-editor-actions">
                     <button class="btn small" type="submit">Save changes</button>
+                    <button class="btn danger small" type="button" data-category-delete="${option.key}" data-category-label="${escapeHtml(option.label)}" data-category-assignments="${option.assignment_count || 0}">Delete</button>
                   </div>
                 </form>
               </div>
@@ -2421,13 +2443,23 @@ function renderSettings(data) {
 
   const toggleEditor = (key, open) => {
     document.querySelectorAll('[data-category-editor]').forEach(editor => {
-      editor.hidden = editor.dataset.categoryEditor !== key || !open;
+      const isOpen = editor.dataset.categoryEditor === key && open;
+      editor.hidden = !isOpen;
+      editor.closest('[data-category-card]')?.classList.toggle('is-editing', isOpen);
+    });
+    document.querySelectorAll('[data-category-edit]').forEach(button => {
+      const isOpen = button.dataset.categoryEdit === key && open;
+      button.setAttribute('aria-expanded', String(isOpen));
+      button.textContent = isOpen ? 'Close' : 'Edit';
     });
   };
 
   document.querySelectorAll('[data-category-edit]').forEach(button => {
     button.addEventListener('click', () => {
-      toggleEditor(button.dataset.categoryEdit, true);
+      const editor = document.querySelector(`[data-category-editor="${button.dataset.categoryEdit}"]`);
+      const shouldOpen = !editor || editor.hidden;
+      toggleEditor(button.dataset.categoryEdit, shouldOpen);
+      if (!shouldOpen) return;
       document
         .querySelector(`[data-category-editor="${button.dataset.categoryEdit}"] input[name="label"]`)
         ?.focus();
@@ -2607,9 +2639,6 @@ function render(data) {
   const closedSessionCount = summary.closed_session_count || 0;
   const phantomCount = summary.phantom_closed_count || 0;
 
-  const todayName = new Date().toLocaleDateString('en-US',{weekday:'long'});
-  const goalWeekLabel = shortRange(summary.goal_week_start, summary.goal_week_end);
-
   document.getElementById('app').innerHTML = `
     <div class="cards">
       <div class="card">
@@ -2618,46 +2647,35 @@ function render(data) {
         <div class="card-sub">${summary.month_project_count} project${summary.month_project_count !== 1 ? 's' : ''} · this month</div>
       </div>
       <div class="card">
-        <div class="card-label">Today</div>
-        <div class="card-value">${fmt.dur(summary.today_seconds)}</div>
-        <div class="card-sub">${todayName.toLowerCase()}</div>
-      </div>
-      <div class="card">
-        <div class="card-label">This Week</div>
-        <div class="card-value">${fmt.dur(summary.week_seconds)}</div>
-        <div class="card-sub">${goalWeekLabel} · resets Friday</div>
-      </div>
-      <div class="card">
         <div class="card-label">Streak</div>
         <div class="card-value">${summary.streak_days}<span class="unit">day${summary.streak_days !== 1 ? 's' : ''}</span></div>
         <div class="card-sub">consecutive</div>
       </div>
     </div>
 
-    <div class="chart-row">
-      <div class="chart-card">
+    <div class="rings-row">
+      <div class="chart-card target-card">
         <div class="section-head">
-          <h3 class="section-title">Activity <em>calendar</em></h3>
-          <span class="section-meta">Friday to Thursday · browse week by week</span>
+          <h3 class="section-title">Daily <em>target</em></h3>
+          <span class="section-meta">Today: <strong>${fmt.dur(summary.today_seconds || 0)}</strong></span>
         </div>
-        <div class="chart-wrap"><div id="activityHeatmap"></div></div>
+        <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
       </div>
-      <div class="target-stack">
-        <div class="chart-card target-card">
-          <div class="section-head">
-            <h3 class="section-title">Weekly <em>target</em></h3>
-            <span class="section-meta">set your hours goal</span>
-          </div>
-          <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
+      <div class="chart-card target-card">
+        <div class="section-head">
+          <h3 class="section-title">Weekly <em>target</em></h3>
+          <span class="section-meta">This Week: <strong>${fmt.dur(summary.week_seconds || 0)}</strong></span>
         </div>
-        <div class="chart-card target-card">
-          <div class="section-head">
-            <h3 class="section-title">Daily <em>target</em></h3>
-            <span class="section-meta">shape today’s session</span>
-          </div>
-          <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
-        </div>
+        <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
       </div>
+    </div>
+
+    <div class="chart-card chart-card-wide">
+      <div class="section-head">
+        <h3 class="section-title">Activity <em>calendar</em></h3>
+        <span class="section-meta">Friday to Thursday · browse week by week</span>
+      </div>
+      <div class="chart-wrap"><div id="activityHeatmap"></div></div>
     </div>
 
     <div class="chart-card chart-card-wide">
@@ -2994,34 +3012,27 @@ function renderGoalCard({
     const progress = completedHours / safeGoalHours;
     const progressClamped = clamp(progress, 0, 1);
     const progressDegrees = Math.round(progressClamped * 360);
-    const remainingHours = Math.max(safeGoalHours - completedHours, 0);
-    const overHours = Math.max(completedHours - safeGoalHours, 0);
+    const progressMidDegrees = Math.round(progressDegrees * 0.48);
+    const progressHotDegrees = Math.round(progressDegrees * 0.78);
     const percent = Math.round(progress * 100);
-    const ringBackground = progress >= 1
-      ? 'conic-gradient(from -90deg, #4aa3ff 0deg, #8cbcff 110deg, #ffc36e 250deg, #ff8d32 360deg)'
-      : `conic-gradient(from -90deg, #4aa3ff 0deg, #ff9f0a ${progressDegrees}deg, rgba(77,97,126,.14) ${progressDegrees}deg, rgba(77,97,126,.14) 360deg)`;
+    const percentLabel = `${Math.min(percent, 999)}%`;
+    const helperMarkup = helperLabel ? `<span>${helperLabel}</span>` : '';
 
     mount.innerHTML = `
       <div class="goal-shell">
         <div class="goal-range">${rangeLabel}</div>
         <div class="goal-ring-wrap">
-          <div class="goal-ring" style="background:${ringBackground}">
+          <div class="goal-ring ${progress >= 1 ? 'is-complete' : ''}" style="--goal-progress:${progressDegrees}deg;--goal-progress-mid:${progressMidDegrees}deg;--goal-progress-hot:${progressHotDegrees}deg" aria-label="${percentLabel} complete">
             <div class="goal-ring-core">
-              <div class="goal-kicker">${progress >= 1 ? 'Target hit' : 'On the way'}</div>
-              <div class="goal-value">${formatHoursNumber(completedHours)}<small> / ${formatHoursNumber(safeGoalHours)}h</small></div>
-              <div class="goal-status">
-                ${progress >= 1
-                  ? `${formatHoursNumber(overHours)}h over goal · ${percent}% complete`
-                  : `${formatHoursNumber(remainingHours)}h left · ${percent}% complete`}
-              </div>
+              <div class="goal-value">${percentLabel}</div>
             </div>
           </div>
         </div>
         <div class="goal-controls">
           <div class="goal-input-row">
             <label class="goal-label" for="${mountId}Input">
-              <span>${goalLabel}</span>
-              <span>${helperLabel}</span>
+              <strong>${goalLabel}</strong>
+              ${helperMarkup}
             </label>
             <div class="goal-input-wrap">
               <input class="goal-input" id="${mountId}Input" type="number" min="1" max="100" step="0.5" value="${safeGoalHours}">
@@ -3032,16 +3043,6 @@ function renderGoalCard({
             ${presets.map(hours => `
               <button class="goal-chip" type="button" data-goal-hours="${hours}">${hours}h</button>
             `).join('')}
-          </div>
-          <div class="goal-summary">
-            <div class="goal-stat">
-              <div class="goal-stat-label">Completed</div>
-              <div class="goal-stat-value">${formatHoursNumber(completedHours)}h</div>
-            </div>
-            <div class="goal-stat">
-              <div class="goal-stat-label">${progress >= 1 ? 'Ahead by' : 'Still to go'}</div>
-              <div class="goal-stat-value">${formatHoursNumber(progress >= 1 ? overHours : remainingHours)}h</div>
-            </div>
           </div>
         </div>
       </div>
@@ -3080,8 +3081,7 @@ function renderWeeklyGoal(summary) {
     completedSeconds: summary.week_seconds || 0,
     rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets Friday`,
     goalLabel: 'Weekly goal',
-    helperLabel: 'Saved locally in this browser.',
-    presets: [5, 10, 15, 20],
+    presets: [10, 20, 30, 40],
   });
 }
 
@@ -3098,7 +3098,6 @@ function renderDailyGoal(summary) {
     completedSeconds: summary.today_seconds || 0,
     rangeLabel: `${todayLabel} · resets tomorrow`,
     goalLabel: 'Daily goal',
-    helperLabel: 'Saved locally in this browser.',
     presets: [1, 2, 3, 5],
   });
 }
