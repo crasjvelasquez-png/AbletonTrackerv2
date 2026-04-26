@@ -625,17 +625,22 @@ header{
 }
 .heatmap-shell{display:grid;gap:16px}
 .heatmap-meta{
-  display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:14px;
 }
 .heatmap-summary{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  display:grid;gap:6px;justify-items:start;min-width:0;
   font-size:12px;color:var(--ink-4);
 }
 .heatmap-summary strong{
+  display:block;
   font-size:13px;color:var(--ink-2);font-weight:650;
 }
+.heatmap-summary span{
+  display:block;min-width:0;
+}
 .heatmap-controls{
-  display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:nowrap;
+  justify-self:end;white-space:nowrap;
 }
 .heatmap-week-label{
   font-size:12px;color:var(--ink-3);font-weight:700;
@@ -662,6 +667,7 @@ header{
   font-size:11px;color:var(--ink-4);
   padding:8px 12px;border-radius:999px;
   background:rgba(62,94,53,.08);
+  flex:0 0 auto;
 }
 .heatmap-scale-row{display:inline-flex;align-items:center;gap:5px}
 .heatmap-swatch{
@@ -1106,7 +1112,8 @@ tbody tr:hover .row-del{opacity:1}
   .card-value{font-size:34px}
   .daily-bars{gap:4px}
   .mark{gap:8px;flex-direction:column;align-items:flex-start}
-  .heatmap-controls{width:100%;justify-content:space-between}
+  .heatmap-meta{grid-template-columns:1fr}
+  .heatmap-controls{width:100%;justify-content:space-between;justify-self:stretch}
   .heatmap-stage{min-height:316px;padding:16px 12px 16px}
   .heatmap-stage-head,
   .heatmap-stage-values{gap:6px}
