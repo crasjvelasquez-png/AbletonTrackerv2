@@ -8,8 +8,9 @@ import signal
 import sys
 import re
 import tempfile
+import threading
 from collections import defaultdict
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -46,6 +47,11 @@ NON_PROJECT_TITLE_PATTERNS = [
     r"^collect all and save$",
     r"^manage files$",
 ]
+_NON_PROJECT_TITLE_RES = [re.compile(p, re.IGNORECASE) for p in NON_PROJECT_TITLE_PATTERNS]
+_WHITESPACE_RE = re.compile(r"\s+")
+_BRACKET_RE = re.compile(r"\s*\[[^\]]*\]")
+_PAREN_RE = re.compile(r"\s*\([^)]*\)")
+_ALS_SUFFIX_RE = re.compile(r"\.als\s*$", re.IGNORECASE)
 
 
 def setup_db():
@@ -81,11 +87,11 @@ def is_phantom_session_name(name: str | None) -> bool:
     if not raw:
         return False
 
-    lowered = re.sub(r"\s+", " ", raw).strip().lower()
+    lowered = _WHITESPACE_RE.sub(" ", raw).strip().lower()
     if lowered in UNTITLED_NAMES:
         return False
 
-    if any(re.match(pattern, lowered, flags=re.IGNORECASE) for pattern in NON_PROJECT_TITLE_PATTERNS):
+    if any(r.match(lowered) for r in _NON_PROJECT_TITLE_RES):
         return True
 
     # Slash characters cannot appear in Live set filenames on macOS, but
@@ -287,18 +293,34 @@ def is_ableton_running() -> bool:
     return _live_pid() is not None
 
 
-_last_idle_error = None
+_error_state: dict[str, str | None] = {}
+
+
+def _log_transient_error(
+    channel: str,
+    message: str | None,
+    fail_label: str,
+    recover_label: str,
+    suffix: str = "",
+):
+    """De-duplicate repeated subprocess error logs across polls.
+
+    Only prints when the message changes from the previous one for `channel`,
+    so a persistent failure logs once and a recovery logs once.
+    """
+    if message == _error_state.get(channel):
+        return
+    _error_state[channel] = message
+    if message:
+        print(f"[{_ts()}] {fail_label}: {message}{suffix}")
+    else:
+        print(f"[{_ts()}] {recover_label}")
 
 
 def _set_idle_error(message: str | None):
-    global _last_idle_error
-    if message == _last_idle_error:
-        return
-    _last_idle_error = message
-    if message:
-        print(f"[{_ts()}] HIDIdleTime read failed: {message}")
-    else:
-        print(f"[{_ts()}] HIDIdleTime read recovered")
+    _log_transient_error(
+        "idle", message, "HIDIdleTime read failed", "HIDIdleTime read recovered"
+    )
 
 
 def get_idle_seconds() -> float:
@@ -350,40 +372,28 @@ def _parse_audio_level_probe(output: str) -> bool | None:
     return None
 
 
-_last_audio_probe_error = None
-
-
 def _set_audio_probe_error(message: str | None):
-    global _last_audio_probe_error
-    if message == _last_audio_probe_error:
-        return
-    _last_audio_probe_error = message
-    if message:
-        print(f"[{_ts()}] audio-level probe unavailable: {message}")
-    else:
-        print(f"[{_ts()}] audio-level probe recovered")
+    _log_transient_error(
+        "audio_probe",
+        message,
+        "audio-level probe unavailable",
+        "audio-level probe recovered",
+    )
 
 
-def _system_audio_level_active() -> bool | None:
-    """Sample actual macOS system output level using ScreenCaptureKit.
-
-    This is intentionally level-based instead of a Live CPU/process proxy:
-    a stopped transport or idle audio engine should read quiet, while real
-    playback from Live (or any audible system output) keeps auto-idle awake.
-    """
-    swift = f"""
+_AUDIO_PROBE_SOURCE = """
 import AVFoundation
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
 
-final class AudioProbe: NSObject, SCStreamOutput {{
+final class AudioProbe: NSObject, SCStreamOutput {
     var peak: Float = 0
     var sumOfSquares: Double = 0
     var sampleCount: Int = 0
 
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {{
-        guard type == .audio, sampleBuffer.isValid else {{ return }}
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard type == .audio, sampleBuffer.isValid else { return }
         var blockBuffer: CMBlockBuffer?
         var audioBufferList = AudioBufferList()
         CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
@@ -398,26 +408,30 @@ final class AudioProbe: NSObject, SCStreamOutput {{
         )
 
         let buffers = UnsafeMutableAudioBufferListPointer(&audioBufferList)
-        for buffer in buffers {{
-            guard let data = buffer.mData else {{ continue }}
+        for buffer in buffers {
+            guard let data = buffer.mData else { continue }
             let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
             let samples = data.bindMemory(to: Float.self, capacity: count)
-            for index in 0..<count {{
+            for index in 0..<count {
                 let sample = samples[index]
                 let absSample = abs(sample)
-                if absSample > peak {{ peak = absSample }}
+                if absSample > peak { peak = absSample }
                 sumOfSquares += Double(sample) * Double(sample)
                 sampleCount += 1
-            }}
-        }}
-    }}
-}}
+            }
+        }
+    }
+}
+
+let args = CommandLine.arguments
+let pollSeconds = args.count > 1 ? (Double(args[1]) ?? 1.0) : 1.0
+let activeThreshold = args.count > 2 ? (Double(args[2]) ?? 0.01) : 0.01
 
 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-guard let display = content.displays.first else {{
+guard let display = content.displays.first else {
     print("quiet 0")
     exit(0)
-}}
+}
 
 let filter = SCContentFilter(display: display, excludingWindows: [])
 let config = SCStreamConfiguration()
@@ -431,25 +445,74 @@ let probe = AudioProbe()
 let stream = SCStream(filter: filter, configuration: config, delegate: nil)
 try stream.addStreamOutput(probe, type: .audio, sampleHandlerQueue: DispatchQueue(label: "audio-probe"))
 try await stream.startCapture()
-try await Task.sleep(nanoseconds: UInt64({AUDIO_LEVEL_POLL_SECONDS} * 1_000_000_000))
+try await Task.sleep(nanoseconds: UInt64(pollSeconds * 1_000_000_000))
 try await stream.stopCapture()
 
 let rms = probe.sampleCount > 0 ? sqrt(probe.sumOfSquares / Double(probe.sampleCount)) : 0
-if probe.sampleCount == 0 {{
+if probe.sampleCount == 0 {
     print("unavailable samples=0")
-}} else if rms >= Double({AUDIO_LEVEL_ACTIVE_THRESHOLD}) {{
+} else if rms >= activeThreshold {
     print("active rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
-}} else {{
+} else {
     print("quiet rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
-}}
+}
 """
-    script_path = None
+
+_AUDIO_PROBE_BINARY = DB_PATH.parent / "audio_probe"
+_AUDIO_PROBE_BUILD_LOCK = threading.Lock()
+
+
+def _ensure_audio_probe_binary() -> Path | None:
+    """Compile the Swift audio probe to a cached binary if needed.
+
+    Rebuilds when the binary is missing or older than this source file, so
+    edits to _AUDIO_PROBE_SOURCE take effect on the next launch. Returns the
+    binary path on success, None on compile failure (caller logs).
+    """
+    binary = _AUDIO_PROBE_BINARY
+    tracker_module_mtime = Path(__file__).stat().st_mtime
+    if binary.exists() and binary.stat().st_mtime >= tracker_module_mtime:
+        return binary
+
+    with _AUDIO_PROBE_BUILD_LOCK:
+        if binary.exists() and binary.stat().st_mtime >= tracker_module_mtime:
+            return binary
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".swift", delete=False) as src:
+            src.write(_AUDIO_PROBE_SOURCE)
+            src_path = src.name
+        try:
+            r = subprocess.run(
+                ["swiftc", "-O", "-o", str(binary), src_path],
+                capture_output=True, text=True, timeout=60,
+            )
+        except Exception as e:
+            _set_audio_probe_error(f"swiftc: {e}")
+            return None
+        finally:
+            with suppress(FileNotFoundError):
+                Path(src_path).unlink()
+        if r.returncode != 0:
+            _set_audio_probe_error(
+                f"swiftc exited {r.returncode}: {(r.stderr or '').strip()[:300]}"
+            )
+            return None
+    return binary
+
+
+def _system_audio_level_active() -> bool | None:
+    """Sample actual macOS system output level using ScreenCaptureKit.
+
+    This is intentionally level-based instead of a Live CPU/process proxy:
+    a stopped transport or idle audio engine should read quiet, while real
+    playback from Live (or any audible system output) keeps auto-idle awake.
+    """
+    binary = _ensure_audio_probe_binary()
+    if binary is None:
+        return None
     try:
-        with tempfile.NamedTemporaryFile("w", suffix=".swift", delete=False) as script:
-            script.write(swift)
-            script_path = script.name
         r = subprocess.run(
-            ["swift", script_path],
+            [str(binary), str(AUDIO_LEVEL_POLL_SECONDS), str(AUDIO_LEVEL_ACTIVE_THRESHOLD)],
             capture_output=True,
             text=True,
             timeout=max(AUDIO_POLL_TIMEOUT, AUDIO_LEVEL_POLL_SECONDS + 4),
@@ -457,12 +520,6 @@ if probe.sampleCount == 0 {{
     except Exception as e:
         _set_audio_probe_error(str(e))
         return None
-    finally:
-        if script_path:
-            try:
-                Path(script_path).unlink()
-            except FileNotFoundError:
-                pass
 
     if r.returncode != 0:
         error_lines = (r.stderr or "").strip().splitlines()
@@ -516,16 +573,12 @@ def is_audio_active() -> bool | None:
     return _system_audio_level_active()
 
 
-_last_title_error = None
-
-
 def get_live_window_titles() -> list[str]:
     """Return visible Ableton Live window titles.
 
     Logs (once) when System Events refuses — without that, an Accessibility
     permission failure looks identical to "Ableton has no open windows".
     """
-    global _last_title_error
     script = """
 tell application "System Events"
     if not (exists process "Live") then return ""
@@ -539,28 +592,32 @@ end tell
             ["osascript", "-e", script], capture_output=True, text=True, timeout=5
         )
     except Exception as e:
-        if _last_title_error != str(e):
-            print(f"[{_ts()}] window-title lookup failed: {e}")
-            _last_title_error = str(e)
+        _log_transient_error(
+            "title", str(e), "window-title lookup failed", "window-title lookup recovered"
+        )
         return []
 
     if r.returncode != 0:
         err = r.stderr.strip()
-        if _last_title_error != err:
-            hint = ""
-            if "1719" in err or "assistive access" in err.lower() or "-25211" in err:
-                hint = (
-                    "  → Grant Accessibility to this Python in System Settings → "
-                    "Privacy & Security → Accessibility "
-                    f"({sys.executable})"
-                )
-            print(f"[{_ts()}] osascript error reading Live windows: {err}{hint}")
-            _last_title_error = err
+        hint = ""
+        if "1719" in err or "assistive access" in err.lower() or "-25211" in err:
+            hint = (
+                "  → Grant Accessibility to this Python in System Settings → "
+                "Privacy & Security → Accessibility "
+                f"({sys.executable})"
+            )
+        _log_transient_error(
+            "title",
+            err,
+            "osascript error reading Live windows",
+            "window-title lookup recovered",
+            suffix=hint,
+        )
         return []
 
-    if _last_title_error is not None:
-        print(f"[{_ts()}] window-title lookup recovered")
-        _last_title_error = None
+    _log_transient_error(
+        "title", None, "window-title lookup failed", "window-title lookup recovered"
+    )
     return [title.strip() for title in r.stdout.splitlines() if title.strip()]
 
 
@@ -584,16 +641,16 @@ def parse_project_title(title: str) -> str | None:
             return None
         name = raw
 
-    name = re.sub(r"\s*\[[^\]]*\]", "", name).strip()
-    name = re.sub(r"\s*\([^)]*\)", "", name).strip()
-    name = re.sub(r"\.als\s*$", "", name, flags=re.IGNORECASE).strip()
-    name = re.sub(r"\s+", " ", name).strip(" -–—")
+    name = _BRACKET_RE.sub("", name).strip()
+    name = _PAREN_RE.sub("", name).strip()
+    name = _ALS_SUFFIX_RE.sub("", name).strip()
+    name = _WHITESPACE_RE.sub(" ", name).strip(" -–—")
 
     if not name or name.lower() in {"", "ableton live", "live"}:
         return None
 
     lowered = name.lower()
-    if any(re.match(pattern, lowered, flags=re.IGNORECASE) for pattern in NON_PROJECT_TITLE_PATTERNS):
+    if any(r.match(lowered) for r in _NON_PROJECT_TITLE_RES):
         return None
 
     return name
@@ -605,44 +662,37 @@ def get_project_name(current_project: str | None = None) -> str | None:
     Returns None if no reliable project title is visible; callers should keep
     the current session alive rather than rotating to a guess.
     """
-    candidates = []
-    distinct_candidates = []
-    seen_candidates = set()
-    distinct_live_title_candidates = []
-    seen_live_title_candidates = set()
+    candidates: list[str] = []
+    distinct: dict[str, str] = {}
+    distinct_live: dict[str, str] = {}
     for title in get_live_window_titles():
         parsed = parse_project_title(title)
-        if parsed:
-            candidates.append(parsed)
-            key = parsed.casefold()
-            if key not in seen_candidates:
-                distinct_candidates.append(parsed)
-                seen_candidates.add(key)
-            if LIVE_TITLE_SUFFIX_RE.search(title):
-                if key not in seen_live_title_candidates:
-                    distinct_live_title_candidates.append(parsed)
-                    seen_live_title_candidates.add(key)
+        if not parsed:
+            continue
+        candidates.append(parsed)
+        key = parsed.casefold()
+        distinct.setdefault(key, parsed)
+        if LIVE_TITLE_SUFFIX_RE.search(title):
+            distinct_live.setdefault(key, parsed)
 
     if not candidates:
         return None
 
     if current_project:
-        for candidate in candidates:
-            if candidate == current_project:
-                return candidate
+        if current_project in candidates:
+            return current_project
 
         # A single canonical Live title is a reliable project switch.
-        if len(distinct_live_title_candidates) == 1:
-            return distinct_live_title_candidates[0]
-
-        if len(distinct_live_title_candidates) > 1:
+        if len(distinct_live) == 1:
+            return next(iter(distinct_live.values()))
+        if len(distinct_live) > 1:
             return None
 
         # When Live is only exposing bare titles, accept a single distinct
         # parsed candidate as a real project switch. This fixes the common case
         # where the main project window title is just the set name.
-        if len(distinct_candidates) == 1:
-            return distinct_candidates[0]
+        if len(distinct) == 1:
+            return next(iter(distinct.values()))
 
         # Otherwise keep the current session alive rather than rotating to a
         # new bare title guess just because the visible windows are transient.
@@ -667,20 +717,12 @@ class Tracker:
         self.resume_hint_project = None
         self.next_cleanup_at = 0.0
         self.last_audio_active = 0.0
-        self.last_paused = False
         self.last_running = False
         self.last_hid_idle = 0.0
         self.last_audio_is_active = False
         self.last_audio_idle = float("inf")
-        self.last_idle_paused = False
         self.last_checked_at = 0.0
         self.last_state = STATE_ABLETON_CLOSED
-
-    def _publish_state(self, state: str):
-        self.last_state = state
-        self.last_paused = state == STATE_PAUSED
-        self.last_running = state != STATE_ABLETON_CLOSED
-        self.last_idle_paused = state == STATE_IDLE_PAUSED
 
     def _start(self, project: str):
         now = time.time()
@@ -786,16 +828,17 @@ class Tracker:
         self.last_tick = None
 
     def status(self) -> TrackerStatus:
+        state = self.last_state
         return TrackerStatus(
-            state=self.last_state,
-            paused=self.last_paused,
+            state=state,
+            paused=state == STATE_PAUSED,
             running=self.last_running,
             project_name=self.project_name,
             resume_hint_project=self.resume_hint_project,
             hid_idle_seconds=self.last_hid_idle,
             audio_active=self.last_audio_is_active,
             audio_idle_seconds=self.last_audio_idle,
-            idle_paused=self.last_idle_paused,
+            idle_paused=state == STATE_IDLE_PAUSED,
             checked_at=self.last_checked_at,
         )
 
@@ -804,22 +847,24 @@ class Tracker:
         self.last_checked_at = now
 
         if paused:
-            running = is_ableton_running()
+            self.last_running = is_ableton_running()
             self.last_hid_idle = 0.0
             self.last_audio_is_active = False
             self.last_audio_idle = float("inf")
             self._close(preserve_resume_hint=True)
-            self._publish_state(STATE_PAUSED)
-            self.last_running = running
+            self.last_state = STATE_PAUSED
             return
 
         if not is_ableton_running():
+            self.last_running = False
             self.last_hid_idle = 0.0
             self.last_audio_is_active = False
             self.last_audio_idle = float("inf")
             self._close()
-            self._publish_state(STATE_ABLETON_CLOSED)
+            self.last_state = STATE_ABLETON_CLOSED
             return
+
+        self.last_running = True
 
         self.last_hid_idle = get_idle_seconds()
         should_check_audio = (
@@ -863,7 +908,7 @@ class Tracker:
                     f"(idle {int(self.last_hid_idle)}s, audio quiet)"
                 )
             self._close(preserve_resume_hint=True)
-            self._publish_state(
+            self.last_state = (
                 STATE_IDLE_PAUSED if self.resume_hint_project else STATE_ABLETON_OPEN
             )
             return
@@ -875,7 +920,7 @@ class Tracker:
             if self.session_id is None and self.resume_hint_project:
                 self._start(self.resume_hint_project)
             self._tick()
-            self._publish_state(
+            self.last_state = (
                 STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
             )
             return
@@ -884,7 +929,7 @@ class Tracker:
             self._close()
             self._start(project)
         self._tick()
-        self._publish_state(STATE_TRACKING)
+        self.last_state = STATE_TRACKING
 
     def maybe_run_cleanup(self, force: bool = False):
         now = time.time()
@@ -903,6 +948,9 @@ class Tracker:
         if stale:
             print(f"[{_ts()}] closed {stale} stale open session{'s' if stale != 1 else ''}")
         self.maybe_run_cleanup(force=True)
+        # Pay swiftc compile cost up front so the first audio probe doesn't stall a poll.
+        if _ensure_audio_probe_binary() is None:
+            print(f"[{_ts()}] audio probe unavailable at startup — will retry on first use")
         print(f"Ableton Tracker  |  poll every {POLL_INTERVAL}s  |  db: {DB_PATH}")
         print("Ctrl+C to stop\n")
 

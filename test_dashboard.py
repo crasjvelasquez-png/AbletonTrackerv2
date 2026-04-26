@@ -28,6 +28,8 @@ class DashboardCategoryTests(unittest.TestCase):
                 pass
 
     def test_set_project_category_persists_and_is_returned_by_stats(self):
+        created = dashboard.create_category("Production", "#00a6ff")
+
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             conn.execute(
                 """
@@ -38,17 +40,19 @@ class DashboardCategoryTests(unittest.TestCase):
             )
             conn.commit()
 
-        result = dashboard.set_project_category("Real Song", "production")
+        result = dashboard.set_project_category("Real Song", created["category"]["key"])
         self.assertTrue(result["ok"])
         self.assertEqual(result["category"]["label"], "Production")
 
         stats = dashboard.get_stats()
-        self.assertEqual(stats["projects"][0]["category_key"], "production")
+        self.assertEqual(stats["projects"][0]["category_key"], created["category"]["key"])
         self.assertEqual(stats["projects"][0]["category_label"], "Production")
         self.assertEqual(stats["projects"][0]["category_color"], "#00A6FF")
-        self.assertEqual(stats["recent"][0]["category_key"], "production")
+        self.assertEqual(stats["recent"][0]["category_key"], created["category"]["key"])
 
     def test_set_project_category_none_clears_existing_assignment(self):
+        created = dashboard.create_category("Mixing", "#8b5a2b")
+
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             conn.execute(
                 """
@@ -59,13 +63,148 @@ class DashboardCategoryTests(unittest.TestCase):
             )
             conn.commit()
 
-        dashboard.set_project_category("Real Song", "mixing")
+        dashboard.set_project_category("Real Song", created["category"]["key"])
         cleared = dashboard.set_project_category("Real Song", None)
 
         self.assertTrue(cleared["ok"])
         stats = dashboard.get_stats()
         self.assertIsNone(stats["projects"][0]["category_key"])
         self.assertIsNone(stats["recent"][0]["category_key"])
+
+    def test_create_category_adds_custom_option_and_allows_assignment(self):
+        created = dashboard.create_category("Sound Design", "#7c5cff")
+
+        self.assertTrue(created["ok"])
+        self.assertEqual(created["category"]["label"], "Sound Design")
+        self.assertEqual(created["category"]["color"], "#7C5CFF")
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Custom Song", 100.0, 200.0, 200.0, 100.0),
+            )
+            conn.commit()
+
+        assigned = dashboard.set_project_category("Custom Song", created["category"]["key"])
+        self.assertTrue(assigned["ok"])
+
+        stats = dashboard.get_stats()
+        option = next(
+            item for item in stats["category_options"]
+            if item["key"] == created["category"]["key"]
+        )
+        self.assertEqual(option["label"], created["category"]["label"])
+        self.assertEqual(option["color"], created["category"]["color"])
+        self.assertEqual(option["assignment_count"], 1)
+        self.assertEqual(stats["custom_category_count"], 1)
+        self.assertEqual(stats["projects"][0]["category_label"], "Sound Design")
+        self.assertEqual(stats["projects"][0]["category_color"], "#7C5CFF")
+
+    def test_update_category_changes_name_and_color(self):
+        created = dashboard.create_category("Sound Design", "#7c5cff")
+
+        updated = dashboard.update_category(
+            created["category"]["key"],
+            "Vocal Production",
+            "#11aa88",
+        )
+
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["category"]["label"], "Vocal Production")
+        self.assertEqual(updated["category"]["color"], "#11AA88")
+
+        stats = dashboard.get_stats()
+        option = next(
+            item for item in stats["category_options"]
+            if item["key"] == created["category"]["key"]
+        )
+        self.assertEqual(option["label"], "Vocal Production")
+        self.assertEqual(option["color"], "#11AA88")
+
+    def test_delete_category_clears_project_assignments(self):
+        created = dashboard.create_category("Sound Design", "#7c5cff")
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Custom Song", 100.0, 200.0, 200.0, 100.0),
+            )
+            conn.commit()
+
+        dashboard.set_project_category("Custom Song", created["category"]["key"])
+        deleted = dashboard.delete_category(created["category"]["key"])
+
+        self.assertTrue(deleted["ok"])
+        self.assertEqual(deleted["cleared_assignments"], 1)
+
+        stats = dashboard.get_stats()
+        self.assertFalse(
+            any(item["key"] == created["category"]["key"] for item in stats["category_options"])
+        )
+        self.assertIsNone(stats["projects"][0]["category_key"])
+
+    def test_legacy_seeded_categories_are_purged(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.ensure_category_definitions_table(conn)
+            dashboard.ensure_project_category_table(conn)
+            conn.execute(
+                """
+                INSERT INTO category_definitions (key, label, color, updated_at)
+                VALUES (?, ?, ?, 0)
+                """,
+                ("production", "Production", "#00A6FF"),
+            )
+            conn.execute(
+                """
+                INSERT INTO project_categories (project_name, category_key, updated_at)
+                VALUES (?, ?, 0)
+                """,
+                ("Legacy Song", "production"),
+            )
+            conn.commit()
+
+        stats = dashboard.get_stats()
+        self.assertFalse(any(item["key"] == "production" for item in stats["category_options"]))
+        self.assertEqual(stats["custom_category_count"], 0)
+
+    def test_category_table_migration_removes_is_default_column(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("DROP TABLE IF EXISTS category_definitions")
+            conn.execute(
+                """
+                CREATE TABLE category_definitions (
+                    key         TEXT PRIMARY KEY,
+                    label       TEXT NOT NULL,
+                    color       TEXT NOT NULL,
+                    is_default  INTEGER NOT NULL DEFAULT 0,
+                    updated_at  INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO category_definitions (key, label, color, is_default, updated_at)
+                VALUES (?, ?, ?, ?, 0)
+                """,
+                ("custom-mixing", "Mixing", "#11AA88", 0),
+            )
+            conn.commit()
+
+            dashboard.ensure_category_definitions_table(conn)
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(category_definitions)").fetchall()]
+            row = conn.execute(
+                "SELECT key, label, color, updated_at FROM category_definitions WHERE key = ?",
+                ("custom-mixing",),
+            ).fetchone()
+
+        self.assertEqual(columns, ["key", "label", "color", "updated_at"])
+        self.assertEqual(tuple(row), ("custom-mixing", "Mixing", "#11AA88", 0))
 
 
 class DashboardRolloverTests(unittest.TestCase):
@@ -121,6 +260,39 @@ class DashboardRolloverTests(unittest.TestCase):
         }
         self.assertEqual(hourly[("2026-04-24", 23)], 60.0)
         self.assertEqual(hourly[("2026-04-25", 0)], 180.0)
+        self.assertEqual(stats["summary"]["streak_days"], 2)
+
+    def test_streak_does_not_reset_right_after_midnight_without_activity_yet(self):
+        session_1_start_ts = datetime(2026, 4, 23, 12, 0).timestamp()
+        session_1_end_ts = datetime(2026, 4, 23, 12, 10).timestamp()
+        session_2_start_ts = datetime(2026, 4, 24, 12, 0).timestamp()
+        session_2_end_ts = datetime(2026, 4, 24, 12, 10).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Day 1", session_1_start_ts, session_1_end_ts, session_1_end_ts, 600.0),
+            )
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Day 2", session_2_start_ts, session_2_end_ts, session_2_end_ts, 600.0),
+            )
+            conn.commit()
+
+        class FrozenDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 4, 25)
+
+        with patch.object(dashboard, "date", FrozenDate):
+            stats = dashboard.get_stats()
+
         self.assertEqual(stats["summary"]["streak_days"], 2)
 
 

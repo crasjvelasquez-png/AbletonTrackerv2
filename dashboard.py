@@ -19,14 +19,14 @@ from tracker import (
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
 PORT = 7421
 UNTITLED_NAMES = {"untitled", "untitled project"}
-CATEGORY_OPTIONS = [
-    {"key": "c4milo", "label": "c4milo", "color": "#228B22"},
-    {"key": "production", "label": "Production", "color": "#00A6FF"},
-    {"key": "mixing", "label": "Mixing", "color": "#8B5A2B"},
-    {"key": "mastering", "label": "Mastering", "color": "#800020"},
-    {"key": "instrumentation", "label": "Instrumentation", "color": "#B8860B"},
+MAX_CUSTOM_CATEGORIES = 12
+LEGACY_CATEGORY_KEYS = [
+    "c4milo",
+    "production",
+    "mixing",
+    "mastering",
+    "instrumentation",
 ]
-CATEGORY_BY_KEY = {option["key"]: option for option in CATEGORY_OPTIONS}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -111,8 +111,100 @@ def ensure_project_category_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS category_definitions (
+            key         TEXT PRIMARY KEY,
+            label       TEXT NOT NULL,
+            color       TEXT NOT NULL,
+            updated_at  INTEGER NOT NULL
+        )
+        """
+    )
+    columns = [
+        row[1]
+        for row in conn.execute("PRAGMA table_info(category_definitions)").fetchall()
+    ]
+    expected_columns = ["key", "label", "color", "updated_at"]
+    if columns != expected_columns:
+        try:
+            conn.execute("BEGIN")
+            conn.execute("ALTER TABLE category_definitions RENAME TO category_definitions_legacy")
+            conn.execute(
+                """
+                CREATE TABLE category_definitions (
+                    key         TEXT PRIMARY KEY,
+                    label       TEXT NOT NULL,
+                    color       TEXT NOT NULL,
+                    updated_at  INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO category_definitions (key, label, color, updated_at)
+                SELECT key, label, color, updated_at
+                FROM category_definitions_legacy
+                """
+            )
+            conn.execute("DROP TABLE category_definitions_legacy")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def purge_legacy_categories(conn: sqlite3.Connection) -> None:
+    ensure_category_definitions_table(conn)
+    ensure_project_category_table(conn)
+    placeholders = ",".join("?" * len(LEGACY_CATEGORY_KEYS))
+    conn.execute(
+        f"DELETE FROM project_categories WHERE category_key IN ({placeholders})",
+        LEGACY_CATEGORY_KEYS,
+    )
+    conn.execute(
+        f"DELETE FROM category_definitions WHERE key IN ({placeholders})",
+        LEGACY_CATEGORY_KEYS,
+    )
+
+
+def get_category_options(conn: sqlite3.Connection) -> list[dict]:
+    purge_legacy_categories(conn)
+    ensure_project_category_table(conn)
+    rows = conn.execute(
+        """
+        SELECT category.key,
+               category.label,
+               category.color,
+               COUNT(project.project_name) AS assignment_count
+        FROM category_definitions
+        AS category
+        LEFT JOIN project_categories AS project
+          ON project.category_key = category.key
+        GROUP BY category.key, category.label, category.color
+        ORDER BY LOWER(category.label) ASC
+        """
+    ).fetchall()
+    return [
+        {
+            "key": row["key"],
+            "label": row["label"],
+            "color": row["color"],
+            "assignment_count": row["assignment_count"],
+        }
+        for row in rows
+    ]
+
+
+def get_category_maps(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, dict]]:
+    options = get_category_options(conn)
+    return options, {option["key"]: option for option in options}
+
+
 def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
     ensure_project_category_table(conn)
+    _, category_by_key = get_category_maps(conn)
     rows = conn.execute(
         """
         SELECT project_name, category_key
@@ -121,7 +213,7 @@ def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
     ).fetchall()
     categories = {}
     for row in rows:
-        category = CATEGORY_BY_KEY.get(row["category_key"])
+        category = category_by_key.get(row["category_key"])
         if not category:
             continue
         categories[row["project_name"]] = {
@@ -141,11 +233,13 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
         return {"error": "Project name is required."}
 
     normalized_key = (category_key or "").strip().lower() or None
-    if normalized_key is not None and normalized_key not in CATEGORY_BY_KEY:
-        return {"error": "Unknown category."}
 
     with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
         ensure_project_category_table(conn)
+        _, category_by_key = get_category_maps(conn)
+        if normalized_key is not None and normalized_key not in category_by_key:
+            return {"error": "Unknown category."}
         if normalized_key is None:
             cur = conn.execute(
                 "DELETE FROM project_categories WHERE project_name = ?",
@@ -165,7 +259,7 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
             (normalized_name, normalized_key),
         )
         conn.commit()
-        category = CATEGORY_BY_KEY[normalized_key]
+        category = category_by_key[normalized_key]
         return {
             "ok": True,
             "project_name": normalized_name,
@@ -173,6 +267,188 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
                 "key": category["key"],
                 "label": category["label"],
                 "color": category["color"],
+            },
+        }
+
+
+def normalize_category_key(label: str) -> str:
+    collapsed = "".join(ch.lower() if ch.isalnum() else "-" for ch in label.strip())
+    cleaned = "-".join(part for part in collapsed.split("-") if part)
+    return cleaned[:36] or "category"
+
+
+def normalize_hex_color(color: str) -> str | None:
+    normalized = (color or "").strip().upper()
+    if (
+        len(normalized) != 7
+        or not normalized.startswith("#")
+        or any(ch not in "0123456789ABCDEF" for ch in normalized[1:])
+    ):
+        return None
+    return normalized
+
+
+def create_category(label: str, color: str) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+
+    normalized_label = " ".join((label or "").strip().split())
+    if not normalized_label:
+        return {"error": "Category name is required."}
+    if len(normalized_label) > 32:
+        return {"error": "Category name must be 32 characters or less."}
+
+    normalized_color = normalize_hex_color(color)
+    if not normalized_color:
+        return {"error": "Pick a valid hex color."}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        purge_legacy_categories(conn)
+        custom_count = conn.execute(
+            "SELECT COUNT(*) FROM category_definitions"
+        ).fetchone()[0]
+        if custom_count >= MAX_CUSTOM_CATEGORIES:
+            return {"error": f"You can create up to {MAX_CUSTOM_CATEGORIES} custom categories."}
+
+        existing_label = conn.execute(
+            "SELECT key FROM category_definitions WHERE LOWER(label) = LOWER(?)",
+            (normalized_label,),
+        ).fetchone()
+        if existing_label:
+            return {"error": "A category with that name already exists."}
+
+        base_key = f"custom-{normalize_category_key(normalized_label)}"
+        category_key = base_key
+        suffix = 2
+        while conn.execute(
+            "SELECT 1 FROM category_definitions WHERE key = ?",
+            (category_key,),
+        ).fetchone():
+            category_key = f"{base_key}-{suffix}"
+            suffix += 1
+
+        conn.execute(
+            """
+            INSERT INTO category_definitions (key, label, color, updated_at)
+            VALUES (?, ?, ?, strftime('%s', 'now'))
+            """,
+            (category_key, normalized_label, normalized_color),
+        )
+        conn.commit()
+        return {
+            "ok": True,
+            "category": {
+                "key": category_key,
+                "label": normalized_label,
+                "color": normalized_color,
+            },
+            "custom_category_limit": MAX_CUSTOM_CATEGORIES,
+            "custom_category_count": custom_count + 1,
+        }
+
+
+def update_category(category_key: str, label: str, color: str) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+
+    normalized_key = (category_key or "").strip().lower()
+    normalized_label = " ".join((label or "").strip().split())
+    if not normalized_key:
+        return {"error": "Category key is required."}
+    if not normalized_label:
+        return {"error": "Category name is required."}
+    if len(normalized_label) > 32:
+        return {"error": "Category name must be 32 characters or less."}
+
+    normalized_color = normalize_hex_color(color)
+    if not normalized_color:
+        return {"error": "Pick a valid hex color."}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        purge_legacy_categories(conn)
+        row = conn.execute(
+            """
+            SELECT key
+            FROM category_definitions
+            WHERE key = ?
+            """,
+            (normalized_key,),
+        ).fetchone()
+        if not row:
+            return {"error": "Category not found."}
+
+        existing_label = conn.execute(
+            """
+            SELECT key
+            FROM category_definitions
+            WHERE LOWER(label) = LOWER(?)
+              AND key != ?
+            """,
+            (normalized_label, normalized_key),
+        ).fetchone()
+        if existing_label:
+            return {"error": "A category with that name already exists."}
+
+        conn.execute(
+            """
+            UPDATE category_definitions
+            SET label = ?, color = ?, updated_at = strftime('%s', 'now')
+            WHERE key = ?
+            """,
+            (normalized_label, normalized_color, normalized_key),
+        )
+        conn.commit()
+        return {
+            "ok": True,
+            "category": {
+                "key": normalized_key,
+                "label": normalized_label,
+                "color": normalized_color,
+            },
+        }
+
+
+def delete_category(category_key: str) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+
+    normalized_key = (category_key or "").strip().lower()
+    if not normalized_key:
+        return {"error": "Category key is required."}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        purge_legacy_categories(conn)
+        row = conn.execute(
+            """
+            SELECT key, label, color
+            FROM category_definitions
+            WHERE key = ?
+            """,
+            (normalized_key,),
+        ).fetchone()
+        if not row:
+            return {"error": "Category not found."}
+
+        cleared = conn.execute(
+            "DELETE FROM project_categories WHERE category_key = ?",
+            (normalized_key,),
+        ).rowcount
+        conn.execute(
+            "DELETE FROM category_definitions WHERE key = ?",
+            (normalized_key,),
+        )
+        conn.commit()
+        return {
+            "ok": True,
+            "deleted_category_key": normalized_key,
+            "cleared_assignments": cleared,
+            "category": {
+                "key": row["key"],
+                "label": row["label"],
+                "color": row["color"],
             },
         }
 
@@ -187,6 +463,7 @@ def get_stats() -> dict:
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.row_factory = sqlite3.Row
+            category_options, _ = get_category_maps(conn)
             project_categories = get_project_categories(conn)
 
             activity_rows = conn.execute("""
@@ -275,11 +552,16 @@ def get_stats() -> dict:
             ).fetchone()[0] or 0
             phantom_closed_count = count_phantom_sessions()
 
-            # Streak: consecutive days with activity ending today
+            # Streak: consecutive days with activity ending today (or yesterday, right after midnight)
             active_days = {day for day, seconds in daily_totals.items() if seconds > 0}
             streak = 0
-            cursor_day = date.today()
-            while cursor_day.isoformat() in active_days:
+            cursor_day = None
+            if today.isoformat() in active_days:
+                cursor_day = today
+            elif (today - timedelta(days=1)).isoformat() in active_days:
+                cursor_day = today - timedelta(days=1)
+
+            while cursor_day and cursor_day.isoformat() in active_days:
                 streak += 1
                 cursor_day -= timedelta(days=1)
 
@@ -334,7 +616,9 @@ def get_stats() -> dict:
                 "year_daily": [dict(r) for r in year_daily],
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
-                "category_options": CATEGORY_OPTIONS,
+                "category_options": category_options,
+                "custom_category_limit": MAX_CUSTOM_CATEGORIES,
+                "custom_category_count": len(category_options),
             }
     except Exception as e:
         return {"error": str(e)}
@@ -521,6 +805,22 @@ header{
   color:var(--ink);letter-spacing:-.025em;
 }
 .logo-text h1 em{font-style:normal;color:var(--ink-3);font-weight:550}
+
+.header-nav{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px;border-radius:999px;
+  background:var(--control-bg);border:1px solid var(--border);
+}
+.nav-tab{
+  border:none;background:transparent;color:var(--ink-3);
+  font-size:13px;font-weight:650;padding:9px 14px;border-radius:999px;cursor:pointer;
+  transition:background .18s ease, color .18s ease, transform .18s ease;
+}
+.nav-tab:hover{color:var(--ink);background:var(--surface-hover)}
+.nav-tab.is-active{
+  color:var(--ink);background:var(--control-bg-strong);
+  box-shadow:0 1px 2px rgba(15,23,42,.06);
+}
 
 .header-right{display:flex;align-items:center;gap:14px}
 .theme-toggle{
@@ -982,6 +1282,169 @@ header{
   margin-top:18px;display:flex;justify-content:flex-end;
 }
 
+.settings-shell{display:grid;gap:28px}
+.settings-grid{
+  display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:18px;
+}
+.settings-stack{display:grid;gap:18px}
+.settings-card{
+  border-radius:var(--radius);
+  padding:24px 26px;
+}
+.settings-copy{
+  font-size:14px;line-height:1.6;color:var(--ink-3);max-width:62ch;
+}
+.settings-kpis{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;
+}
+.settings-kpi{
+  padding:16px 18px;border-radius:18px;
+  background:var(--control-bg);border:1px solid var(--border);
+}
+.settings-kpi-label{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);font-weight:700;
+}
+.settings-kpi-value{
+  margin-top:8px;font-family:var(--font-display);font-size:26px;font-weight:680;
+  color:var(--ink);letter-spacing:-.04em;
+}
+.category-form{
+  display:grid;gap:14px;
+}
+.field-grid{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end;
+}
+.field{
+  display:grid;gap:8px;
+}
+.field-label{
+  font-size:12px;font-weight:650;color:var(--ink-3);
+}
+.text-input{
+  width:100%;border:1px solid var(--border);background:var(--control-bg);
+  border-radius:16px;padding:14px 16px;font-size:14px;color:var(--ink);
+  transition:border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.text-input:focus,
+.color-picker-button:focus-within{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+  background:var(--control-bg-strong);
+}
+.color-field{
+  display:grid;gap:10px;
+}
+.color-control{
+  display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;
+  padding:10px 12px;border-radius:18px;border:1px solid var(--border);background:var(--control-bg);
+}
+.color-preview{
+  width:40px;height:40px;border-radius:14px;background:var(--color-value, var(--accent));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.55), 0 10px 24px color-mix(in srgb, var(--color-value, var(--accent)) 22%, transparent);
+}
+.color-summary{
+  display:grid;gap:3px;min-width:0;
+}
+.color-summary-label{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);font-weight:700;
+}
+.color-summary-value{
+  font-family:var(--font-mono);font-size:13px;color:var(--ink);letter-spacing:.02em;
+}
+.color-picker-button{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  min-width:88px;min-height:40px;padding:0 14px;border-radius:999px;
+  border:1px solid var(--border);background:var(--control-bg-strong);cursor:pointer;
+  font-size:12px;font-weight:700;color:var(--ink-2);
+  transition:border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.color-picker-button:hover{
+  color:var(--ink);border-color:var(--border-strong);
+}
+.color-input{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.color-presets{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;
+}
+.color-preset{
+  height:30px;border-radius:10px;border:1px solid transparent;background:var(--color-value);
+  cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.36);
+  transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.color-preset:hover{
+  transform:translateY(-1px);
+}
+.color-preset.is-active{
+  border-color:color-mix(in srgb, var(--color-value) 72%, black 8%);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--color-value) 24%, transparent), inset 0 0 0 1px rgba(255,255,255,.65);
+}
+.color-preset:disabled{
+  cursor:not-allowed;opacity:.45;transform:none;box-shadow:none;
+}
+.field-note{
+  font-size:12px;color:var(--ink-4);
+}
+.settings-actions{display:flex;justify-content:flex-start}
+.category-library{
+  display:grid;gap:12px;
+}
+.category-library-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;
+}
+.category-library-card{
+  display:grid;gap:10px;padding:16px;border-radius:18px;
+  background:var(--control-bg);border:1px solid var(--border);
+}
+.category-library-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.category-library-title{
+  display:flex;align-items:center;gap:10px;min-width:0;
+}
+.category-library-name{
+  font-size:14px;font-weight:650;color:var(--ink);
+}
+.category-library-type{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);
+}
+.category-library-swatch{
+  width:14px;height:14px;border-radius:999px;background:var(--category-color, var(--accent));
+  box-shadow:0 0 0 5px color-mix(in srgb, var(--category-color, var(--accent)) 16%, transparent);
+}
+.category-library-code{
+  font-family:var(--font-mono);font-size:12px;color:var(--ink-4);
+}
+.category-library-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  font-size:12px;color:var(--ink-4);
+}
+.category-library-actions{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.btn.small{
+  padding:7px 11px;font-size:12px;
+}
+.btn.subtle{
+  color:var(--ink-3);
+}
+.btn.subtle:hover{
+  color:var(--ink);background:var(--control-bg-strong);
+}
+.category-editor{
+  display:grid;gap:12px;padding:14px;border-radius:16px;
+  background:var(--surface-hover);border:1px solid var(--border);
+}
+.category-editor-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.category-editor-title{
+  font-size:13px;font-weight:700;color:var(--ink);
+}
+.category-editor-actions{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+
 .table-card{
   border-radius:var(--radius);
   padding:24px 26px;margin-bottom:24px;
@@ -1061,6 +1524,7 @@ tbody tr:hover .row-del{opacity:1}
   color:var(--ink-3);
   background:color-mix(in srgb, var(--category-color) 10%, var(--control-bg));
   border-color:color-mix(in srgb, var(--category-color) 28%, transparent);
+  min-width:0;
 }
 .category-pill.empty .category-pill-swatch{background:var(--category-color)}
 
@@ -1101,12 +1565,16 @@ tbody tr:hover .row-del{opacity:1}
 @media(max-width:960px){
   .cards{grid-template-columns:repeat(2,1fr)}
   .chart-row{grid-template-columns:1fr}
+  .settings-grid{grid-template-columns:1fr}
+  .settings-kpis{grid-template-columns:1fr}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
   .goal-input-row{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
+  .header-right{gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .header-nav{order:2;width:100%;justify-content:center}
   .page{padding:28px 20px 60px}
   .section-head{flex-wrap:wrap}
   .card-value{font-size:34px}
@@ -1120,6 +1588,10 @@ tbody tr:hover .row-del{opacity:1}
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
   .goal-summary{grid-template-columns:1fr}
+  .field-grid{grid-template-columns:1fr}
+  .color-control{grid-template-columns:auto 1fr}
+  .color-picker-button{grid-column:1 / -1}
+  .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 </style>
 </head>
@@ -1140,6 +1612,10 @@ tbody tr:hover .row-del{opacity:1}
     </div>
   </div>
   <div class="header-right">
+    <div class="header-nav" role="tablist" aria-label="Pages">
+      <button class="nav-tab is-active" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
+      <button class="nav-tab" id="navSettings" type="button" data-view-tab="settings">Settings</button>
+    </div>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M21 14.7A8 8 0 0 1 9.3 3 7 7 0 1 0 21 14.7Z"/>
@@ -1160,7 +1636,8 @@ tbody tr:hover .row-del{opacity:1}
 <div class="page">
   <div class="intro">
     <div>
-      <div class="sub">Live · <span id="introDate"></span></div>
+      <h2 id="pageTitle">Studio <em>dashboard</em></h2>
+      <div class="sub" id="pageSubtitle">Live · <span id="introDate"></span></div>
     </div>
   </div>
   <div id="app"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
@@ -1205,21 +1682,21 @@ const PROJECT_COLORS = [
   '#007aff','#5ac8fa','#64d2ff','#5e5ce6','#34c759',
   '#ff9f0a','#ff375f','#8e8e93','#aeaeb2','#c7c7cc'
 ];
-const CATEGORY_OPTIONS = [
-  { key: 'c4milo', label: 'c4milo', color: '#228B22' },
-  { key: 'production', label: 'Production', color: '#00A6FF' },
-  { key: 'mixing', label: 'Mixing', color: '#8B5A2B' },
-  { key: 'mastering', label: 'Mastering', color: '#800020' },
-  { key: 'instrumentation', label: 'Instrumentation', color: '#B8860B' },
-];
-const CATEGORY_BY_KEY = Object.fromEntries(CATEGORY_OPTIONS.map(option => [option.key, option]));
-
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
 const GOAL_STORAGE_KEY = 'ableton_tracker_weekly_goal_hours';
 const THEME_STORAGE_KEY = 'ableton_tracker_theme';
+const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
+const CATEGORY_COLOR_PRESETS = [
+  '#FF6B6B', '#FF9F43', '#FFD166', '#7BD389',
+  '#3EC1D3', '#4D96FF', '#7C5CFF', '#C77DFF',
+  '#F15BB5', '#6D6875', '#A3A380', '#F28482',
+];
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
+let activeView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
+let CATEGORY_OPTIONS = [];
+let CATEGORY_BY_KEY = {};
 
 function activeTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -1250,11 +1727,118 @@ function toggleTheme() {
   applyStoredTheme();
 }
 
+function syncCategoryOptions(options) {
+  CATEGORY_OPTIONS = Array.isArray(options) ? options : [];
+  CATEGORY_BY_KEY = Object.fromEntries(CATEGORY_OPTIONS.map(option => [option.key, option]));
+}
+
+function normalizeHexColor(value) {
+  const text = String(value || '').trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(text) ? text : null;
+}
+
+function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false } = {}) {
+  const safeValue = normalizeHexColor(value) || '#7C5CFF';
+  return `
+    <div class="color-field" data-color-field>
+      <div class="color-control">
+        <span class="color-preview" data-color-preview style="--color-value:${safeValue}"></span>
+        <div class="color-summary">
+          <span class="color-summary-label">Current color</span>
+          <strong class="color-summary-value" data-color-value>${safeValue}</strong>
+        </div>
+        <label class="color-picker-button">
+          <input
+            class="color-input"
+            ${inputId ? `id="${inputId}"` : ''}
+            name="color"
+            type="color"
+            value="${safeValue}"
+            ${disabled ? 'disabled' : ''}
+          >
+          <span>Browse</span>
+        </label>
+      </div>
+      <div class="color-presets" role="list" aria-label="Suggested colors">
+        ${CATEGORY_COLOR_PRESETS.map(color => `
+          <button
+            class="color-preset ${color === safeValue ? 'is-active' : ''}"
+            type="button"
+            data-color-preset="${color}"
+            aria-label="Use ${color}"
+            style="--color-value:${color}"
+            ${disabled ? 'disabled' : ''}
+          ></button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindColorField(root) {
+  const field = root?.matches?.('[data-color-field]') ? root : root?.querySelector?.('[data-color-field]');
+  if (!field) return;
+  const input = field.querySelector('input[name="color"]');
+  const preview = field.querySelector('[data-color-preview]');
+  const valueLabel = field.querySelector('[data-color-value]');
+  const presets = Array.from(field.querySelectorAll('[data-color-preset]'));
+  if (!input || !preview || !valueLabel) return;
+
+  const sync = nextValue => {
+    const color = normalizeHexColor(nextValue) || '#7C5CFF';
+    input.value = color;
+    preview.style.setProperty('--color-value', color);
+    valueLabel.textContent = color;
+    presets.forEach(button => {
+      button.classList.toggle('is-active', button.dataset.colorPreset === color);
+    });
+  };
+
+  input.addEventListener('input', event => sync(event.target.value));
+  presets.forEach(button => {
+    button.addEventListener('click', () => sync(button.dataset.colorPreset));
+  });
+  sync(input.value);
+}
+
+function updateHeaderForView() {
+  const isSettings = activeView === 'settings';
+  document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
+  document.getElementById('navSettings').classList.toggle('is-active', isSettings);
+  document.getElementById('pageTitle').innerHTML = isSettings
+    ? 'Workspace <em>settings</em>'
+    : 'Studio <em>dashboard</em>';
+  document.getElementById('pageSubtitle').innerHTML = isSettings
+    ? 'Manage categories, colors, and personal organization'
+    : 'Live · <span id="introDate"></span>';
+  if (!isSettings) {
+    document.getElementById('introDate').textContent =
+      new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  }
+}
+
+function setActiveView(nextView, { pushHash = true } = {}) {
+  activeView = nextView === 'settings' ? 'settings' : 'dashboard';
+  if (pushHash) {
+    const nextHash = activeView === 'settings' ? '#settings' : '#dashboard';
+    if (window.location.hash !== nextHash) window.location.hash = nextHash;
+  }
+  updateHeaderForView();
+  if (latestDashboardData) render(latestDashboardData);
+}
+
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 systemTheme.addEventListener('change', () => {
   if (!localStorage.getItem(THEME_STORAGE_KEY)) updateThemeToggle();
 });
 applyStoredTheme();
+document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
+document.getElementById('navSettings').addEventListener('click', () => setActiveView('settings'));
+window.addEventListener('hashchange', () => {
+  const nextView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
+  if (nextView !== activeView) setActiveView(nextView, { pushHash: false });
+});
+updateHeaderForView();
 
 const fmt = {
   dur(s) {
@@ -1474,9 +2058,6 @@ function setStoredGoalHours(hours) {
   localStorage.setItem(GOAL_STORAGE_KEY, String(hours));
 }
 
-document.getElementById('introDate').textContent =
-  new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-
 // ── Toast ──
 let toastTimer = null;
 function toast(msg){
@@ -1614,6 +2195,238 @@ function openCategoryPicker({ projectName, categoryKey }) {
   list.querySelector('[data-category-value]')?.focus();
 }
 
+function renderSettings(data) {
+  const categoryOptions = data.category_options || [];
+  const customLimit = data.custom_category_limit || CUSTOM_CATEGORY_LIMIT_FALLBACK;
+  const customCount = data.custom_category_count || 0;
+  const remaining = Math.max(customLimit - customCount, 0);
+
+  document.getElementById('app').innerHTML = `
+    <div class="settings-shell">
+      <div class="chart-card settings-card">
+        <div class="section-head">
+          <h3 class="section-title">Custom <em>categories</em></h3>
+          <span class="section-meta">${customCount}/${customLimit} used</span>
+        </div>
+        <p class="settings-copy">
+          Create up to ${customLimit} personal categories with your own color palette.
+          Anything you add here becomes available in the project category picker right away.
+        </p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="chart-card settings-card">
+          <div class="section-head">
+            <h3 class="section-title">Create a <em>category</em></h3>
+            <span class="section-meta">${remaining} slot${remaining === 1 ? '' : 's'} left</span>
+          </div>
+          <form class="category-form" id="categoryCreateForm">
+            <div class="field-grid">
+              <label class="field">
+                <span class="field-label">Category name</span>
+                <input
+                  class="text-input"
+                  id="categoryNameInput"
+                  name="label"
+                  type="text"
+                  maxlength="32"
+                  placeholder="Ex. Sound Design"
+                  ${remaining === 0 ? 'disabled' : ''}
+                  required
+                >
+              </label>
+              <label class="field">
+                <span class="field-label">Color</span>
+                ${renderColorField({ inputId: 'categoryColorInput', value: '#7C5CFF', disabled: remaining === 0 })}
+              </label>
+            </div>
+            <div class="field-note">Pick a color from the palette or open the browser picker for something custom.</div>
+            <div class="settings-actions">
+              <button class="btn" type="submit" ${remaining === 0 ? 'disabled' : ''}>Save category</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-stack">
+          <div class="chart-card settings-card">
+            <div class="section-head">
+              <h3 class="section-title">At a <em>glance</em></h3>
+            </div>
+            <div class="settings-kpis">
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Categories</div>
+                <div class="settings-kpi-value">${customCount}</div>
+              </div>
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Available</div>
+                <div class="settings-kpi-value">${remaining}</div>
+              </div>
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Limit</div>
+                <div class="settings-kpi-value">${customLimit}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="section-head">
+          <h3 class="section-title">Category <em>library</em></h3>
+          <span class="section-meta">${categoryOptions.length} total</span>
+        </div>
+        <div class="category-library">
+          <div class="category-library-grid">
+            ${categoryOptions.map(option => `
+              <div class="category-library-card" data-category-card="${option.key}">
+                <div class="category-library-head">
+                  <div class="category-library-title">
+                    <span class="category-library-swatch" style="--category-color:${option.color}"></span>
+                    <span class="category-library-name">${escapeHtml(option.label)}</span>
+                  </div>
+                </div>
+                <div class="category-library-code">${escapeHtml(option.color)}</div>
+                <div class="category-library-meta">
+                  <span>${option.assignment_count || 0} assigned project${option.assignment_count === 1 ? '' : 's'}</span>
+                  <div class="category-library-actions">
+                    <button class="btn subtle small" type="button" data-category-edit="${option.key}">Edit</button>
+                    <button class="btn danger small" type="button" data-category-delete="${option.key}" data-category-label="${escapeHtml(option.label)}" data-category-assignments="${option.assignment_count || 0}">Delete</button>
+                  </div>
+                </div>
+                <form class="category-editor" data-category-editor="${option.key}" hidden>
+                  <div class="category-editor-head">
+                    <span class="category-editor-title">Edit category</span>
+                    <button class="btn subtle small" type="button" data-category-cancel="${option.key}">Cancel</button>
+                  </div>
+                  <div class="field-grid">
+                    <label class="field">
+                      <span class="field-label">Category name</span>
+                      <input
+                        class="text-input"
+                        name="label"
+                        type="text"
+                        maxlength="32"
+                        value="${escapeHtml(option.label)}"
+                        required
+                      >
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Color</span>
+                      ${renderColorField({ value: option.color })}
+                    </label>
+                  </div>
+                  <div class="category-editor-actions">
+                    <button class="btn small" type="submit">Save changes</button>
+                  </div>
+                </form>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('categoryCreateForm');
+  if (!form) return;
+  bindColorField(form);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const nameInput = document.getElementById('categoryNameInput');
+    const colorInput = document.getElementById('categoryColorInput');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const label = nameInput.value.trim();
+    const color = colorInput.value;
+    if (!label) {
+      toast('Add a category name first');
+      nameInput.focus();
+      return;
+    }
+    submitButton.disabled = true;
+    try {
+      const result = await postJson('/api/category-options', { label, color });
+      toast(`Created ${result.category.label}`);
+      form.reset();
+      colorInput.value = '#7C5CFF';
+      bindColorField(form);
+      await load();
+    } catch (error) {
+      toast(error.message || 'Failed to create category');
+    } finally {
+      submitButton.disabled = remaining === 0;
+    }
+  });
+
+  const toggleEditor = (key, open) => {
+    document.querySelectorAll('[data-category-editor]').forEach(editor => {
+      editor.hidden = editor.dataset.categoryEditor !== key || !open;
+    });
+  };
+
+  document.querySelectorAll('[data-category-edit]').forEach(button => {
+    button.addEventListener('click', () => {
+      toggleEditor(button.dataset.categoryEdit, true);
+      document
+        .querySelector(`[data-category-editor="${button.dataset.categoryEdit}"] input[name="label"]`)
+        ?.focus();
+    });
+  });
+
+  document.querySelectorAll('[data-category-cancel]').forEach(button => {
+    button.addEventListener('click', () => toggleEditor(button.dataset.categoryCancel, false));
+  });
+
+  document.querySelectorAll('[data-category-editor]').forEach(editor => {
+    bindColorField(editor);
+    editor.addEventListener('submit', async event => {
+      event.preventDefault();
+      const key = editor.dataset.categoryEditor;
+      const submitButton = editor.querySelector('button[type="submit"]');
+      const label = editor.querySelector('input[name="label"]').value.trim();
+      const color = editor.querySelector('input[name="color"]').value;
+      submitButton.disabled = true;
+      try {
+        const result = await postJson('/api/category-options/update', { key, label, color });
+        toast(`Updated ${result.category.label}`);
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to update category');
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-category-delete]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const key = button.dataset.categoryDelete;
+      const label = button.dataset.categoryLabel || 'this category';
+      const assignments = Number(button.dataset.categoryAssignments || '0');
+      const ok = await confirmDialog({
+        title: 'Delete custom <em>category</em>?',
+        body: assignments > 0
+          ? `Deletes <code>${label}</code> and clears it from ${assignments} assigned project${assignments === 1 ? '' : 's'}.`
+          : `Deletes <code>${label}</code> from your category library.`,
+        confirmLabel: 'Delete category',
+      });
+      if (!ok) return;
+      button.disabled = true;
+      try {
+        const result = await postJson('/api/category-options/delete', { key });
+        toast(
+          result.cleared_assignments > 0
+            ? `Deleted ${result.category.label} and cleared ${result.cleared_assignments} project${result.cleared_assignments === 1 ? '' : 's'}`
+            : `Deleted ${result.category.label}`
+        );
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to delete category');
+        button.disabled = false;
+      }
+    });
+  });
+}
+
 async function clearRecent(){
   const ok = await confirmDialog({
     title: 'Clear <em>all logs?</em>',
@@ -1712,7 +2525,13 @@ function render(data) {
       `<div class="empty"><p>${escapeHtml(data.error)}</p><small>run start_tracker.command</small></div>`;
     return;
   }
+  syncCategoryOptions(data.category_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
+
+  if (activeView === 'settings') {
+    renderSettings(data);
+    return;
+  }
 
   if (summary.live_project) {
     document.getElementById('liveBadge').style.display = 'inline-flex';
@@ -2350,6 +3169,37 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_name", ""),
                 payload.get("category_key"),
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/category-options":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = create_category(
+                payload.get("label", ""),
+                payload.get("color", ""),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/category-options/update":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = update_category(
+                payload.get("key", ""),
+                payload.get("label", ""),
+                payload.get("color", ""),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/category-options/delete":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = delete_category(payload.get("key", ""))
             self._json(result, status=200 if result.get("ok") else 400)
         else:
             self._json({"error": "not found"}, status=404)
