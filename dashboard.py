@@ -1719,7 +1719,7 @@ tbody tr:hover .row-del{opacity:1}
 <div class="page">
   <div class="intro">
     <div>
-      <h2 id="pageTitle">Studio <em>dashboard</em></h2>
+      <h2 id="pageTitle">Dashboard </h2>
       <div class="sub" id="pageSubtitle">Live · <span id="introDate"></span></div>
     </div>
   </div>
