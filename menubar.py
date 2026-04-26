@@ -43,6 +43,22 @@ def fmt_dur(seconds: float) -> str:
     return f"{h}h {m}m" if h else f"{m}m"
 
 
+_QUARTER_GLYPH = {0: "", 1: "¼", 2: "½", 3: "¾"}
+
+
+def fmt_quarter(seconds: float) -> str:
+    """Round seconds to the nearest quarter hour, render as e.g. '1¾'. Empty if zero."""
+    quarters = round((seconds or 0) / 900)
+    if quarters == 0:
+        return ""
+    whole, frac = divmod(quarters, 4)
+    if whole and frac:
+        return f"{whole}{_QUARTER_GLYPH[frac]}"
+    if whole:
+        return str(whole)
+    return _QUARTER_GLYPH[frac]
+
+
 def today_seconds() -> float:
     try:
         return day_seconds(date.today())
@@ -148,12 +164,15 @@ class AbletonTrackerApp(rumps.App):
         paused = PAUSE_FILE.exists()
         self.pause_item.title = "Resume tracking" if paused else "Pause tracking"
         status = self.tracker_thread.status()
+        today = today_seconds()
+        frac = fmt_quarter(today)
+        suffix = f" {frac}" if frac else ""
 
         if status.state == STATE_PAUSED:
-            self.title = "⏸"
+            self.title = f"⏸{suffix}"
             self.status_item.title = "Paused"
         elif status.state == STATE_IDLE_PAUSED:
-            self.title = "💤"
+            self.title = f"⏸{suffix}"
             idle_seconds = int(status.hid_idle_seconds)
             if idle_seconds < 60:
                 idle_label = f"{idle_seconds}s"
@@ -162,19 +181,19 @@ class AbletonTrackerApp(rumps.App):
             project = status.resume_hint_project or "last project"
             self.status_item.title = f"Paused: idle {idle_label} - {project}"
         elif status.state == STATE_TRACKING and status.project_name:
-            self.title = f"● {fmt_dur(today_seconds())}"
+            self.title = f"●{suffix}"
             self.status_item.title = f"Recording: {status.project_name}"
         elif status.state == STATE_ABLETON_OPEN:
-            self.title = "○"
+            self.title = f"◐{suffix}"
             self.status_item.title = "Ableton open (no project)"
         elif status.state == STATE_ABLETON_CLOSED:
-            self.title = "○"
+            self.title = f"○{suffix}"
             self.status_item.title = "Ableton not running"
         else:
-            self.title = "○"
+            self.title = f"○{suffix}"
             self.status_item.title = "Idle"
 
-        self.today_item.title = f"Today: {fmt_dur(today_seconds())}"
+        self.today_item.title = f"Today: {fmt_dur(today)}"
 
     def open_dashboard(self, _):
         self.dashboard.open()
