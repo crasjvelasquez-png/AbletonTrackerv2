@@ -10,7 +10,7 @@ import re
 import tempfile
 import threading
 from collections import defaultdict
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -490,10 +490,8 @@ def _ensure_audio_probe_binary() -> Path | None:
             _set_audio_probe_error(f"swiftc: {e}")
             return None
         finally:
-            try:
+            with suppress(FileNotFoundError):
                 Path(src_path).unlink()
-            except FileNotFoundError:
-                pass
         if r.returncode != 0:
             _set_audio_probe_error(
                 f"swiftc exited {r.returncode}: {(r.stderr or '').strip()[:300]}"
