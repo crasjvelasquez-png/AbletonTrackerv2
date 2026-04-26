@@ -128,26 +128,31 @@ def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
     ]
     expected_columns = ["key", "label", "color", "updated_at"]
     if columns != expected_columns:
-        conn.execute("ALTER TABLE category_definitions RENAME TO category_definitions_legacy")
-        conn.execute(
-            """
-            CREATE TABLE category_definitions (
-                key         TEXT PRIMARY KEY,
-                label       TEXT NOT NULL,
-                color       TEXT NOT NULL,
-                updated_at  INTEGER NOT NULL
+        try:
+            conn.execute("BEGIN")
+            conn.execute("ALTER TABLE category_definitions RENAME TO category_definitions_legacy")
+            conn.execute(
+                """
+                CREATE TABLE category_definitions (
+                    key         TEXT PRIMARY KEY,
+                    label       TEXT NOT NULL,
+                    color       TEXT NOT NULL,
+                    updated_at  INTEGER NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            INSERT INTO category_definitions (key, label, color, updated_at)
-            SELECT key, label, color, updated_at
-            FROM category_definitions_legacy
-            """
-        )
-        conn.execute("DROP TABLE category_definitions_legacy")
-        conn.commit()
+            conn.execute(
+                """
+                INSERT INTO category_definitions (key, label, color, updated_at)
+                SELECT key, label, color, updated_at
+                FROM category_definitions_legacy
+                """
+            )
+            conn.execute("DROP TABLE category_definitions_legacy")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def purge_legacy_categories(conn: sqlite3.Connection) -> None:

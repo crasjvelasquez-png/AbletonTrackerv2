@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Ableton Live project time tracker daemon."""
 
+import contextlib
 import sqlite3
 import subprocess
 import time
@@ -490,10 +491,8 @@ def _ensure_audio_probe_binary() -> Path | None:
             _set_audio_probe_error(f"swiftc: {e}")
             return None
         finally:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 Path(src_path).unlink()
-            except FileNotFoundError:
-                pass
         if r.returncode != 0:
             _set_audio_probe_error(
                 f"swiftc exited {r.returncode}: {(r.stderr or '').strip()[:300]}"
