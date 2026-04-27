@@ -6,9 +6,10 @@ import sqlite3
 import json
 import webbrowser
 import threading
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import parse_qs, urlparse
 
 from tracker import (
     allocate_session_activity,
@@ -156,6 +157,18 @@ def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
         except Exception:
             conn.rollback()
             raise
+
+
+def ensure_daily_metrics_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS daily_metrics (
+            metric_date      TEXT PRIMARY KEY,
+            goal_hours       REAL,
+            updated_at       INTEGER NOT NULL
+        )
+        """
+    )
 
 
 def purge_legacy_categories(conn: sqlite3.Connection) -> None:
@@ -455,6 +468,169 @@ def delete_category(category_key: str) -> dict:
             },
         }
 
+
+def parse_iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat((value or "").strip())
+    except ValueError as exc:
+        raise ValueError("invalid date") from exc
+
+
+def get_friday_week_range(target_date: date) -> tuple[date, date]:
+    week_start = target_date - timedelta(days=(target_date.weekday() - 4) % 7)
+    return week_start, week_start + timedelta(days=6)
+
+
+def get_daily_progress_seconds(conn: sqlite3.Connection, target_date: date) -> int:
+    day_start = datetime.combine(target_date, datetime.min.time()).timestamp()
+    day_end = datetime.combine(target_date + timedelta(days=1), datetime.min.time()).timestamp()
+    rows = conn.execute(
+        """
+        SELECT start_time, last_seen_time, end_time, active_seconds
+        FROM sessions
+        WHERE active_seconds > 0
+          AND start_time < ?
+          AND COALESCE(end_time, last_seen_time, start_time) >= ?
+        """,
+        (day_end, day_start),
+    ).fetchall()
+    target_key = target_date.isoformat()
+    total_seconds = 0.0
+    for row in rows:
+        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
+        for day_key, _hour, seconds in allocate_session_activity(
+            row["start_time"],
+            end_time,
+            row["active_seconds"],
+        ):
+            if day_key == target_key:
+                total_seconds += seconds
+    return round(total_seconds)
+
+
+def get_range_progress_seconds(conn: sqlite3.Connection, start_date: date, end_date: date) -> int:
+    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
+    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
+    rows = conn.execute(
+        """
+        SELECT start_time, last_seen_time, end_time, active_seconds
+        FROM sessions
+        WHERE active_seconds > 0
+          AND start_time < ?
+          AND COALESCE(end_time, last_seen_time, start_time) >= ?
+        """,
+        (range_end, range_start),
+    ).fetchall()
+    start_key = start_date.isoformat()
+    end_key = end_date.isoformat()
+    total_seconds = 0.0
+    for row in rows:
+        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
+        for day_key, _hour, seconds in allocate_session_activity(
+            row["start_time"],
+            end_time,
+            row["active_seconds"],
+        ):
+            if start_key <= day_key <= end_key:
+                total_seconds += seconds
+    return round(total_seconds)
+
+
+def get_daily_target(date_value: str) -> dict:
+    target_date = parse_iso_date(date_value)
+    date_key = target_date.isoformat()
+
+    if not DB_PATH.exists():
+        return {
+            "date": date_key,
+            "goal_hours": None,
+            "progress_seconds": 0,
+            "has_target": False,
+        }
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.row_factory = sqlite3.Row
+        ensure_daily_metrics_table(conn)
+        row = conn.execute(
+            """
+            SELECT goal_hours
+            FROM daily_metrics
+            WHERE metric_date = ?
+            """,
+            (date_key,),
+        ).fetchone()
+        progress_seconds = get_daily_progress_seconds(conn, target_date)
+        goal_hours = None
+        if row and row["goal_hours"] is not None:
+            goal_hours = round(float(row["goal_hours"]) * 10) / 10
+        return {
+            "date": date_key,
+            "goal_hours": goal_hours,
+            "progress_seconds": progress_seconds,
+            "has_target": goal_hours is not None,
+        }
+
+
+def set_daily_target(date_value: str, goal_hours: object) -> dict:
+    target_date = parse_iso_date(date_value)
+    try:
+        normalized_goal = round(float(goal_hours) * 10) / 10
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid goal") from exc
+    if normalized_goal <= 0 or normalized_goal > 100:
+        raise ValueError("invalid goal")
+
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.row_factory = sqlite3.Row
+        ensure_daily_metrics_table(conn)
+        conn.execute(
+            """
+            INSERT INTO daily_metrics (metric_date, goal_hours, updated_at)
+            VALUES (?, ?, strftime('%s', 'now'))
+            ON CONFLICT(metric_date) DO UPDATE SET
+                goal_hours = excluded.goal_hours,
+                updated_at = excluded.updated_at
+            """,
+            (target_date.isoformat(), normalized_goal),
+        )
+        conn.commit()
+    return get_daily_target(target_date.isoformat())
+
+
+def get_weekly_target(date_value: str = "") -> dict:
+    target_date = parse_iso_date(date_value) if date_value else date.today()
+    week_start, week_end = get_friday_week_range(target_date)
+    start_key = week_start.isoformat()
+    end_key = week_end.isoformat()
+    reset_at = datetime.combine(week_end + timedelta(days=1), datetime.min.time())
+    seconds_until_reset = max(0, int(round(reset_at.timestamp() - datetime.now().timestamp())))
+
+    base = {
+        "week_start": start_key,
+        "week_end": end_key,
+        "weekly_start_date": start_key,
+        "weekly_end_date": end_key,
+        "reset_at": reset_at.isoformat(),
+        "seconds_until_reset": seconds_until_reset,
+        "goal_hours": 0,
+        "progress_seconds": 0,
+        "has_target": False,
+    }
+
+    if not DB_PATH.exists():
+        return base
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.row_factory = sqlite3.Row
+        return {
+            **base,
+            "progress_seconds": get_range_progress_seconds(conn, week_start, week_end),
+        }
+
 # ─────────────────────────────────────────────────────────────
 #  Data layer
 # ─────────────────────────────────────────────────────────────
@@ -513,8 +689,7 @@ def get_stats() -> dict:
             recent = condense_recent_sessions(recent)[:60]
 
             today_str   = today.isoformat()
-            goal_week_start = today - timedelta(days=(today.weekday() - 4) % 7)
-            goal_week_end   = goal_week_start + timedelta(days=6)
+            goal_week_start, goal_week_end = get_friday_week_range(today)
             month_start = today.replace(day=1).isoformat()
 
             today_session_seconds = []
@@ -710,8 +885,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path.startswith("/api/data"):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/data":
             self._json(get_stats())
+        elif parsed.path == "/api/daily-target":
+            date_value = parse_qs(parsed.query).get("date", [""])[0]
+            try:
+                self._json(get_daily_target(date_value))
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
+        elif parsed.path in ("/api/weekly-target", "/api/get_weekly_target"):
+            date_value = parse_qs(parsed.query).get("date", [""])[0]
+            try:
+                self._json(get_weekly_target(date_value))
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
         else:
             body = _load_html().encode()
             self.send_response(200)
@@ -780,6 +968,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             result = delete_category(payload.get("key", ""))
             self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/daily-target":
+            try:
+                payload = self._request_json()
+                result = set_daily_target(
+                    payload.get("date", ""),
+                    payload.get("goal_hours"),
+                )
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
+                return
+            self._json(result)
         else:
             self._json({"error": "not found"}, status=404)
 

@@ -207,6 +207,102 @@ class DashboardCategoryTests(unittest.TestCase):
         self.assertEqual(tuple(row), ("custom-mixing", "Mixing", "#11AA88", 0))
 
 
+class DashboardWeeklyTargetTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_friday_week_range_uses_previous_friday_through_thursday(self):
+        self.assertEqual(
+            dashboard.get_friday_week_range(date(2026, 4, 24)),
+            (date(2026, 4, 24), date(2026, 4, 30)),
+        )
+        self.assertEqual(
+            dashboard.get_friday_week_range(date(2026, 4, 27)),
+            (date(2026, 4, 24), date(2026, 4, 30)),
+        )
+        self.assertEqual(
+            dashboard.get_friday_week_range(date(2026, 4, 30)),
+            (date(2026, 4, 24), date(2026, 4, 30)),
+        )
+        self.assertEqual(
+            dashboard.get_friday_week_range(date(2026, 5, 1)),
+            (date(2026, 5, 1), date(2026, 5, 7)),
+        )
+
+    def test_weekly_target_aggregates_friday_to_thursday_progress(self):
+        friday_start = datetime(2026, 4, 24, 10, 0).timestamp()
+        friday_end = datetime(2026, 4, 24, 12, 0).timestamp()
+        thursday_start = datetime(2026, 4, 30, 13, 0).timestamp()
+        thursday_end = datetime(2026, 4, 30, 14, 0).timestamp()
+        next_friday_start = datetime(2026, 5, 1, 10, 0).timestamp()
+        next_friday_end = datetime(2026, 5, 1, 12, 0).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    ("Friday", friday_start, friday_end, friday_end, 7200.0),
+                    ("Thursday", thursday_start, thursday_end, thursday_end, 3600.0),
+                    ("Next Friday", next_friday_start, next_friday_end, next_friday_end, 7200.0),
+                ],
+            )
+            conn.commit()
+
+        target = dashboard.get_weekly_target("2026-04-27")
+
+        self.assertEqual(target["week_start"], "2026-04-24")
+        self.assertEqual(target["week_end"], "2026-04-30")
+        self.assertEqual(target["weekly_start_date"], "2026-04-24")
+        self.assertEqual(target["weekly_end_date"], "2026-04-30")
+        self.assertEqual(target["progress_seconds"], 10800)
+        self.assertEqual(target["reset_at"], "2026-05-01T00:00:00")
+        self.assertGreaterEqual(target["seconds_until_reset"], 0)
+
+    def test_weekly_target_is_independent_from_daily_goals(self):
+        friday_start = datetime(2026, 4, 24, 10, 0).timestamp()
+        friday_end = datetime(2026, 4, 24, 12, 0).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Friday", friday_start, friday_end, friday_end, 7200.0),
+            )
+            conn.commit()
+
+        baseline = dashboard.get_weekly_target("2026-04-27")
+
+        dashboard.set_daily_target("2026-04-24", 2.5)
+        dashboard.set_daily_target("2026-04-30", 3.5)
+        dashboard.set_daily_target("2026-04-27", 8.0)
+
+        after_daily_changes = dashboard.get_weekly_target("2026-04-27")
+
+        self.assertEqual(after_daily_changes["progress_seconds"], baseline["progress_seconds"])
+        self.assertEqual(after_daily_changes["goal_hours"], baseline["goal_hours"])
+        self.assertFalse(after_daily_changes["has_target"])
+        self.assertNotIn("goal_day_count", after_daily_changes)
+
+
 class DashboardRolloverTests(unittest.TestCase):
     def setUp(self):
         fd, path = tempfile.mkstemp(suffix=".db")
