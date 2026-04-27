@@ -4,6 +4,7 @@
 import os
 import sqlite3
 import json
+import time
 import webbrowser
 import threading
 from datetime import date, timedelta
@@ -591,11 +592,24 @@ def get_stats() -> dict:
                 streak += 1
                 cursor_day -= timedelta(days=1)
 
+            now_ts = time.time()
+
             # Currently active session (end_time IS NULL)
             live = conn.execute("""
-                SELECT project_name FROM sessions
+                SELECT project_name, start_time, last_seen_time, active_seconds
+                FROM sessions
                 WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
             """).fetchone()
+            live_duration_seconds = 0.0
+            live_start_time = None
+            if live:
+                live_start_time = float(live["start_time"] or 0)
+                live_last_seen = float(live["last_seen_time"] or live_start_time or now_ts)
+                live_active_seconds = float(live["active_seconds"] or 0)
+                live_duration_seconds = max(
+                    live_active_seconds + max(0.0, now_ts - live_last_seen),
+                    0.0,
+                )
 
             month_per_project = dict(conn.execute(
                 """
@@ -649,7 +663,10 @@ def get_stats() -> dict:
                     "project_count":  len(projects),
                     "streak_days":    streak,
                     "live_project":   live["project_name"] if live else None,
+                    "live_session_start_time": live_start_time,
+                    "live_session_duration_seconds": live_duration_seconds,
                     "ableton_running": is_ableton_running(),
+                    "generated_at": now_ts,
                     "closed_session_count": closed_session_count,
                     "unsaved_closed_count": unsaved_closed_count,
                     "phantom_closed_count": phantom_closed_count,
@@ -923,17 +940,23 @@ header{
 .intro .sub{
   font-size:13px;color:var(--ink-4);margin-top:12px;
 }
-.intro .sub > span:not(.session-status){color:var(--ink-2)}
+.intro .sub > span:not(.session-presence){color:var(--ink-2)}
+.session-presence{
+  display:inline-flex;align-items:center;gap:12px;
+  flex-wrap:nowrap;
+}
 .session-status{
-  display:inline-flex;align-items:center;gap:10px;
+  display:grid;grid-template-columns:max-content 24px;align-items:center;column-gap:4px;
   color:var(--ink-2);
 }
 .session-status__text{
   color:inherit;
+  white-space:nowrap;
 }
 .session-status__indicator{
   display:inline-flex;align-items:center;gap:4px;
   min-width:24px;
+  justify-content:flex-start;
 }
 .session-status__dot{
   width:10px;height:10px;border-radius:999px;
@@ -946,18 +969,57 @@ header{
   box-shadow:none;
 }
 .session-status__indicator--booting{
-  min-width:auto;
+  min-width:24px;
 }
 .session-status__indicator--booting .session-status__dot{
   background:#ffffff;
   box-shadow:0 0 0 1px rgba(0,0,0,.14), 0 0 12px rgba(255,255,255,.28);
   animation:bootBlink 0.545s ease-in-out infinite;
 }
-.session-status__indicator--booting .session-status__dot:nth-child(2){
-  animation-delay:-0.182s;
+.session-status__timer{
+  display:grid;grid-template-columns:44px 72px;align-items:center;column-gap:10px;
+  min-width:126px;
+  padding:4px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:color-mix(in srgb, var(--surface) 82%, transparent);
+  color:var(--ink-2);
 }
-.session-status__indicator--booting .session-status__dot:nth-child(3){
-  animation-delay:-0.364s;
+.session-status__timer-label{
+  font-size:11px;
+  color:var(--ink-4);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.session-status__timer-value{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+  white-space:nowrap;
+}
+.session-status__timer[data-state="live"]{
+  color:var(--ink);
+  border-color:color-mix(in srgb, #30d158 22%, var(--border));
+  background:color-mix(in srgb, #30d158 12%, var(--surface));
+}
+.session-status__timer[data-state="booting"]{
+  border-color:color-mix(in srgb, #ffffff 20%, var(--border));
+}
+.session-status__timer[data-state="off"] .session-status__timer-value{
+  color:var(--ink-4);
+}
+@media (max-width: 640px){
+  .session-presence{
+    display:grid;
+    grid-template-columns:1fr;
+    row-gap:8px;
+    align-items:flex-start;
+  }
+  .session-status__timer{
+    width:100%;
+    max-width:220px;
+  }
 }
 @keyframes bootBlink{
   0%, 18%, 100%{opacity:1;transform:scale(1)}
@@ -2008,10 +2070,16 @@ tbody tr:hover .row-del{opacity:1}
     <div>
       <h2 id="pageTitle">Dashboard </h2>
       <div class="sub" id="pageSubtitle">
-        <span class="session-status" id="sessionStatus" data-state="live">
-          <span class="session-status__text" id="sessionStatusText">Live</span>
-          <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
-            <span class="session-status__dot"></span>
+        <span class="session-presence">
+          <span class="session-status" id="sessionStatus" data-state="live">
+            <span class="session-status__text" id="sessionStatusText">Live</span>
+            <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+              <span class="session-status__dot"></span>
+            </span>
+          </span>
+          <span class="session-status__timer" id="sessionTimer" data-state="live" aria-live="polite">
+            <span class="session-status__timer-label" id="sessionTimerLabel">Session</span>
+            <span class="session-status__timer-value" id="sessionTimerValue">00:00:00</span>
           </span>
         </span>
         · <span id="introDate"></span> · <span id="introTime"></span>
@@ -2076,6 +2144,25 @@ let latestDashboardData = null;
 let activeView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
+let sessionTimerSnapshot = { state: 'off', baseSeconds: 0, syncedAtMs: 0 };
+
+function sessionSubtitleMarkup() {
+  return `
+    <span class="session-presence">
+      <span class="session-status" id="sessionStatus" data-state="live">
+        <span class="session-status__text" id="sessionStatusText">Live</span>
+        <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+          <span class="session-status__dot"></span>
+        </span>
+      </span>
+      <span class="session-status__timer" id="sessionTimer" data-state="live" aria-live="polite">
+        <span class="session-status__timer-label" id="sessionTimerLabel">Session</span>
+        <span class="session-status__timer-value" id="sessionTimerValue">00:00:00</span>
+      </span>
+    </span>
+    · <span id="introDate"></span> · <span id="introTime"></span>
+  `;
+}
 
 function activeTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -2199,6 +2286,23 @@ function setIntroDates() {
   }
 }
 
+function tickSessionTimer() {
+  const timer = document.getElementById('sessionTimer');
+  const value = document.getElementById('sessionTimerValue');
+  if (!timer || !value) return;
+
+  const state = sessionTimerSnapshot.state || 'off';
+  timer.dataset.state = state;
+
+  if (state === 'live') {
+    const elapsed = Math.max(0, (Date.now() - sessionTimerSnapshot.syncedAtMs) / 1000);
+    value.textContent = formatSessionClock((sessionTimerSnapshot.baseSeconds || 0) + elapsed);
+    return;
+  }
+
+  value.textContent = state === 'booting' ? 'Starting…' : '--:--:--';
+}
+
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
   document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
@@ -2208,17 +2312,10 @@ function updateHeaderForView() {
     : '<strong class="page-title-dashboard">Dashboard</strong>';
   document.getElementById('pageSubtitle').innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
-    : `
-      <span class="session-status" id="sessionStatus" data-state="live">
-        <span class="session-status__text" id="sessionStatusText">Live</span>
-        <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
-          <span class="session-status__dot"></span>
-        </span>
-      </span>
-      · <span id="introDate"></span> · <span id="introTime"></span>
-    `;
+    : sessionSubtitleMarkup();
   if (!isSettings) {
     setIntroDates();
+    updateSessionStatus(latestDashboardData?.summary);
   }
 }
 
@@ -2263,6 +2360,14 @@ const fmt = {
   },
   hrs(s) { return Math.round((s || 0) / 360) / 10; }
 };
+
+function formatSessionClock(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 function escapeHtml(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3279,36 +3384,47 @@ function updateSessionStatus(summary) {
   const status = document.getElementById('sessionStatus');
   const label = document.getElementById('sessionStatusText');
   const indicator = document.getElementById('sessionStatusIndicator');
-  if (!status || !label || !indicator) return;
+  const timer = document.getElementById('sessionTimer');
+  const timerLabel = document.getElementById('sessionTimerLabel');
+  if (!status || !label || !indicator || !timer || !timerLabel) return;
 
   let state = 'off';
   let text = 'Off';
   let indicatorHtml = '<span class="session-status__dot"></span>';
+  let timerLabelText = 'Session';
+  let timerBaseSeconds = 0;
 
   if (summary?.live_project) {
     state = 'live';
     text = 'Live';
     indicator.className = 'session-status__indicator session-status__indicator--live';
     indicatorHtml = '<span class="session-status__dot"></span>';
+    timerBaseSeconds = Number(summary.live_session_duration_seconds) || 0;
   } else if (summary?.ableton_running) {
     state = 'booting';
     text = 'Booting up';
     indicator.className = 'session-status__indicator session-status__indicator--booting';
-    indicatorHtml = `
-      <span class="session-status__dot"></span>
-      <span class="session-status__dot"></span>
-      <span class="session-status__dot"></span>
-    `;
+    indicatorHtml = '<span class="session-status__dot"></span>';
+    timerLabelText = 'Status';
   } else {
     state = 'off';
     text = 'Off';
     indicator.className = 'session-status__indicator session-status__indicator--off';
     indicatorHtml = '<span class="session-status__dot"></span>';
+    timerLabelText = 'Status';
   }
 
+  sessionTimerSnapshot = {
+    state,
+    baseSeconds: timerBaseSeconds,
+    syncedAtMs: Date.now(),
+  };
   status.dataset.state = state;
   label.textContent = text;
   indicator.innerHTML = indicatorHtml;
+  timer.dataset.state = state;
+  timerLabel.textContent = timerLabelText;
+  tickSessionTimer();
 }
 
 function renderActivityHeatmap(yearDaily, yearHourly) {
@@ -3760,7 +3876,11 @@ function renderCategoryChart(projects) {
 }
 
 load();
-setInterval(load, 60_000);
+setInterval(load, 5_000);
+setInterval(() => {
+  if (activeView === 'dashboard') setIntroDates();
+}, 30_000);
+setInterval(tickSessionTimer, 1_000);
 </script>
 </body>
 </html>"""
