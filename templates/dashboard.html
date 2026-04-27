@@ -1,868 +1,4 @@
-#!/usr/bin/env python3
-"""Ableton Tracker Dashboard — local web server."""
-
-import os
-import sqlite3
-import json
-import time
-import webbrowser
-import threading
-from datetime import date, datetime, timedelta
-from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
-
-from tracker import (
-    allocate_session_activity,
-    build_activity_rollups,
-    cleanup_phantom_sessions,
-    condense_recent_sessions,
-    count_phantom_sessions,
-    is_ableton_running,
-)
-
-DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
-PORT = 7421
-UNTITLED_NAMES = {"untitled", "untitled project"}
-MAX_CUSTOM_CATEGORIES = 12
-LEGACY_CATEGORY_KEYS = [
-    "c4milo",
-    "production",
-    "mixing",
-    "mastering",
-    "instrumentation",
-]
-
-
-# ─────────────────────────────────────────────────────────────
-#  Mutations
-# ─────────────────────────────────────────────────────────────
-
-def clear_all_sessions() -> dict:
-    if not DB_PATH.exists():
-        return {"ok": True, "deleted": 0}
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute("DELETE FROM sessions WHERE end_time IS NOT NULL")
-        conn.commit()
-        return {"ok": True, "deleted": cur.rowcount}
-
-
-def clear_unsaved_projects() -> dict:
-    if not DB_PATH.exists():
-        return {"ok": True, "deleted": 0}
-    placeholders = ",".join("?" * len(UNTITLED_NAMES))
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute(
-            f"""
-            DELETE FROM sessions
-            WHERE end_time IS NOT NULL
-              AND LOWER(TRIM(project_name)) IN ({placeholders})
-            """,
-            tuple(UNTITLED_NAMES),
-        )
-        conn.commit()
-        return {"ok": True, "deleted": cur.rowcount}
-
-
-def clear_phantom_sessions() -> dict:
-    return cleanup_phantom_sessions()
-
-
-def delete_sessions(session_ids) -> dict:
-    if not isinstance(session_ids, list) or not session_ids:
-        return {"error": "session_ids required"}
-
-    clean_ids: list[int] = []
-    for raw in session_ids:
-        try:
-            clean_ids.append(int(raw))
-        except (TypeError, ValueError):
-            return {"error": "invalid session id"}
-
-    if not DB_PATH.exists():
-        return {"ok": True, "deleted": 0, "skipped_live": 0}
-
-    placeholders = ",".join("?" * len(clean_ids))
-    with sqlite3.connect(DB_PATH) as conn:
-        live_rows = conn.execute(
-            f"SELECT id FROM sessions WHERE id IN ({placeholders}) AND end_time IS NULL",
-            clean_ids,
-        ).fetchall()
-        live_ids = {row[0] for row in live_rows}
-        deletable = [i for i in clean_ids if i not in live_ids]
-
-        deleted = 0
-        if deletable:
-            del_placeholders = ",".join("?" * len(deletable))
-            cur = conn.execute(
-                f"DELETE FROM sessions WHERE id IN ({del_placeholders}) AND end_time IS NOT NULL",
-                deletable,
-            )
-            conn.commit()
-            deleted = cur.rowcount
-
-        return {"ok": True, "deleted": deleted, "skipped_live": len(live_ids)}
-
-
-def ensure_project_category_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_categories (
-            project_name TEXT PRIMARY KEY,
-            category_key TEXT NOT NULL,
-            updated_at   INTEGER NOT NULL
-        )
-        """
-    )
-
-
-def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS category_definitions (
-            key         TEXT PRIMARY KEY,
-            label       TEXT NOT NULL,
-            color       TEXT NOT NULL,
-            updated_at  INTEGER NOT NULL
-        )
-        """
-    )
-    columns = [
-        row[1]
-        for row in conn.execute("PRAGMA table_info(category_definitions)").fetchall()
-    ]
-    expected_columns = ["key", "label", "color", "updated_at"]
-    if columns != expected_columns:
-        try:
-            conn.execute("BEGIN")
-            conn.execute("ALTER TABLE category_definitions RENAME TO category_definitions_legacy")
-            conn.execute(
-                """
-                CREATE TABLE category_definitions (
-                    key         TEXT PRIMARY KEY,
-                    label       TEXT NOT NULL,
-                    color       TEXT NOT NULL,
-                    updated_at  INTEGER NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                INSERT INTO category_definitions (key, label, color, updated_at)
-                SELECT key, label, color, updated_at
-                FROM category_definitions_legacy
-                """
-            )
-            conn.execute("DROP TABLE category_definitions_legacy")
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-
-
-def ensure_daily_metrics_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS daily_metrics (
-            metric_date      TEXT PRIMARY KEY,
-            goal_hours       REAL,
-            updated_at       INTEGER NOT NULL
-        )
-        """
-    )
-
-
-def purge_legacy_categories(conn: sqlite3.Connection) -> None:
-    ensure_category_definitions_table(conn)
-    ensure_project_category_table(conn)
-    placeholders = ",".join("?" * len(LEGACY_CATEGORY_KEYS))
-    conn.execute(
-        f"DELETE FROM project_categories WHERE category_key IN ({placeholders})",
-        LEGACY_CATEGORY_KEYS,
-    )
-    conn.execute(
-        f"DELETE FROM category_definitions WHERE key IN ({placeholders})",
-        LEGACY_CATEGORY_KEYS,
-    )
-
-
-def get_category_options(conn: sqlite3.Connection) -> list[dict]:
-    purge_legacy_categories(conn)
-    ensure_project_category_table(conn)
-    rows = conn.execute(
-        """
-        SELECT category.key,
-               category.label,
-               category.color,
-               COUNT(project.project_name) AS assignment_count
-        FROM category_definitions
-        AS category
-        LEFT JOIN project_categories AS project
-          ON project.category_key = category.key
-        GROUP BY category.key, category.label, category.color
-        ORDER BY LOWER(category.label) ASC
-        """
-    ).fetchall()
-    return [
-        {
-            "key": row["key"],
-            "label": row["label"],
-            "color": row["color"],
-            "assignment_count": row["assignment_count"],
-        }
-        for row in rows
-    ]
-
-
-def get_category_maps(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, dict]]:
-    options = get_category_options(conn)
-    return options, {option["key"]: option for option in options}
-
-
-def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
-    ensure_project_category_table(conn)
-    _, category_by_key = get_category_maps(conn)
-    rows = conn.execute(
-        """
-        SELECT project_name, category_key
-        FROM project_categories
-        """
-    ).fetchall()
-    categories = {}
-    for row in rows:
-        category = category_by_key.get(row["category_key"])
-        if not category:
-            continue
-        categories[row["project_name"]] = {
-            "key": category["key"],
-            "label": category["label"],
-            "color": category["color"],
-        }
-    return categories
-
-
-def set_project_category(project_name: str, category_key: str | None) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized_name = (project_name or "").strip()
-    if not normalized_name:
-        return {"error": "Project name is required."}
-
-    normalized_key = (category_key or "").strip().lower() or None
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        ensure_project_category_table(conn)
-        _, category_by_key = get_category_maps(conn)
-        if normalized_key is not None and normalized_key not in category_by_key:
-            return {"error": "Unknown category."}
-        if normalized_key is None:
-            cur = conn.execute(
-                "DELETE FROM project_categories WHERE project_name = ?",
-                (normalized_name,),
-            )
-            conn.commit()
-            return {"ok": True, "deleted": cur.rowcount, "project_name": normalized_name}
-
-        conn.execute(
-            """
-            INSERT INTO project_categories (project_name, category_key, updated_at)
-            VALUES (?, ?, strftime('%s', 'now'))
-            ON CONFLICT(project_name) DO UPDATE SET
-                category_key = excluded.category_key,
-                updated_at = excluded.updated_at
-            """,
-            (normalized_name, normalized_key),
-        )
-        conn.commit()
-        category = category_by_key[normalized_key]
-        return {
-            "ok": True,
-            "project_name": normalized_name,
-            "category": {
-                "key": category["key"],
-                "label": category["label"],
-                "color": category["color"],
-            },
-        }
-
-
-def normalize_category_key(label: str) -> str:
-    collapsed = "".join(ch.lower() if ch.isalnum() else "-" for ch in label.strip())
-    cleaned = "-".join(part for part in collapsed.split("-") if part)
-    return cleaned[:36] or "category"
-
-
-def normalize_hex_color(color: str) -> str | None:
-    normalized = (color or "").strip().upper()
-    if (
-        len(normalized) != 7
-        or not normalized.startswith("#")
-        or any(ch not in "0123456789ABCDEF" for ch in normalized[1:])
-    ):
-        return None
-    return normalized
-
-
-def create_category(label: str, color: str) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized_label = " ".join((label or "").strip().split())
-    if not normalized_label:
-        return {"error": "Category name is required."}
-    if len(normalized_label) > 32:
-        return {"error": "Category name must be 32 characters or less."}
-
-    normalized_color = normalize_hex_color(color)
-    if not normalized_color:
-        return {"error": "Pick a valid hex color."}
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
-        custom_count = conn.execute(
-            "SELECT COUNT(*) FROM category_definitions"
-        ).fetchone()[0]
-        if custom_count >= MAX_CUSTOM_CATEGORIES:
-            return {"error": f"You can create up to {MAX_CUSTOM_CATEGORIES} custom categories."}
-
-        existing_label = conn.execute(
-            "SELECT key FROM category_definitions WHERE LOWER(label) = LOWER(?)",
-            (normalized_label,),
-        ).fetchone()
-        if existing_label:
-            return {"error": "A category with that name already exists."}
-
-        base_key = f"custom-{normalize_category_key(normalized_label)}"
-        category_key = base_key
-        suffix = 2
-        while conn.execute(
-            "SELECT 1 FROM category_definitions WHERE key = ?",
-            (category_key,),
-        ).fetchone():
-            category_key = f"{base_key}-{suffix}"
-            suffix += 1
-
-        conn.execute(
-            """
-            INSERT INTO category_definitions (key, label, color, updated_at)
-            VALUES (?, ?, ?, strftime('%s', 'now'))
-            """,
-            (category_key, normalized_label, normalized_color),
-        )
-        conn.commit()
-        return {
-            "ok": True,
-            "category": {
-                "key": category_key,
-                "label": normalized_label,
-                "color": normalized_color,
-            },
-            "custom_category_limit": MAX_CUSTOM_CATEGORIES,
-            "custom_category_count": custom_count + 1,
-        }
-
-
-def update_category(category_key: str, label: str, color: str) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized_key = (category_key or "").strip().lower()
-    normalized_label = " ".join((label or "").strip().split())
-    if not normalized_key:
-        return {"error": "Category key is required."}
-    if not normalized_label:
-        return {"error": "Category name is required."}
-    if len(normalized_label) > 32:
-        return {"error": "Category name must be 32 characters or less."}
-
-    normalized_color = normalize_hex_color(color)
-    if not normalized_color:
-        return {"error": "Pick a valid hex color."}
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
-        row = conn.execute(
-            """
-            SELECT key
-            FROM category_definitions
-            WHERE key = ?
-            """,
-            (normalized_key,),
-        ).fetchone()
-        if not row:
-            return {"error": "Category not found."}
-
-        existing_label = conn.execute(
-            """
-            SELECT key
-            FROM category_definitions
-            WHERE LOWER(label) = LOWER(?)
-              AND key != ?
-            """,
-            (normalized_label, normalized_key),
-        ).fetchone()
-        if existing_label:
-            return {"error": "A category with that name already exists."}
-
-        conn.execute(
-            """
-            UPDATE category_definitions
-            SET label = ?, color = ?, updated_at = strftime('%s', 'now')
-            WHERE key = ?
-            """,
-            (normalized_label, normalized_color, normalized_key),
-        )
-        conn.commit()
-        return {
-            "ok": True,
-            "category": {
-                "key": normalized_key,
-                "label": normalized_label,
-                "color": normalized_color,
-            },
-        }
-
-
-def delete_category(category_key: str) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized_key = (category_key or "").strip().lower()
-    if not normalized_key:
-        return {"error": "Category key is required."}
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
-        row = conn.execute(
-            """
-            SELECT key, label, color
-            FROM category_definitions
-            WHERE key = ?
-            """,
-            (normalized_key,),
-        ).fetchone()
-        if not row:
-            return {"error": "Category not found."}
-
-        cleared = conn.execute(
-            "DELETE FROM project_categories WHERE category_key = ?",
-            (normalized_key,),
-        ).rowcount
-        conn.execute(
-            "DELETE FROM category_definitions WHERE key = ?",
-            (normalized_key,),
-        )
-        conn.commit()
-        return {
-            "ok": True,
-            "deleted_category_key": normalized_key,
-            "cleared_assignments": cleared,
-            "category": {
-                "key": row["key"],
-                "label": row["label"],
-                "color": row["color"],
-            },
-        }
-
-
-def parse_iso_date(value: str) -> date:
-    try:
-        return date.fromisoformat((value or "").strip())
-    except ValueError as exc:
-        raise ValueError("invalid date") from exc
-
-
-def get_friday_week_range(target_date: date) -> tuple[date, date]:
-    week_start = target_date - timedelta(days=(target_date.weekday() - 4) % 7)
-    return week_start, week_start + timedelta(days=6)
-
-
-def get_daily_progress_seconds(conn: sqlite3.Connection, target_date: date) -> int:
-    day_start = datetime.combine(target_date, datetime.min.time()).timestamp()
-    day_end = datetime.combine(target_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT start_time, last_seen_time, end_time, active_seconds
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time < ?
-          AND COALESCE(end_time, last_seen_time, start_time) >= ?
-        """,
-        (day_end, day_start),
-    ).fetchall()
-    target_key = target_date.isoformat()
-    total_seconds = 0.0
-    for row in rows:
-        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
-        for day_key, _hour, seconds in allocate_session_activity(
-            row["start_time"],
-            end_time,
-            row["active_seconds"],
-        ):
-            if day_key == target_key:
-                total_seconds += seconds
-    return round(total_seconds)
-
-
-def get_range_progress_seconds(conn: sqlite3.Connection, start_date: date, end_date: date) -> int:
-    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
-    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT start_time, last_seen_time, end_time, active_seconds
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time < ?
-          AND COALESCE(end_time, last_seen_time, start_time) >= ?
-        """,
-        (range_end, range_start),
-    ).fetchall()
-    start_key = start_date.isoformat()
-    end_key = end_date.isoformat()
-    total_seconds = 0.0
-    for row in rows:
-        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
-        for day_key, _hour, seconds in allocate_session_activity(
-            row["start_time"],
-            end_time,
-            row["active_seconds"],
-        ):
-            if start_key <= day_key <= end_key:
-                total_seconds += seconds
-    return round(total_seconds)
-
-
-def get_daily_target(date_value: str) -> dict:
-    target_date = parse_iso_date(date_value)
-    date_key = target_date.isoformat()
-
-    if not DB_PATH.exists():
-        return {
-            "date": date_key,
-            "goal_hours": None,
-            "progress_seconds": 0,
-            "has_target": False,
-        }
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.row_factory = sqlite3.Row
-        ensure_daily_metrics_table(conn)
-        row = conn.execute(
-            """
-            SELECT goal_hours
-            FROM daily_metrics
-            WHERE metric_date = ?
-            """,
-            (date_key,),
-        ).fetchone()
-        progress_seconds = get_daily_progress_seconds(conn, target_date)
-        goal_hours = None
-        if row and row["goal_hours"] is not None:
-            goal_hours = round(float(row["goal_hours"]) * 10) / 10
-        return {
-            "date": date_key,
-            "goal_hours": goal_hours,
-            "progress_seconds": progress_seconds,
-            "has_target": goal_hours is not None,
-        }
-
-
-def set_daily_target(date_value: str, goal_hours: object) -> dict:
-    target_date = parse_iso_date(date_value)
-    try:
-        normalized_goal = round(float(goal_hours) * 10) / 10
-    except (TypeError, ValueError) as exc:
-        raise ValueError("invalid goal") from exc
-    if normalized_goal <= 0 or normalized_goal > 100:
-        raise ValueError("invalid goal")
-
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.row_factory = sqlite3.Row
-        ensure_daily_metrics_table(conn)
-        conn.execute(
-            """
-            INSERT INTO daily_metrics (metric_date, goal_hours, updated_at)
-            VALUES (?, ?, strftime('%s', 'now'))
-            ON CONFLICT(metric_date) DO UPDATE SET
-                goal_hours = excluded.goal_hours,
-                updated_at = excluded.updated_at
-            """,
-            (target_date.isoformat(), normalized_goal),
-        )
-        conn.commit()
-    return get_daily_target(target_date.isoformat())
-
-
-def get_weekly_target(date_value: str = "") -> dict:
-    target_date = parse_iso_date(date_value) if date_value else date.today()
-    week_start, week_end = get_friday_week_range(target_date)
-    start_key = week_start.isoformat()
-    end_key = week_end.isoformat()
-    reset_at = datetime.combine(week_end + timedelta(days=1), datetime.min.time())
-    seconds_until_reset = max(0, int(round(reset_at.timestamp() - datetime.now().timestamp())))
-
-    base = {
-        "week_start": start_key,
-        "week_end": end_key,
-        "weekly_start_date": start_key,
-        "weekly_end_date": end_key,
-        "reset_at": reset_at.isoformat(),
-        "seconds_until_reset": seconds_until_reset,
-        "goal_hours": 0,
-        "progress_seconds": 0,
-        "has_target": False,
-    }
-
-    if not DB_PATH.exists():
-        return base
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.row_factory = sqlite3.Row
-        return {
-            **base,
-            "progress_seconds": get_range_progress_seconds(conn, week_start, week_end),
-        }
-
-# ─────────────────────────────────────────────────────────────
-#  Data layer
-# ─────────────────────────────────────────────────────────────
-
-def get_stats() -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.row_factory = sqlite3.Row
-            category_options, _ = get_category_maps(conn)
-            project_categories = get_project_categories(conn)
-
-            activity_rows = conn.execute("""
-                SELECT project_name, start_time, last_seen_time, end_time, active_seconds
-                FROM sessions
-                WHERE active_seconds > 0
-            """).fetchall()
-            daily_totals, hourly_totals = build_activity_rollups(activity_rows)
-
-            projects = conn.execute("""
-                SELECT project_name,
-                       SUM(active_seconds)  AS total_seconds,
-                       COUNT(*)             AS session_count,
-                       MIN(start_time)      AS first_seen,
-                       MAX(COALESCE(end_time, last_seen_time, start_time)) AS last_seen,
-                       AVG(active_seconds)  AS avg_seconds
-                FROM   sessions
-                WHERE  active_seconds > 0
-                GROUP  BY project_name
-                ORDER  BY total_seconds DESC
-            """).fetchall()
-
-            today = date.today()
-            last_year_ago = (today - timedelta(days=364)).isoformat()
-            year_daily = [
-                {"day": day, "total_seconds": total_seconds}
-                for day, total_seconds in sorted(daily_totals.items())
-                if day >= last_year_ago
-            ]
-
-            year_hourly = [
-                {"day": day, "hour": hour, "active_seconds": active_seconds}
-                for (day, hour), active_seconds in sorted(hourly_totals.items())
-                if day >= last_year_ago
-            ]
-
-            recent = conn.execute("""
-                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds
-                FROM   sessions
-                WHERE  active_seconds >= 5 OR end_time IS NULL
-                ORDER  BY start_time DESC
-                LIMIT  240
-            """).fetchall()
-            recent = condense_recent_sessions(recent)[:60]
-
-            today_str   = today.isoformat()
-            goal_week_start, goal_week_end = get_friday_week_range(today)
-            month_start = today.replace(day=1).isoformat()
-
-            today_session_seconds = []
-            today_project_names = set()
-            for row in activity_rows:
-                row_today_seconds = 0.0
-                end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
-                for day_key, _hour, seconds in allocate_session_activity(
-                    row["start_time"],
-                    end_time,
-                    row["active_seconds"],
-                ):
-                    if day_key == today_str:
-                        row_today_seconds += seconds
-                if row_today_seconds > 0:
-                    today_session_seconds.append(row_today_seconds)
-                    today_project_names.add(row["project_name"])
-
-            today_session_count = len(today_session_seconds)
-            today_avg_session_seconds = (
-                sum(today_session_seconds) / today_session_count
-                if today_session_count
-                else 0
-            )
-
-            def scalar(q, *p):
-                return conn.execute(q, p).fetchone()[0] or 0
-
-            total_s  = scalar("SELECT COALESCE(SUM(active_seconds),0) FROM sessions")
-            today_s  = daily_totals.get(today_str, 0)
-            week_s   = sum(
-                seconds
-                for day_key, seconds in daily_totals.items()
-                if goal_week_start.isoformat() <= day_key <= goal_week_end.isoformat()
-            )
-            month_s  = sum(
-                seconds
-                for day_key, seconds in daily_totals.items()
-                if day_key >= month_start
-            )
-            month_project_count = scalar(
-                """
-                SELECT COUNT(DISTINCT project_name)
-                FROM sessions
-                WHERE active_seconds > 0
-                  AND date(start_time,'unixepoch','localtime') >= ?
-                """,
-                month_start,
-            )
-            closed_session_count = scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NOT NULL")
-
-            placeholders = ",".join("?" * len(UNTITLED_NAMES))
-            unsaved_closed_count = conn.execute(
-                f"""
-                SELECT COUNT(*)
-                FROM sessions
-                WHERE end_time IS NOT NULL
-                  AND LOWER(TRIM(project_name)) IN ({placeholders})
-                """,
-                tuple(UNTITLED_NAMES),
-            ).fetchone()[0] or 0
-            phantom_closed_count = count_phantom_sessions()
-
-            # Streak: consecutive days with activity ending today (or yesterday, right after midnight)
-            active_days = {day for day, seconds in daily_totals.items() if seconds > 0}
-            streak = 0
-            cursor_day = None
-            if today.isoformat() in active_days:
-                cursor_day = today
-            elif (today - timedelta(days=1)).isoformat() in active_days:
-                cursor_day = today - timedelta(days=1)
-
-            while cursor_day and cursor_day.isoformat() in active_days:
-                streak += 1
-                cursor_day -= timedelta(days=1)
-
-            now_ts = time.time()
-
-            # Currently active session (end_time IS NULL)
-            live = conn.execute("""
-                SELECT project_name, start_time, last_seen_time, active_seconds
-                FROM sessions
-                WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
-            """).fetchone()
-            live_duration_seconds = 0.0
-            live_start_time = None
-            if live:
-                live_start_time = float(live["start_time"] or 0)
-                live_last_seen = float(live["last_seen_time"] or live_start_time or now_ts)
-                live_active_seconds = float(live["active_seconds"] or 0)
-                live_duration_seconds = max(
-                    live_active_seconds + max(0.0, now_ts - live_last_seen),
-                    0.0,
-                )
-
-            month_per_project = dict(conn.execute(
-                """
-                SELECT project_name, COALESCE(SUM(active_seconds), 0) AS month_seconds
-                FROM sessions
-                WHERE active_seconds > 0
-                  AND date(start_time, 'unixepoch', 'localtime') >= ?
-                GROUP BY project_name
-                """,
-                (month_start,),
-            ).fetchall())
-
-            project_rows = []
-            for row in projects:
-                project = dict(row)
-                category = project_categories.get(project["project_name"])
-                project["category_key"] = category["key"] if category else None
-                project["category_label"] = category["label"] if category else None
-                project["category_color"] = category["color"] if category else None
-                project["month_seconds"] = month_per_project.get(project["project_name"], 0)
-                project_rows.append(project)
-
-            recent_rows = []
-            for row in recent:
-                category = project_categories.get(row["project_name"])
-                recent_rows.append(
-                    {
-                        "project_name": row["project_name"],
-                        "start_time": row["start_time"],
-                        "end_time": row["end_time"],
-                        "active_seconds": row["active_seconds"],
-                        "session_ids": row.get("session_ids", []),
-                        "category_key": category["key"] if category else None,
-                        "category_label": category["label"] if category else None,
-                        "category_color": category["color"] if category else None,
-                    }
-                )
-
-            return {
-                "summary": {
-                    "total_seconds":  total_s,
-                    "today_seconds":  today_s,
-                    "today_average_session_seconds": today_avg_session_seconds,
-                    "today_session_count": today_session_count,
-                    "today_project_count": len(today_project_names),
-                    "week_seconds":   week_s,
-                    "goal_week_start": goal_week_start.isoformat(),
-                    "goal_week_end": goal_week_end.isoformat(),
-                    "month_seconds":  month_s,
-                    "month_project_count": month_project_count,
-                    "project_count":  len(projects),
-                    "streak_days":    streak,
-                    "live_project":   live["project_name"] if live else None,
-                    "live_session_start_time": live_start_time,
-                    "live_session_duration_seconds": live_duration_seconds,
-                    "ableton_running": is_ableton_running(),
-                    "generated_at": now_ts,
-                    "closed_session_count": closed_session_count,
-                    "unsaved_closed_count": unsaved_closed_count,
-                    "phantom_closed_count": phantom_closed_count,
-                },
-                "projects": project_rows,
-                "year_daily": [dict(r) for r in year_daily],
-                "year_hourly": [dict(r) for r in year_hourly],
-                "recent": recent_rows,
-                "category_options": category_options,
-                "custom_category_limit": MAX_CUSTOM_CATEGORIES,
-                "custom_category_count": len(category_options),
-            }
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# ─────────────────────────────────────────────────────────────
-#  HTML template
-# ─────────────────────────────────────────────────────────────
-
-HTML = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -887,6 +23,13 @@ HTML = """<!DOCTYPE html>
   --surface:rgba(255,255,255,.72);
   --surface-2:rgba(255,255,255,.94);
   --surface-hover:rgba(60,60,67,.06);
+  --bg-card:rgba(255,255,255,.72);
+  --bg-card-strong:rgba(255,255,255,.94);
+  --text-primary:#1d1d1f;
+  --text-secondary:#6e6e73;
+  --target-track:rgba(60,60,67,.10);
+  --target-shadow:0 22px 56px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.65);
   --border:rgba(60,60,67,.12);
   --border-strong:rgba(60,60,67,.18);
   --ink:#1d1d1f;
@@ -932,6 +75,13 @@ HTML = """<!DOCTYPE html>
     --surface:rgba(28,31,36,.72);
     --surface-2:rgba(37,40,46,.94);
     --surface-hover:rgba(235,235,245,.07);
+    --bg-card:rgba(28,31,36,.72);
+    --bg-card-strong:rgba(37,40,46,.94);
+    --text-primary:#f5f5f7;
+    --text-secondary:#aaaab3;
+    --target-track:rgba(235,235,245,.12);
+    --target-shadow:0 24px 58px rgba(0,0,0,.34), 0 1px 1px rgba(255,255,255,.03);
+    --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.06);
     --border:rgba(235,235,245,.12);
     --border-strong:rgba(235,235,245,.2);
     --ink:#f5f5f7;
@@ -970,6 +120,13 @@ HTML = """<!DOCTYPE html>
   --surface:rgba(28,31,36,.72);
   --surface-2:rgba(37,40,46,.94);
   --surface-hover:rgba(235,235,245,.07);
+  --bg-card:rgba(28,31,36,.72);
+  --bg-card-strong:rgba(37,40,46,.94);
+  --text-primary:#f5f5f7;
+  --text-secondary:#aaaab3;
+  --target-track:rgba(235,235,245,.12);
+  --target-shadow:0 24px 58px rgba(0,0,0,.34), 0 1px 1px rgba(255,255,255,.03);
+  --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.06);
   --border:rgba(235,235,245,.12);
   --border-strong:rgba(235,235,245,.2);
   --ink:#f5f5f7;
@@ -1016,6 +173,7 @@ body{
     var(--page-glow-a),
     var(--page-glow-b);
   background-attachment:fixed;
+  transition:background-color .3s ease, color .3s ease;
 }
 
 header{
@@ -1115,23 +273,17 @@ header{
 .intro .sub{
   font-size:13px;color:var(--ink-4);margin-top:12px;
 }
-.intro .sub > span:not(.session-presence){color:var(--ink-2)}
-.session-presence{
-  display:inline-flex;align-items:center;gap:12px;
-  flex-wrap:nowrap;
-}
+.intro .sub > span:not(.session-status){color:var(--ink-2)}
 .session-status{
-  display:grid;grid-template-columns:max-content 24px;align-items:center;column-gap:4px;
+  display:inline-flex;align-items:center;gap:10px;
   color:var(--ink-2);
 }
 .session-status__text{
   color:inherit;
-  white-space:nowrap;
 }
 .session-status__indicator{
   display:inline-flex;align-items:center;gap:4px;
   min-width:24px;
-  justify-content:flex-start;
 }
 .session-status__dot{
   width:10px;height:10px;border-radius:999px;
@@ -1144,57 +296,18 @@ header{
   box-shadow:none;
 }
 .session-status__indicator--booting{
-  min-width:24px;
+  min-width:auto;
 }
 .session-status__indicator--booting .session-status__dot{
   background:#ffffff;
   box-shadow:0 0 0 1px rgba(0,0,0,.14), 0 0 12px rgba(255,255,255,.28);
   animation:bootBlink 0.545s ease-in-out infinite;
 }
-.session-status__timer{
-  display:grid;grid-template-columns:44px 72px;align-items:center;column-gap:10px;
-  min-width:126px;
-  padding:4px 10px;
-  border:1px solid var(--border);
-  border-radius:999px;
-  background:color-mix(in srgb, var(--surface) 82%, transparent);
-  color:var(--ink-2);
+.session-status__indicator--booting .session-status__dot:nth-child(2){
+  animation-delay:-0.182s;
 }
-.session-status__timer-label{
-  font-size:11px;
-  color:var(--ink-4);
-  text-transform:uppercase;
-  letter-spacing:.08em;
-}
-.session-status__timer-value{
-  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-  font-size:12px;
-  font-variant-numeric:tabular-nums;
-  text-align:right;
-  white-space:nowrap;
-}
-.session-status__timer[data-state="live"]{
-  color:var(--ink);
-  border-color:color-mix(in srgb, #30d158 22%, var(--border));
-  background:color-mix(in srgb, #30d158 12%, var(--surface));
-}
-.session-status__timer[data-state="booting"]{
-  border-color:color-mix(in srgb, #ffffff 20%, var(--border));
-}
-.session-status__timer[data-state="off"] .session-status__timer-value{
-  color:var(--ink-4);
-}
-@media (max-width: 640px){
-  .session-presence{
-    display:grid;
-    grid-template-columns:1fr;
-    row-gap:8px;
-    align-items:flex-start;
-  }
-  .session-status__timer{
-    width:100%;
-    max-width:220px;
-  }
+.session-status__indicator--booting .session-status__dot:nth-child(3){
+  animation-delay:-0.364s;
 }
 @keyframes bootBlink{
   0%, 18%, 100%{opacity:1;transform:scale(1)}
@@ -1304,10 +417,12 @@ header{
   min-height:410px;
   padding:28px 30px 26px;
   position:relative;overflow:hidden;
+  background:var(--bg-card);
+  box-shadow:var(--target-shadow);
   transform-origin:center top;
   backdrop-filter:none;
   -webkit-backdrop-filter:none;
-  transition:border-color .22s ease, background .22s ease, box-shadow .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);
+  transition:border-color .3s ease, background .3s ease, box-shadow .3s ease, transform .26s cubic-bezier(.2,.8,.2,1);
 }
 .target-card::after{
   content:"";position:absolute;inset:0;pointer-events:none;
@@ -1317,7 +432,7 @@ header{
 }
 .target-card:hover{
   border-color:var(--border-strong);
-  background:var(--surface-2);
+  background:var(--bg-card-strong);
   box-shadow:var(--shadow-card-hover);
   transform:scale(1.02);
   z-index:2;
@@ -1455,8 +570,8 @@ header{
 .goal-shell{
   height:100%;
   display:grid;
-  grid-template-columns:minmax(170px,200px) minmax(0,1fr);
-  gap:22px;
+  grid-template-columns:minmax(168px,210px) minmax(0,1fr);
+  gap:24px;
   align-items:center;
 }
 .goal-range{
@@ -1472,47 +587,66 @@ header{
 }
 .goal-ring{
   width:min(220px,100%);aspect-ratio:1;border-radius:50%;
-  --goal-progress:0deg;
-  --goal-progress-mid:120deg;
-  --goal-progress-hot:240deg;
-  --goal-cold:#1677ff;
-  --goal-cool:#33c7ff;
-  --goal-warm:#ffc247;
-  --goal-hot:#ff3b30;
-  --goal-track:rgba(120,120,128,.18);
-  --goal-dial:conic-gradient(from -90deg, var(--goal-cold) 0deg, var(--goal-cool) var(--goal-progress-mid), var(--goal-warm) var(--goal-progress-hot), var(--goal-hot) var(--goal-progress), var(--goal-track) var(--goal-progress) 360deg);
-  padding:9px;position:relative;
-  background:var(--goal-dial);
-  box-shadow:0 18px 44px rgba(22,119,255,.12), 0 8px 24px rgba(255,59,48,.09);
+  --target-progress-pct:0;
+  --target-accent:#0a84ff;
+  --target-glow:rgba(10,132,255,.22);
+  --target-glow-alpha:.18;
+  position:relative;
+  display:grid;place-items:center;
   isolation:isolate;
+  transition:filter .3s ease;
 }
-.goal-ring::before{
-  display:none;
+.goal-ring-svg{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  overflow:visible;
+  transform:rotate(-90deg);
 }
-.goal-ring::after{
-  content:"";position:absolute;inset:8px;border-radius:inherit;
-  background:linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,0) 42%);
-  opacity:.4;pointer-events:none;
+.goal-ring-track,
+.goal-ring-progress{
+  fill:none;
+  cx:50;cy:50;r:42;
+  stroke-linecap:round;
 }
-.goal-ring.is-complete{
-  --goal-track:rgba(239,58,56,.18);
+.goal-ring-track{
+  stroke:var(--target-track);
+  stroke-width:8;
+}
+.goal-ring-progress{
+  stroke:var(--target-accent);
+  stroke-width:9;
+  stroke-dasharray:100;
+  stroke-dashoffset:calc(100 - var(--target-progress-pct));
+  filter:
+    drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
+    drop-shadow(0 0 8px var(--target-glow))
+    drop-shadow(0 0 18px color-mix(in srgb, var(--target-accent) calc(var(--target-glow-alpha) * 70%), transparent));
+  transition:stroke-dashoffset .3s ease, stroke .3s ease, filter .3s ease;
+}
+.goal-ring.is-complete .goal-ring-progress{
+  filter:
+    drop-shadow(0 0 4px color-mix(in srgb, var(--target-accent) 80%, transparent))
+    drop-shadow(0 0 12px var(--target-glow))
+    drop-shadow(0 0 26px color-mix(in srgb, var(--target-accent) 55%, transparent))
+    drop-shadow(0 0 42px color-mix(in srgb, var(--target-accent) 30%, transparent));
 }
 .goal-ring-core{
-  width:100%;height:100%;border-radius:50%;
-  background:color-mix(in srgb, var(--control-inner) 88%, transparent);
-  border:1px solid var(--border);
-  backdrop-filter:blur(18px) saturate(150%);
-  -webkit-backdrop-filter:blur(18px) saturate(150%);
+  width:78%;height:78%;border-radius:50%;
+  position:relative;z-index:1;
   display:flex;align-items:center;justify-content:center;
-  text-align:center;padding:18px;
+  text-align:center;padding:14px;
 }
 .goal-kicker{
   display:none;
 }
 .goal-value{
-  font-family:var(--font-display);font-size:42px;font-weight:720;
-  line-height:1;color:var(--ink);letter-spacing:-.06em;
+  font-family:var(--font-display);font-size:42px;font-weight:780;
+  line-height:1;color:var(--text-primary);letter-spacing:-.045em;
   font-variant-numeric:tabular-nums;
+  transition:color .3s ease;
+}
+.goal-ring:not(.is-empty) .goal-value{
+  color:var(--target-accent);
 }
 .goal-value small{
   font-family:var(--font-body);font-size:.5em;font-weight:750;color:var(--ink-3);
@@ -1523,12 +657,20 @@ header{
 }
 .goal-controls{
   display:grid;
-  gap:16px;
+  gap:14px;
   align-content:center;
   padding:18px;
   border:1px solid var(--border);
   border-radius:22px;
   background:color-mix(in srgb, var(--control-bg) 72%, transparent);
+  box-shadow:var(--target-inner-shadow);
+  min-width:0;
+  transition:background .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+.goal-context{
+  font-size:12px;
+  color:var(--text-secondary);
+  line-height:1.35;
 }
 .goal-input-row{
   display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;
@@ -1557,12 +699,18 @@ header{
 .goal-chip{
   border:none;border-radius:999px;padding:8px 12px;cursor:pointer;
   background:var(--control-bg);border:1px solid var(--border);color:var(--ink-2);
-  font-size:12px;font-weight:600;transition:all .18s ease;
+  font-size:12px;font-weight:700;transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
-.goal-chip:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink)}
+.goal-chip:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink);transform:translateY(-1px)}
+.goal-chip:active{transform:translateY(0) scale(.97)}
+.goal-chip.is-active{
+  background:var(--target-accent, var(--accent));
+  border-color:color-mix(in srgb, var(--target-accent, var(--accent)) 86%, black 8%);
+  color:#fff;
+  box-shadow:0 8px 20px color-mix(in srgb, var(--target-accent, var(--accent)) 28%, transparent);
+}
 .target-card .goal-ring{
   width:min(176px,100%);
-  padding:10px;
 }
 .target-card .goal-ring-core{
   padding:16px;
@@ -1648,6 +796,134 @@ header{
   color:var(--ink-4);
   font-weight:700;
   margin-top:2px;
+  transition:color .3s ease;
+}
+.section-meta-note.is-far{color:#ff453a}
+.section-meta-note.is-mid{color:#ff9f0a}
+.section-meta-note.is-near{color:#0a84ff}
+.section-meta-note.is-met{color:#30d158}
+.daily-target-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:18px;
+}
+.daily-target-head-side{
+  display:grid;
+  gap:10px;
+  justify-items:end;
+}
+.daily-target-nav{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+}
+.daily-target-nav-btn{
+  width:34px;
+  height:34px;
+  border:none;
+  border-radius:999px;
+  background:var(--control-bg);
+  border:1px solid var(--border);
+  color:var(--ink-2);
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  transition:transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+}
+.daily-target-nav-btn:hover{
+  transform:translateY(-1px);
+  background:var(--control-bg-strong);
+  border-color:var(--border-strong);
+  color:var(--ink);
+}
+.daily-target-nav-btn:active{
+  transform:translateY(0);
+}
+.daily-target-nav-btn svg{
+  width:14px;
+  height:14px;
+  stroke:currentColor;
+  fill:none;
+  stroke-width:1.9;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.daily-target-today-btn[hidden]{
+  display:none;
+}
+.weekly-target-current-btn[hidden]{
+  display:none;
+}
+.daily-target-panel{
+  height:100%;
+  transition:opacity .16s ease, transform .16s ease;
+}
+.daily-target-panel.is-loading{
+  opacity:.46;
+  transform:translateY(3px);
+}
+.daily-target-panel.is-fresh{
+  animation:dailyTargetRefresh .18s ease;
+}
+@keyframes dailyTargetRefresh{
+  from{opacity:.58;transform:translateY(4px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.goal-ring.is-empty{
+  --target-accent:var(--ink-4);
+  --target-glow:rgba(120,120,128,.08);
+  box-shadow:var(--target-inner-shadow);
+}
+.goal-ring.is-empty .goal-ring-core{
+  border-style:dashed;
+}
+.goal-value--stack{
+  display:grid;
+  gap:6px;
+  justify-items:center;
+}
+.goal-value-caption{
+  font-family:var(--font-body);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.goal-empty-note{
+  font-size:12px;
+  color:var(--ink-4);
+  line-height:1.45;
+}
+.weekly-target-breakdown{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:16px;
+}
+.weekly-target-stat{
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:12px;
+  background:color-mix(in srgb, var(--control-bg) 70%, transparent);
+}
+.weekly-target-stat span{
+  display:block;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.weekly-target-stat strong{
+  display:block;
+  margin-top:5px;
+  font-family:var(--font-display);
+  font-size:22px;
+  letter-spacing:-.04em;
+  color:var(--ink);
 }
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
@@ -2172,6 +1448,9 @@ tbody tr:hover .row-del{opacity:1}
   .target-card .section-head{display:grid;grid-template-columns:1fr;margin-bottom:22px}
   .target-card .section-title{padding-top:0}
   .target-card .section-meta{width:100%;min-width:0}
+  .daily-target-head{grid-template-columns:1fr}
+  .daily-target-head-side{justify-items:start}
+  .daily-target-nav{justify-content:flex-start;flex-wrap:wrap}
   .target-card .goal-shell{grid-template-columns:1fr;gap:18px}
   .target-card .goal-ring{width:min(210px,100%)}
   .target-card .goal-controls{padding:16px}
@@ -2245,16 +1524,10 @@ tbody tr:hover .row-del{opacity:1}
     <div>
       <h2 id="pageTitle">Dashboard </h2>
       <div class="sub" id="pageSubtitle">
-        <span class="session-presence">
-          <span class="session-status" id="sessionStatus" data-state="live">
-            <span class="session-status__text" id="sessionStatusText">Live</span>
-            <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
-              <span class="session-status__dot"></span>
-            </span>
-          </span>
-          <span class="session-status__timer" id="sessionTimer" data-state="live" aria-live="polite">
-            <span class="session-status__timer-label" id="sessionTimerLabel">Session</span>
-            <span class="session-status__timer-value" id="sessionTimerValue">00:00:00</span>
+        <span class="session-status" id="sessionStatus" data-state="live">
+          <span class="session-status__text" id="sessionStatusText">Live</span>
+          <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+            <span class="session-status__dot"></span>
           </span>
         </span>
         · <span id="introDate"></span> · <span id="introTime"></span>
@@ -2305,9 +1578,8 @@ const PROJECT_COLORS = [
 ];
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
-const WEEKLY_GOAL_STORAGE_KEY = 'ableton_tracker_weekly_goal_hours';
-const DAILY_GOAL_STORAGE_KEY = 'ableton_tracker_daily_goal_hours';
 const THEME_STORAGE_KEY = 'ableton_tracker_theme';
+const WEEKLY_GOAL_STORAGE_KEY = 'ableton_tracker_weekly_visual_goal_hours';
 const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
 const CATEGORY_COLOR_PRESETS = [
   '#FF6B6B', '#FF9F43', '#FFD166', '#7BD389',
@@ -2319,25 +1591,14 @@ let latestDashboardData = null;
 let activeView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
-let sessionTimerSnapshot = { state: 'off', baseSeconds: 0, syncedAtMs: 0 };
-
-function sessionSubtitleMarkup() {
-  return `
-    <span class="session-presence">
-      <span class="session-status" id="sessionStatus" data-state="live">
-        <span class="session-status__text" id="sessionStatusText">Live</span>
-        <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
-          <span class="session-status__dot"></span>
-        </span>
-      </span>
-      <span class="session-status__timer" id="sessionTimer" data-state="live" aria-live="polite">
-        <span class="session-status__timer-label" id="sessionTimerLabel">Session</span>
-        <span class="session-status__timer-value" id="sessionTimerValue">00:00:00</span>
-      </span>
-    </span>
-    · <span id="introDate"></span> · <span id="introTime"></span>
-  `;
-}
+const dailyTargetState = {
+  viewedDate: localDateKey(new Date()),
+  requestToken: 0,
+};
+const weeklyTargetState = {
+  currentWeekStartDate: null,
+  requestToken: 0,
+};
 
 function activeTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -2461,23 +1722,6 @@ function setIntroDates() {
   }
 }
 
-function tickSessionTimer() {
-  const timer = document.getElementById('sessionTimer');
-  const value = document.getElementById('sessionTimerValue');
-  if (!timer || !value) return;
-
-  const state = sessionTimerSnapshot.state || 'off';
-  timer.dataset.state = state;
-
-  if (state === 'live') {
-    const elapsed = Math.max(0, (Date.now() - sessionTimerSnapshot.syncedAtMs) / 1000);
-    value.textContent = formatSessionClock((sessionTimerSnapshot.baseSeconds || 0) + elapsed);
-    return;
-  }
-
-  value.textContent = state === 'booting' ? 'Starting…' : '--:--:--';
-}
-
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
   document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
@@ -2487,10 +1731,17 @@ function updateHeaderForView() {
     : '<strong class="page-title-dashboard">Dashboard</strong>';
   document.getElementById('pageSubtitle').innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
-    : sessionSubtitleMarkup();
+    : `
+      <span class="session-status" id="sessionStatus" data-state="live">
+        <span class="session-status__text" id="sessionStatusText">Live</span>
+        <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+          <span class="session-status__dot"></span>
+        </span>
+      </span>
+      · <span id="introDate"></span> · <span id="introTime"></span>
+    `;
   if (!isSettings) {
     setIntroDates();
-    updateSessionStatus(latestDashboardData?.summary);
   }
 }
 
@@ -2535,14 +1786,6 @@ const fmt = {
   },
   hrs(s) { return Math.round((s || 0) / 360) / 10; }
 };
-
-function formatSessionClock(seconds) {
-  const total = Math.max(0, Math.floor(seconds || 0));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
 
 function escapeHtml(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2634,6 +1877,29 @@ function shortRange(startKey, endKey) {
   return `${shortDate(startKey)} - ${shortDate(endKey)}`;
 }
 
+function humanDailyTargetLabel(dateKey) {
+  const today = new Date();
+  const todayKey = localDateKey(today);
+  const yesterdayKey = localDateKey(addDays(today, -1));
+  const tomorrowKey = localDateKey(addDays(today, 1));
+  if (dateKey === todayKey) return 'Today';
+  if (dateKey === yesterdayKey) return 'Yesterday';
+  if (dateKey === tomorrowKey) return 'Tomorrow';
+  return dateFromKey(dateKey).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function longDailyTargetLabel(dateKey) {
+  return dateFromKey(dateKey).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function formatHoursNumber(hours) {
   const rounded = Math.round(hours * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -2641,6 +1907,98 @@ function formatHoursNumber(hours) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function targetTone(progressRatio, hasGoal = true) {
+  if (!hasGoal) {
+    return { className: 'is-empty', accent: '#8e8e93', glow: 'rgba(142,142,147,.12)', glowAlpha: 0.12, ratio: 0 };
+  }
+  const t = clamp(progressRatio, 0, 1);
+  const blue = [10, 132, 255];
+  const yellow = [255, 204, 0];
+  const red = [255, 69, 58];
+  const rgb = t < 0.5
+    ? mixColor(blue, yellow, t / 0.5)
+    : mixColor(yellow, red, (t - 0.5) / 0.5);
+  const accent = rgbString(rgb);
+  let className = 'is-near';
+  if (t >= 0.66) className = 'is-far';
+  else if (t >= 0.33) className = 'is-mid';
+  const glowAlpha = Number((0.18 + Math.pow(t, 1.4) * 0.55).toFixed(2));
+  const glow = rgbaString(rgb, glowAlpha);
+  return { className, accent, glow, glowAlpha, ratio: t };
+}
+
+function goalRemainingText(goalSeconds, completedSeconds) {
+  const deltaSeconds = Math.round(goalSeconds - (completedSeconds || 0));
+  if (deltaSeconds <= 0) {
+    const overSeconds = Math.abs(deltaSeconds);
+    return overSeconds > 0
+      ? `Goal met · ${fmt.dur(overSeconds)} extra`
+      : 'Goal met right on target';
+  }
+  return `${fmt.dur(deltaSeconds)} left`;
+}
+
+function formatResetCountdown(secondsUntilReset) {
+  const seconds = Math.max(0, Math.round(Number(secondsUntilReset) || 0));
+  if (seconds <= 0) return 'Cycle resets now · new sprint starts Friday';
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  let chunk;
+  if (days > 0) chunk = `${days}d ${hours}h`;
+  else if (hours > 0) chunk = `${hours}h ${minutes}m`;
+  else chunk = `${minutes}m`;
+  return `Resets Friday · ${chunk} left in this sprint`;
+}
+
+function progressPercent(progressRatio, hasGoal = true) {
+  if (!hasGoal) return 0;
+  return clamp(Math.round(progressRatio * 100), 0, 999);
+}
+
+let _goalRingId = 0;
+function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMarkup = '' }) {
+  const id = ++_goalRingId;
+  const clamped = hasGoal ? clamp(progressRatio, 0, 1) : 0;
+  const tone = targetTone(progressRatio, hasGoal);
+  const percent = progressPercent(progressRatio, hasGoal);
+  const gradientId = `goalRingGradient-${id}`;
+  const strokeRef = hasGoal ? `url(#${gradientId})` : 'var(--target-track)';
+  return `
+    <div
+      class="goal-ring ${hasGoal && progressRatio >= 1 ? 'is-complete' : ''} ${hasGoal ? '' : 'is-empty'}"
+      data-progress-ring
+      data-progress="${clamped}"
+      style="--target-progress-pct:0;--target-accent:${tone.accent};--target-glow:${tone.glow};--target-glow-alpha:${tone.glowAlpha}"
+      aria-label="${escapeHtml(label || `${percent}% complete`)}"
+    >
+      <svg class="goal-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0a84ff"/>
+            <stop offset="50%" stop-color="#ffcc00"/>
+            <stop offset="100%" stop-color="#ff453a"/>
+          </linearGradient>
+        </defs>
+        <circle class="goal-ring-track" cx="50" cy="50" r="42" pathLength="100"></circle>
+        <circle class="goal-ring-progress" cx="50" cy="50" r="42" pathLength="100" stroke="${strokeRef}"></circle>
+      </svg>
+      <div class="goal-ring-core">
+        <div class="goal-value">${valueMarkup || `${percent}%`}</div>
+      </div>
+    </div>
+  `;
+}
+
+function animateGoalRings(root) {
+  requestAnimationFrame(() => {
+    root.querySelectorAll('[data-progress-ring]').forEach(ring => {
+      const value = clamp(Number(ring.dataset.progress || '0'), 0, 1);
+      ring.style.setProperty('--target-progress-pct', String(value * 100));
+    });
+  });
 }
 
 function mixColor(a, b, t) {
@@ -3377,26 +2735,56 @@ function render(data) {
 
     <div class="rings-row">
       <div class="chart-card target-card">
-        <div class="section-head">
+        <div class="section-head daily-target-head">
           <h3 class="section-title">Daily <em>Target</em></h3>
-          <div class="section-meta">
-            <span>Today</span>
-            <strong>${fmt.dur(summary.today_seconds || 0)}</strong>
-            <span class="section-meta-note" id="dailyGoalRemaining"></span>
+          <div class="daily-target-head-side">
+            <div class="daily-target-nav" aria-label="Daily target date navigation">
+              <button class="daily-target-nav-btn" id="dailyTargetPrev" type="button" aria-label="Show previous date">
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
+                </svg>
+              </button>
+              <button class="daily-target-nav-btn" id="dailyTargetNext" type="button" aria-label="Show next date">
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
+                </svg>
+              </button>
+              <button class="btn small daily-target-today-btn" id="dailyTargetTodayBtn" type="button" hidden>Today</button>
+            </div>
+            <div class="section-meta">
+              <span id="dailyTargetViewedLabel">Today</span>
+              <strong id="dailyTargetProgress">${fmt.dur(summary.today_seconds || 0)}</strong>
+              <span class="section-meta-note" id="dailyGoalRemaining">Loading target…</span>
+            </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
+        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
       </div>
       <div class="chart-card target-card">
-        <div class="section-head">
+        <div class="section-head daily-target-head">
           <h3 class="section-title">Weekly <em>Target</em></h3>
-          <div class="section-meta">
-            <span>This Week</span>
-            <strong>${fmt.dur(summary.week_seconds || 0)}</strong>
-            <span class="section-meta-note" id="weeklyGoalRemaining"></span>
+          <div class="daily-target-head-side">
+            <div class="daily-target-nav" aria-label="Weekly target date navigation">
+              <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week">
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
+                </svg>
+              </button>
+              <button class="daily-target-nav-btn" id="weeklyTargetNext" type="button" aria-label="Show next week">
+                <svg viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
+                </svg>
+              </button>
+              <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
+            </div>
+            <div class="section-meta">
+              <span id="weeklyTargetRangeLabel">${shortRange(summary.goal_week_start, summary.goal_week_end)}</span>
+              <strong id="weeklyTargetProgress">${fmt.dur(summary.week_seconds || 0)}</strong>
+              <span class="section-meta-note" id="weeklyGoalRemaining">Loading target…</span>
+            </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
+        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
       </div>
     </div>
 
@@ -3559,47 +2947,36 @@ function updateSessionStatus(summary) {
   const status = document.getElementById('sessionStatus');
   const label = document.getElementById('sessionStatusText');
   const indicator = document.getElementById('sessionStatusIndicator');
-  const timer = document.getElementById('sessionTimer');
-  const timerLabel = document.getElementById('sessionTimerLabel');
-  if (!status || !label || !indicator || !timer || !timerLabel) return;
+  if (!status || !label || !indicator) return;
 
   let state = 'off';
   let text = 'Off';
   let indicatorHtml = '<span class="session-status__dot"></span>';
-  let timerLabelText = 'Session';
-  let timerBaseSeconds = 0;
 
   if (summary?.live_project) {
     state = 'live';
     text = 'Live';
     indicator.className = 'session-status__indicator session-status__indicator--live';
     indicatorHtml = '<span class="session-status__dot"></span>';
-    timerBaseSeconds = Number(summary.live_session_duration_seconds) || 0;
   } else if (summary?.ableton_running) {
     state = 'booting';
     text = 'Booting up';
     indicator.className = 'session-status__indicator session-status__indicator--booting';
-    indicatorHtml = '<span class="session-status__dot"></span>';
-    timerLabelText = 'Status';
+    indicatorHtml = `
+      <span class="session-status__dot"></span>
+      <span class="session-status__dot"></span>
+      <span class="session-status__dot"></span>
+    `;
   } else {
     state = 'off';
     text = 'Off';
     indicator.className = 'session-status__indicator session-status__indicator--off';
     indicatorHtml = '<span class="session-status__dot"></span>';
-    timerLabelText = 'Status';
   }
 
-  sessionTimerSnapshot = {
-    state,
-    baseSeconds: timerBaseSeconds,
-    syncedAtMs: Date.now(),
-  };
   status.dataset.state = state;
   label.textContent = text;
   indicator.innerHTML = indicatorHtml;
-  timer.dataset.state = state;
-  timerLabel.textContent = timerLabelText;
-  tickSessionTimer();
 }
 
 function renderActivityHeatmap(yearDaily, yearHourly) {
@@ -3912,35 +3289,379 @@ function renderGoalCard({
   paint(getStoredGoalHours(storageKey, fallbackGoalHours));
 }
 
-function renderWeeklyGoal(summary) {
-  renderGoalCard({
-    mountId: 'weeklyGoalCard',
-    storageKey: WEEKLY_GOAL_STORAGE_KEY,
-    fallbackGoalHours: 12,
-    completedSeconds: summary.week_seconds || 0,
-    rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets Friday`,
-    goalLabel: 'Weekly goal',
-    remainingId: 'weeklyGoalRemaining',
-    presets: [10, 20, 30, 40],
+function currentFridayWeekStartKey() {
+  return localDateKey(startOfFridayWeek(new Date()));
+}
+
+function updateWeeklyTargetMeta({ weekStart, weekEnd, progressSeconds = 0, note = 'Loading target…', toneClass = '' }) {
+  const rangeLabel = document.getElementById('weeklyTargetRangeLabel');
+  const progressLabel = document.getElementById('weeklyTargetProgress');
+  const remainingLabel = document.getElementById('weeklyGoalRemaining');
+  const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
+  if (rangeLabel) rangeLabel.textContent = shortRange(weekStart, weekEnd);
+  if (progressLabel) progressLabel.textContent = fmt.dur(progressSeconds || 0);
+  if (remainingLabel) {
+    remainingLabel.textContent = note;
+    remainingLabel.className = `section-meta-note ${toneClass}`.trim();
+  }
+  if (currentBtn) currentBtn.hidden = weekStart === currentFridayWeekStartKey();
+}
+
+function renderWeeklyTargetCard(target) {
+  const mount = document.getElementById('weeklyGoalCard');
+  if (!mount) return;
+
+  const progressSeconds = Math.max(0, target.progress_seconds || 0);
+  const progressHours = Math.round((progressSeconds / 3600) * 10) / 10;
+  const savedWeeklyGoal = Number(localStorage.getItem(WEEKLY_GOAL_STORAGE_KEY));
+  const goalHours = clamp(Math.round(((Number.isFinite(savedWeeklyGoal) && savedWeeklyGoal > 0) ? savedWeeklyGoal : 5) * 10) / 10, 1, 100);
+  const hasGoal = goalHours > 0;
+  const progress = hasGoal ? progressHours / goalHours : 0;
+  const percent = hasGoal ? Math.round(progress * 100) : 0;
+  const remainingSeconds = Math.round((goalHours * 3600) - progressSeconds);
+  const tone = targetTone(progress, hasGoal);
+  const note = goalRemainingText(goalHours * 3600, progressSeconds);
+  const resetCountdown = formatResetCountdown(target.seconds_until_reset);
+
+  updateWeeklyTargetMeta({
+    weekStart: target.week_start,
+    weekEnd: target.week_end,
+    progressSeconds,
+    note,
+    toneClass: tone.className,
+  });
+
+  mount.innerHTML = `
+    <div class="goal-shell">
+      <div class="goal-ring-wrap">
+        ${renderGoalRing({
+          progressRatio: progress,
+          hasGoal,
+          label: `${Math.min(percent, 999)}% complete`,
+        })}
+      </div>
+      <div class="goal-controls">
+        <div class="goal-range">${shortRange(target.week_start, target.week_end)} · Friday-to-Thursday</div>
+        <div class="goal-input-row">
+          <label class="goal-label" for="weeklyGoalCardInput">
+            <strong>Weekly goal</strong>
+            <span class="goal-context">${resetCountdown}</span>
+          </label>
+          <div class="goal-input-wrap">
+            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${goalHours}">
+            <span class="goal-unit">hours</span>
+          </div>
+        </div>
+        <div class="goal-presets" style="--target-accent:${tone.accent}">
+          ${[1, 2, 3, 5].map(hours => `
+            <button class="goal-chip ${Math.abs(goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  animateGoalRings(mount);
+
+  mount.classList.remove('is-fresh');
+  void mount.offsetWidth;
+  mount.classList.add('is-fresh');
+
+  const input = mount.querySelector('#weeklyGoalCardInput');
+  const repaint = nextValue => {
+    const normalized = clamp(Math.round((Number(nextValue) || goalHours) * 10) / 10, 1, 100);
+    localStorage.setItem(WEEKLY_GOAL_STORAGE_KEY, String(normalized));
+    renderWeeklyTargetCard(target);
+  };
+  if (input) {
+    input.addEventListener('change', () => repaint(input.value));
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') repaint(input.value);
+    });
+  }
+  mount.querySelectorAll('[data-weekly-goal-hours]').forEach(button => {
+    button.addEventListener('click', () => repaint(button.dataset.weeklyGoalHours));
   });
 }
 
+async function loadWeeklyTarget(summary = {}) {
+  const mount = document.getElementById('weeklyGoalCard');
+  if (!mount) return;
+  if (!weeklyTargetState.currentWeekStartDate) {
+    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentFridayWeekStartKey();
+  }
+  const weekStart = weeklyTargetState.currentWeekStartDate;
+  const weekEnd = localDateKey(addDays(dateFromKey(weekStart), 6));
+  updateWeeklyTargetMeta({
+    weekStart,
+    weekEnd,
+    progressSeconds: weekStart === (summary.goal_week_start || '') ? (summary.week_seconds || 0) : 0,
+    note: 'Loading target…',
+  });
+  mount.classList.add('is-loading');
+  mount.setAttribute('aria-busy', 'true');
+  const token = ++weeklyTargetState.requestToken;
+  try {
+    const res = await fetch(`/api/weekly-target?date=${encodeURIComponent(weekStart)}`);
+    const payload = await res.json();
+    if (!res.ok || payload.error) throw new Error(payload.error || 'Failed to load weekly target');
+    if (token !== weeklyTargetState.requestToken || weeklyTargetState.currentWeekStartDate !== weekStart) return;
+    weeklyTargetState.currentWeekStartDate = payload.week_start;
+    renderWeeklyTargetCard(payload);
+  } catch (error) {
+    if (token !== weeklyTargetState.requestToken || weeklyTargetState.currentWeekStartDate !== weekStart) return;
+    updateWeeklyTargetMeta({
+      weekStart,
+      weekEnd,
+      progressSeconds: 0,
+      note: 'Could not load target',
+    });
+    mount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
+    toast(error.message || 'Failed to load weekly target');
+  } finally {
+    if (token === weeklyTargetState.requestToken) {
+      mount.classList.remove('is-loading');
+      mount.removeAttribute('aria-busy');
+    }
+  }
+}
+
+function renderWeeklyGoal(summary) {
+  const prevBtn = document.getElementById('weeklyTargetPrev');
+  const nextBtn = document.getElementById('weeklyTargetNext');
+  const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
+  if (!prevBtn || !nextBtn || !currentBtn) return;
+
+  if (!weeklyTargetState.currentWeekStartDate) {
+    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentFridayWeekStartKey();
+  }
+
+  const moveByWeeks = amount => {
+    weeklyTargetState.currentWeekStartDate = localDateKey(addDays(dateFromKey(weeklyTargetState.currentWeekStartDate), amount * 7));
+    loadWeeklyTarget(summary);
+  };
+
+  prevBtn.addEventListener('click', () => moveByWeeks(-1));
+  nextBtn.addEventListener('click', () => moveByWeeks(1));
+  currentBtn.addEventListener('click', () => {
+    weeklyTargetState.currentWeekStartDate = currentFridayWeekStartKey();
+    loadWeeklyTarget(summary);
+  });
+
+  loadWeeklyTarget(summary);
+}
+
+function updateDailyTargetMeta({ dateKey, progressSeconds = 0, note = 'Loading target…', toneClass = '' }) {
+  const viewedLabel = document.getElementById('dailyTargetViewedLabel');
+  const progressLabel = document.getElementById('dailyTargetProgress');
+  const remainingLabel = document.getElementById('dailyGoalRemaining');
+  const todayBtn = document.getElementById('dailyTargetTodayBtn');
+  if (viewedLabel) viewedLabel.textContent = humanDailyTargetLabel(dateKey);
+  if (progressLabel) progressLabel.textContent = fmt.dur(progressSeconds || 0);
+  if (remainingLabel) {
+    remainingLabel.textContent = note;
+    remainingLabel.className = `section-meta-note ${toneClass}`.trim();
+  }
+  if (todayBtn) todayBtn.hidden = dateKey === localDateKey(new Date());
+}
+
+function renderDailyTargetCard(target) {
+  const mount = document.getElementById('dailyGoalCard');
+  if (!mount) return;
+
+  const dateKey = target.date;
+  const progressSeconds = Math.max(0, target.progress_seconds || 0);
+  const progressHours = Math.round((progressSeconds / 3600) * 10) / 10;
+  const hasGoal = Number.isFinite(target.goal_hours) && target.goal_hours > 0;
+  const goalHours = hasGoal ? Math.round(target.goal_hours * 10) / 10 : null;
+
+  function remainingGoalLabel(hours) {
+    const goalSeconds = hours * 3600;
+    const deltaSeconds = Math.round(goalSeconds - progressSeconds);
+    if (deltaSeconds <= 0) {
+      const overSeconds = Math.abs(deltaSeconds);
+      return overSeconds > 0
+        ? `Goal met · ${fmt.dur(overSeconds)} extra`
+        : 'Goal met right on target';
+    }
+    return `${fmt.dur(deltaSeconds)} left to goal`;
+  }
+
+  const descriptiveLabel = longDailyTargetLabel(dateKey);
+  if (hasGoal) {
+    const progress = progressHours / goalHours;
+    const percent = Math.round(progress * 100);
+    const percentLabel = `${Math.min(percent, 999)}%`;
+    const tone = targetTone(progress, true);
+    const note = remainingGoalLabel(goalHours);
+    updateDailyTargetMeta({
+      dateKey,
+      progressSeconds,
+      note,
+      toneClass: tone.className,
+    });
+    mount.innerHTML = `
+      <div class="goal-shell">
+        <div class="goal-ring-wrap">
+          ${renderGoalRing({
+            progressRatio: progress,
+            hasGoal: true,
+            label: `${percentLabel} complete`,
+          })}
+        </div>
+        <div class="goal-controls">
+          <div class="goal-range">${descriptiveLabel} · progress from session history</div>
+          <div class="goal-input-row">
+            <label class="goal-label" for="dailyGoalCardInput">
+              <strong>Daily goal</strong>
+              <span>Saved to the dashboard database for this date.</span>
+            </label>
+            <div class="goal-input-wrap">
+              <input class="goal-input" id="dailyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${goalHours}">
+              <span class="goal-unit">hours</span>
+            </div>
+          </div>
+          <div class="goal-presets" style="--target-accent:${tone.accent}">
+            ${[1, 2, 3, 5].map(hours => `
+              <button class="goal-chip ${Math.abs(goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-daily-goal-hours="${hours}">${hours}h</button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    updateDailyTargetMeta({
+      dateKey,
+      progressSeconds,
+      note: 'No target set',
+    });
+    mount.innerHTML = `
+      <div class="goal-shell">
+        <div class="goal-ring-wrap">
+          ${renderGoalRing({
+            progressRatio: 0,
+            hasGoal: false,
+            label: `${fmt.dur(progressSeconds)} logged with no target set`,
+            valueMarkup: `<span class="goal-value--stack"><span>${progressHours > 0 ? progressHours.toFixed(progressHours % 1 === 0 ? 0 : 1) : '0'}<small>h</small></span><span class="goal-value-caption">Worked</span></span>`,
+          })}
+        </div>
+        <div class="goal-controls">
+          <div class="goal-range">${descriptiveLabel} · progress from session history</div>
+          <div class="goal-input-row">
+            <label class="goal-label" for="dailyGoalCardInput">
+              <strong>Set daily goal</strong>
+              <span>No target has been saved for this date yet.</span>
+            </label>
+            <div class="goal-input-wrap">
+              <input class="goal-input" id="dailyGoalCardInput" type="number" min="1" max="100" step="0.5" value="3">
+              <span class="goal-unit">hours</span>
+            </div>
+          </div>
+          <div class="goal-presets" style="--target-accent:var(--accent)">
+            ${[1, 2, 3, 5].map(hours => `
+              <button class="goal-chip ${hours === 3 ? 'is-active' : ''}" type="button" data-daily-goal-hours="${hours}">${hours}h</button>
+            `).join('')}
+          </div>
+          <div class="goal-empty-note">Choose a goal and it will be saved for ${humanDailyTargetLabel(dateKey).toLowerCase()}.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  mount.classList.remove('is-fresh');
+  void mount.offsetWidth;
+  mount.classList.add('is-fresh');
+  animateGoalRings(mount);
+
+  const input = mount.querySelector('#dailyGoalCardInput');
+  const commit = async (nextValue) => {
+    const normalized = clamp(Math.round((Number(nextValue) || 0) * 10) / 10, 1, 100);
+    const token = ++dailyTargetState.requestToken;
+    mount.classList.add('is-loading');
+    try {
+      const payload = await postJson('/api/daily-target', {
+        date: dateKey,
+        goal_hours: normalized,
+      });
+      if (token !== dailyTargetState.requestToken || dailyTargetState.viewedDate !== dateKey) return;
+      renderDailyTargetCard(payload);
+      toast(`Saved ${normalized}h for ${humanDailyTargetLabel(dateKey)}`);
+    } catch (error) {
+      toast(error.message || 'Failed to save daily target');
+    } finally {
+      if (token === dailyTargetState.requestToken) {
+        mount.classList.remove('is-loading');
+      }
+    }
+  };
+
+  if (input) {
+    const submitInput = () => commit(input.value);
+    input.addEventListener('change', submitInput);
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') submitInput();
+    });
+  }
+
+  mount.querySelectorAll('[data-daily-goal-hours]').forEach(button => {
+    button.addEventListener('click', () => commit(button.dataset.dailyGoalHours));
+  });
+}
+
+async function loadDailyTarget(summary) {
+  const mount = document.getElementById('dailyGoalCard');
+  if (!mount) return;
+  const dateKey = dailyTargetState.viewedDate;
+  updateDailyTargetMeta({
+    dateKey,
+    progressSeconds: dateKey === localDateKey(new Date()) ? (summary.today_seconds || 0) : 0,
+    note: 'Loading target…',
+  });
+  mount.classList.add('is-loading');
+  mount.setAttribute('aria-busy', 'true');
+  const token = ++dailyTargetState.requestToken;
+  try {
+    const res = await fetch(`/api/daily-target?date=${encodeURIComponent(dateKey)}`);
+    const payload = await res.json();
+    if (!res.ok || payload.error) throw new Error(payload.error || 'Failed to load daily target');
+    if (token !== dailyTargetState.requestToken || dailyTargetState.viewedDate !== dateKey) return;
+    renderDailyTargetCard(payload);
+  } catch (error) {
+    if (token !== dailyTargetState.requestToken || dailyTargetState.viewedDate !== dateKey) return;
+    updateDailyTargetMeta({
+      dateKey,
+      progressSeconds: 0,
+      note: 'Could not load target',
+    });
+    mount.innerHTML = '<div class="chart-empty">Unable to load this target right now.</div>';
+    toast(error.message || 'Failed to load daily target');
+  } finally {
+    if (token === dailyTargetState.requestToken) {
+      mount.classList.remove('is-loading');
+      mount.removeAttribute('aria-busy');
+    }
+  }
+}
+
 function renderDailyGoal(summary) {
-  const todayLabel = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
+  const prevBtn = document.getElementById('dailyTargetPrev');
+  const nextBtn = document.getElementById('dailyTargetNext');
+  const todayBtn = document.getElementById('dailyTargetTodayBtn');
+  if (!prevBtn || !nextBtn || !todayBtn) return;
+
+  const moveByDays = amount => {
+    dailyTargetState.viewedDate = localDateKey(addDays(dateFromKey(dailyTargetState.viewedDate), amount));
+    loadDailyTarget(summary);
+  };
+
+  prevBtn.addEventListener('click', () => moveByDays(-1));
+  nextBtn.addEventListener('click', () => moveByDays(1));
+  todayBtn.addEventListener('click', () => {
+    dailyTargetState.viewedDate = localDateKey(new Date());
+    loadDailyTarget(summary);
   });
-  renderGoalCard({
-    mountId: 'dailyGoalCard',
-    storageKey: DAILY_GOAL_STORAGE_KEY,
-    fallbackGoalHours: 3,
-    completedSeconds: summary.today_seconds || 0,
-    rangeLabel: `${todayLabel} · resets tomorrow`,
-    goalLabel: 'Daily goal',
-    remainingId: 'dailyGoalRemaining',
-    presets: [1, 2, 3, 5],
-  });
+
+  loadDailyTarget(summary);
 }
 
 function renderProjectChart(projects) {
@@ -4051,155 +3772,7 @@ function renderCategoryChart(projects) {
 }
 
 load();
-setInterval(load, 5_000);
-setInterval(() => {
-  if (activeView === 'dashboard') setIntroDates();
-}, 30_000);
-setInterval(tickSessionTimer, 1_000);
+setInterval(load, 60_000);
 </script>
 </body>
-</html>"""
-
-
-# ─────────────────────────────────────────────────────────────
-#  HTTP server
-# ─────────────────────────────────────────────────────────────
-
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass  # silence access logs
-
-    def _request_json(self):
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0:
-            return {}
-        raw = self.rfile.read(length)
-        if not raw:
-            return {}
-        return json.loads(raw.decode("utf-8"))
-
-    def _json(self, payload, status=200):
-        body = json.dumps(payload).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/data":
-            self._json(get_stats())
-        elif parsed.path == "/api/daily-target":
-            date_value = parse_qs(parsed.query).get("date", [""])[0]
-            try:
-                self._json(get_daily_target(date_value))
-            except ValueError as exc:
-                self._json({"error": str(exc)}, status=400)
-        elif parsed.path in ("/api/weekly-target", "/api/get_weekly_target"):
-            date_value = parse_qs(parsed.query).get("date", [""])[0]
-            try:
-                self._json(get_weekly_target(date_value))
-            except ValueError as exc:
-                self._json({"error": str(exc)}, status=400)
-        else:
-            body = _load_html().encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            self.end_headers()
-            self.wfile.write(body)
-
-    def do_POST(self):
-        if self.path == "/api/clear-recent":
-            self._json(clear_all_sessions())
-        elif self.path == "/api/clear-unsaved":
-            self._json(clear_unsaved_projects())
-        elif self.path == "/api/clear-phantoms":
-            self._json(clear_phantom_sessions())
-        elif self.path == "/api/delete-session":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = delete_sessions(payload.get("session_ids") or [])
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-category":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = set_project_category(
-                payload.get("project_name", ""),
-                payload.get("category_key"),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/category-options":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = create_category(
-                payload.get("label", ""),
-                payload.get("color", ""),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/category-options/update":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = update_category(
-                payload.get("key", ""),
-                payload.get("label", ""),
-                payload.get("color", ""),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/category-options/delete":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = delete_category(payload.get("key", ""))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/daily-target":
-            try:
-                payload = self._request_json()
-                result = set_daily_target(
-                    payload.get("date", ""),
-                    payload.get("goal_hours"),
-                )
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            except ValueError as exc:
-                self._json({"error": str(exc)}, status=400)
-                return
-            self._json(result)
-        else:
-            self._json({"error": "not found"}, status=404)
-
-
-def main():
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://localhost:{PORT}"
-    print(f"Dashboard running at {url}")
-    print("Ctrl+C to stop\n")
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nDashboard stopped.")
-
-
-if __name__ == "__main__":
-    main()
+</html>

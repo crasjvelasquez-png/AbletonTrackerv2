@@ -45,7 +45,12 @@
       "Bash(/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -c ' *)",
       "Bash(launchctl unload *)",
       "Bash(pkill -f menubar.py)",
-      "Bash(launchctl load *)"
+      "Bash(launchctl load *)",
+      "Bash(python -m unittest test_dashboard)",
+      "Bash(python3 -m unittest test_dashboard)",
+      "Bash(python -m pytest test_dashboard.py -x -q)",
+      "Bash(python3 -m pytest test_dashboard.py -x -q)",
+      "Bash(python3 -c \"import dashboard; print\\('imports ok'\\)\")"
     ]
   }
 }
