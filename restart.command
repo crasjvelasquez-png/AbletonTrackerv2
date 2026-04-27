@@ -19,6 +19,9 @@ echo ""
 # Stop the dashboard server if it's running so the next open uses fresh code.
 pkill -f "dashboard.py" 2>/dev/null || true
 
+# Wipe cached bytecode so Python re-reads source on next launch.
+rm -rf "$DIR/__pycache__"
+
 if [ -f "$PLIST_PATH" ]; then
     echo "Mode: LaunchAgent / menu bar"
     launchctl unload "$PLIST_PATH" 2>/dev/null || true

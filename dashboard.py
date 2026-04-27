@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Ableton Tracker Dashboard — local web server."""
 
+import os
 import sqlite3
 import json
 import webbrowser
@@ -10,10 +11,12 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from tracker import (
+    allocate_session_activity,
     build_activity_rollups,
     cleanup_phantom_sessions,
     condense_recent_sessions,
     count_phantom_sessions,
+    is_ableton_running,
 )
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
@@ -467,7 +470,7 @@ def get_stats() -> dict:
             project_categories = get_project_categories(conn)
 
             activity_rows = conn.execute("""
-                SELECT start_time, last_seen_time, end_time, active_seconds
+                SELECT project_name, start_time, last_seen_time, end_time, active_seconds
                 FROM sessions
                 WHERE active_seconds > 0
             """).fetchall()
@@ -513,6 +516,29 @@ def get_stats() -> dict:
             goal_week_start = today - timedelta(days=(today.weekday() - 4) % 7)
             goal_week_end   = goal_week_start + timedelta(days=6)
             month_start = today.replace(day=1).isoformat()
+
+            today_session_seconds = []
+            today_project_names = set()
+            for row in activity_rows:
+                row_today_seconds = 0.0
+                end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
+                for day_key, _hour, seconds in allocate_session_activity(
+                    row["start_time"],
+                    end_time,
+                    row["active_seconds"],
+                ):
+                    if day_key == today_str:
+                        row_today_seconds += seconds
+                if row_today_seconds > 0:
+                    today_session_seconds.append(row_today_seconds)
+                    today_project_names.add(row["project_name"])
+
+            today_session_count = len(today_session_seconds)
+            today_avg_session_seconds = (
+                sum(today_session_seconds) / today_session_count
+                if today_session_count
+                else 0
+            )
 
             def scalar(q, *p):
                 return conn.execute(q, p).fetchone()[0] or 0
@@ -571,6 +597,17 @@ def get_stats() -> dict:
                 WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
             """).fetchone()
 
+            month_per_project = dict(conn.execute(
+                """
+                SELECT project_name, COALESCE(SUM(active_seconds), 0) AS month_seconds
+                FROM sessions
+                WHERE active_seconds > 0
+                  AND date(start_time, 'unixepoch', 'localtime') >= ?
+                GROUP BY project_name
+                """,
+                (month_start,),
+            ).fetchall())
+
             project_rows = []
             for row in projects:
                 project = dict(row)
@@ -578,6 +615,7 @@ def get_stats() -> dict:
                 project["category_key"] = category["key"] if category else None
                 project["category_label"] = category["label"] if category else None
                 project["category_color"] = category["color"] if category else None
+                project["month_seconds"] = month_per_project.get(project["project_name"], 0)
                 project_rows.append(project)
 
             recent_rows = []
@@ -600,6 +638,9 @@ def get_stats() -> dict:
                 "summary": {
                     "total_seconds":  total_s,
                     "today_seconds":  today_s,
+                    "today_average_session_seconds": today_avg_session_seconds,
+                    "today_session_count": today_session_count,
+                    "today_project_count": len(today_project_names),
                     "week_seconds":   week_s,
                     "goal_week_start": goal_week_start.isoformat(),
                     "goal_week_end": goal_week_end.isoformat(),
@@ -608,6 +649,7 @@ def get_stats() -> dict:
                     "project_count":  len(projects),
                     "streak_days":    streak,
                     "live_project":   live["project_name"] if live else None,
+                    "ableton_running": is_ableton_running(),
                     "closed_session_count": closed_session_count,
                     "unsaved_closed_count": unsaved_closed_count,
                     "phantom_closed_count": phantom_closed_count,
@@ -672,7 +714,7 @@ HTML = """<!DOCTYPE html>
   --logo-bg:linear-gradient(180deg, #ffffff, #f2f7ff);
   --logo-border:rgba(0,122,255,.12);
   --logo-shadow:0 10px 24px rgba(0,122,255,.08);
-  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0));
+  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.182), rgba(255,255,255,0));
   --control-bg:rgba(255,255,255,.8);
   --control-bg-strong:#fff;
   --control-inner:rgba(255,255,255,.96);
@@ -688,6 +730,7 @@ HTML = """<!DOCTYPE html>
   --radius:22px;
   --radius-sm:14px;
   --shadow-1:0 1px 2px rgba(15,23,42,.04), 0 18px 40px rgba(15,23,42,.06);
+  --shadow-card-hover:0 12px 24px rgba(15,23,42,.10), 0 28px 58px rgba(255,255,255,.0845);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -716,7 +759,7 @@ HTML = """<!DOCTYPE html>
     --logo-bg:linear-gradient(180deg, rgba(41,45,54,.94), rgba(21,24,30,.94));
     --logo-border:rgba(10,132,255,.26);
     --logo-shadow:0 10px 24px rgba(0,0,0,.24);
-    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0));
+    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.0416), rgba(255,255,255,0));
     --control-bg:rgba(38,41,48,.82);
     --control-bg-strong:rgba(50,54,62,.96);
     --control-inner:rgba(18,20,25,.96);
@@ -725,6 +768,7 @@ HTML = """<!DOCTYPE html>
     --toast-shadow:0 18px 40px rgba(0,0,0,.38);
     --modal-backdrop:rgba(0,0,0,.48);
     --shadow-1:0 1px 2px rgba(0,0,0,.2), 0 18px 42px rgba(0,0,0,.26);
+    --shadow-card-hover:0 16px 30px rgba(0,0,0,.34), 0 30px 62px rgba(255,255,255,.117);
   }
 }
 :root[data-theme="dark"]{
@@ -753,7 +797,7 @@ HTML = """<!DOCTYPE html>
   --logo-bg:linear-gradient(180deg, rgba(41,45,54,.94), rgba(21,24,30,.94));
   --logo-border:rgba(10,132,255,.26);
   --logo-shadow:0 10px 24px rgba(0,0,0,.24);
-  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0));
+  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.0416), rgba(255,255,255,0));
   --control-bg:rgba(38,41,48,.82);
   --control-bg-strong:rgba(50,54,62,.96);
   --control-inner:rgba(18,20,25,.96);
@@ -762,6 +806,7 @@ HTML = """<!DOCTYPE html>
   --toast-shadow:0 18px 40px rgba(0,0,0,.38);
   --modal-backdrop:rgba(0,0,0,.48);
   --shadow-1:0 1px 2px rgba(0,0,0,.2), 0 18px 42px rgba(0,0,0,.26);
+  --shadow-card-hover:0 16px 30px rgba(0,0,0,.34), 0 30px 62px rgba(255,255,255,.117);
 }
 :root[data-theme="light"]{color-scheme:light}
 html{font-size:15px}
@@ -784,8 +829,7 @@ body{
 header{
   position:sticky;top:0;z-index:20;
   background:var(--header-bg);
-  backdrop-filter:saturate(180%) 
-(18px);
+  backdrop-filter:saturate(180%) blur(18px);
   -webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--border);
   padding:0 36px;height:68px;
@@ -869,12 +913,59 @@ header{
   color:var(--ink);
 }
 .intro h2 em{font-style:normal;color:var(--ink-3);font-weight:500}
+.page-title-dashboard{
+  color:var(--ink);
+  font-weight:780;
+}
+:root[data-theme="dark"] .page-title-dashboard{
+  color:#fff;
+}
 .intro .sub{
   font-size:13px;color:var(--ink-4);margin-top:12px;
 }
-.intro .sub span{color:var(--ink-2)}
+.intro .sub > span:not(.session-status){color:var(--ink-2)}
+.session-status{
+  display:inline-flex;align-items:center;gap:10px;
+  color:var(--ink-2);
+}
+.session-status__text{
+  color:inherit;
+}
+.session-status__indicator{
+  display:inline-flex;align-items:center;gap:4px;
+  min-width:24px;
+}
+.session-status__dot{
+  width:10px;height:10px;border-radius:999px;
+  display:inline-block;flex:0 0 auto;
+  background:#ff453a;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06), 0 0 10px rgba(255,69,58,.35);
+}
+.session-status__indicator--off .session-status__dot{
+  background:#7d7d84;
+  box-shadow:none;
+}
+.session-status__indicator--booting{
+  min-width:auto;
+}
+.session-status__indicator--booting .session-status__dot{
+  background:#ffffff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.14), 0 0 12px rgba(255,255,255,.28);
+  animation:bootBlink 0.545s ease-in-out infinite;
+}
+.session-status__indicator--booting .session-status__dot:nth-child(2){
+  animation-delay:-0.182s;
+}
+.session-status__indicator--booting .session-status__dot:nth-child(3){
+  animation-delay:-0.364s;
+}
+@keyframes bootBlink{
+  0%, 18%, 100%{opacity:1;transform:scale(1)}
+  50%{opacity:.18;transform:scale(.82)}
+}
 
-.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:28px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:28px}
+@media (max-width: 1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .card,
 .chart-card,
 .table-card{
@@ -886,30 +977,77 @@ header{
 }
 .card{
   border-radius:var(--radius);
-  padding:22px 24px 20px;
+  min-height:203px;
+  padding:28px 22px 24px;
   position:relative;overflow:hidden;
-  transition:border-color .2s ease, background .2s ease, transform .2s ease;
+  display:flex;flex-direction:column;align-items:flex-start;
+  transform:translateZ(0);
+  transform-origin:center top;
+  will-change:transform;
+  transition:border-color .22s ease, background .22s ease, box-shadow .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);
 }
 .card::after{
   content:"";position:absolute;inset:0;pointer-events:none;
   background:var(--glass-highlight);
+  opacity:.75;
+  transition:opacity .24s ease;
 }
-.card:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.card:hover{
+  border-color:var(--border-strong);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-card-hover);
+  transform:scale(1.025);
+  z-index:2;
+}
+.card:hover::after{opacity:1}
 .card-label{
-  font-size:13px;font-weight:600;color:var(--ink-3);margin-bottom:14px;
+  font-size:12px;font-weight:650;color:var(--ink-3);margin-bottom:18px;
+  text-transform:uppercase;letter-spacing:.04em;
 }
 .card-value{
   font-family:var(--font-display);font-weight:680;
-  font-size:40px;line-height:1;letter-spacing:-.05em;color:var(--ink);
+  font-size:34px;line-height:1.12;letter-spacing:-.03em;color:var(--ink);
   font-variant-numeric:tabular-nums;
+}
+.card-value--text{
+  font-size:23px;line-height:1.2;letter-spacing:-.02em;
+  white-space:normal;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  max-width:100%;
+}
+.proj-dot{
+  display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:6px;vertical-align:middle;
 }
 .card-value.accent em{font-style:normal;font-weight:550;color:var(--ink-3)}
 .card-value .unit{
-  font-family:var(--font-body);font-size:15px;font-weight:500;
-  color:var(--ink-4);margin-left:4px;
+  font-family:var(--font-body);font-size:13px;font-weight:500;
+  color:var(--ink-4);margin-left:3px;
 }
 .card-sub{
-  font-size:13px;color:var(--ink-4);margin-top:10px;
+  font-size:12px;color:var(--ink-4);margin-top:12px;
+  line-height:1.45;
+}
+.card-chip{
+  display:inline-flex;align-items:center;
+  margin-top:18px;
+  font-size:11px;font-weight:650;
+  padding:4px 9px;border-radius:999px;
+  color:var(--ink-3);
+  background:rgba(120,120,128,.12);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.01em;
+}
+.card-sub:last-child{margin-top:auto;padding-top:12px}
+.card-chip--good{
+  color:#2c8a4a;background:rgba(48,164,85,.14);
+}
+@media (prefers-color-scheme: dark){
+  .card-chip--good{color:#5fd97e;background:rgba(48,164,85,.18)}
+}
+:root[data-theme="dark"] .card-chip--good{color:#5fd97e;background:rgba(48,164,85,.18)}
+.card-chip--record{
+  color:var(--accent);background:var(--accent-soft);
 }
 
 .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
@@ -926,7 +1064,28 @@ header{
 }
 .target-card{
   display:grid;grid-template-rows:auto 1fr;
+  min-height:410px;
+  padding:28px 30px 26px;
+  position:relative;overflow:hidden;
+  transform-origin:center top;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  transition:border-color .22s ease, background .22s ease, box-shadow .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);
 }
+.target-card::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:var(--glass-highlight);
+  opacity:.72;
+  transition:opacity .24s ease;
+}
+.target-card:hover{
+  border-color:var(--border-strong);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-card-hover);
+  transform:scale(1.02);
+  z-index:2;
+}
+.target-card:hover::after{opacity:1}
 .target-card .chart-wrap{
   min-height:0;height:100%;
 }
@@ -1056,27 +1215,42 @@ header{
 .heatmap-foot{
   font-size:12px;color:var(--ink-4);
 }
-.goal-shell{display:grid;gap:16px}
-.goal-range{
-  font-size:12px;color:var(--ink-4);font-weight:600;
+.goal-shell{
+  height:100%;
+  display:grid;
+  grid-template-columns:minmax(170px,200px) minmax(0,1fr);
+  gap:22px;
+  align-items:center;
 }
-.goal-ring-wrap{display:grid;place-items:center}
+.goal-range{
+  font-size:12px;
+  color:var(--ink-4);
+  font-weight:700;
+  letter-spacing:.01em;
+}
+.goal-ring-wrap{
+  display:grid;place-items:center;
+  align-self:stretch;
+  padding:8px 0;
+}
 .goal-ring{
   width:min(220px,100%);aspect-ratio:1;border-radius:50%;
   --goal-progress:0deg;
-  --goal-progress-mid:0deg;
-  --goal-progress-hot:0deg;
-  --goal-track:rgba(77,97,126,.14);
-  --goal-dial:conic-gradient(from -90deg, #ffe96d 0deg, #ffc246 var(--goal-progress-mid), #ff7a42 var(--goal-progress-hot), #ef3a38 var(--goal-progress), var(--goal-track) var(--goal-progress) 360deg);
+  --goal-progress-mid:120deg;
+  --goal-progress-hot:240deg;
+  --goal-cold:#1677ff;
+  --goal-cool:#33c7ff;
+  --goal-warm:#ffc247;
+  --goal-hot:#ff3b30;
+  --goal-track:rgba(120,120,128,.18);
+  --goal-dial:conic-gradient(from -90deg, var(--goal-cold) 0deg, var(--goal-cool) var(--goal-progress-mid), var(--goal-warm) var(--goal-progress-hot), var(--goal-hot) var(--goal-progress), var(--goal-track) var(--goal-progress) 360deg);
   padding:9px;position:relative;
   background:var(--goal-dial);
-  box-shadow:0 18px 44px rgba(239,58,56,.13), 0 8px 24px rgba(255,194,70,.1);
+  box-shadow:0 18px 44px rgba(22,119,255,.12), 0 8px 24px rgba(255,59,48,.09);
   isolation:isolate;
 }
 .goal-ring::before{
-  content:"";position:absolute;inset:-18px;border-radius:inherit;
-  background:var(--goal-dial);
-  filter:blur(24px);opacity:.34;z-index:-1;
+  display:none;
 }
 .goal-ring::after{
   content:"";position:absolute;inset:8px;border-radius:inherit;
@@ -1111,20 +1285,26 @@ header{
   display:none;
 }
 .goal-controls{
-  display:grid;gap:10px;
+  display:grid;
+  gap:16px;
+  align-content:center;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:22px;
+  background:color-mix(in srgb, var(--control-bg) 72%, transparent);
 }
 .goal-input-row{
-  display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
+  display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;
 }
 .goal-label{
-  display:grid;gap:4px;font-size:12px;color:var(--ink-4);
+  display:grid;gap:6px;font-size:12px;color:var(--ink-4);
 }
 .goal-label strong{
-  font-size:13px;color:var(--ink-2);font-weight:700;
+  font-size:15px;color:var(--ink-2);font-weight:760;
 }
 .goal-input-wrap{
   display:inline-flex;align-items:center;gap:8px;
-  padding:10px 12px;border-radius:16px;
+  padding:9px 12px;border-radius:18px;
   background:var(--control-bg);border:1px solid var(--border);
 }
 .goal-input{
@@ -1143,25 +1323,18 @@ header{
   font-size:12px;font-weight:600;transition:all .18s ease;
 }
 .goal-chip:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink)}
-.target-card .goal-shell{
-  grid-template-columns:minmax(126px,150px) minmax(0,1fr);
-  align-items:center;gap:12px 16px;
-}
-.target-card .goal-range{
-  grid-column:1 / -1;
-}
 .target-card .goal-ring{
-  width:min(150px,100%);
-  padding:9px;
+  width:min(176px,100%);
+  padding:10px;
 }
 .target-card .goal-ring-core{
-  padding:13px;
+  padding:16px;
 }
 .target-card .goal-kicker{
   font-size:10px;
 }
 .target-card .goal-value{
-  font-size:30px;
+  font-size:34px;
 }
 .target-card .goal-value small{
   display:block;
@@ -1171,20 +1344,73 @@ header{
   font-size:11px;padding:6px 9px;
 }
 .target-card .goal-controls{
-  gap:9px;
+  gap:16px;
 }
 .target-card .goal-input-wrap{
-  padding:8px 10px;
+  padding:9px 11px;
 }
 .target-card .goal-input{
-  width:56px;
-  font-size:21px;
+  width:48px;
+  font-size:18px;
+}
+.target-card .goal-unit{
+  font-size:11px;
 }
 .target-card .goal-presets{
   gap:6px;
 }
 .target-card .goal-chip{
-  padding:7px 10px;
+  padding:7px 11px;
+}
+.target-card .section-head{
+  align-items:flex-start;
+  margin-bottom:24px;
+  gap:20px;
+}
+.target-card .section-title{
+  font-weight:780;
+  padding-top:7px;
+}
+.target-card .section-title em{
+  color:var(--ink);
+  font-weight:780;
+}
+.target-card .section-meta{
+  display:grid;
+  gap:4px;
+  justify-items:start;
+  text-align:left;
+  min-width:190px;
+  padding:11px 14px 12px;
+  border:1px solid var(--border);
+  border-radius:20px;
+  background:color-mix(in srgb, var(--control-bg) 76%, transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink-2);
+  letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;
+}
+.target-card .section-meta strong{
+  display:block;
+  margin-top:1px;
+  font-family:var(--font-display);
+  font-size:25px;
+  line-height:1;
+  letter-spacing:-.045em;
+  color:var(--ink);
+  font-weight:780;
+}
+.section-meta-note{
+  display:block;
+  font-family:var(--font-body);
+  font-size:12px;
+  line-height:1.25;
+  letter-spacing:.01em;
+  color:var(--ink-4);
+  font-weight:700;
+  margin-top:2px;
 }
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
@@ -1530,6 +1756,50 @@ header{
   border-radius:var(--radius);
   padding:24px 26px;margin-bottom:24px;
 }
+.recent-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:1px;
+  overflow:hidden;
+  margin:-4px 0 20px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:var(--border);
+}
+.recent-stat{
+  min-width:0;
+  padding:15px 17px 16px;
+  background:color-mix(in srgb, var(--control-bg) 70%, transparent);
+}
+.recent-stat-label{
+  display:block;
+  font-size:11px;
+  font-weight:750;
+  color:var(--ink-4);
+  letter-spacing:.055em;
+  text-transform:uppercase;
+}
+.recent-stat-value{
+  display:block;
+  margin-top:7px;
+  font-family:var(--font-display);
+  font-size:25px;
+  line-height:1.05;
+  font-weight:720;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.035em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.recent-stat-note{
+  display:block;
+  margin-top:6px;
+  font-size:12px;
+  line-height:1.35;
+  color:var(--ink-4);
+}
 .table-scroll{
   max-height:min(52vh, 540px);
   overflow:auto;
@@ -1652,8 +1922,8 @@ tbody tr:hover .row-del{opacity:1}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
   .goal-input-row{grid-template-columns:1fr}
-  .target-card .goal-shell{grid-template-columns:1fr}
-  .target-card .goal-ring{width:min(200px,100%)}
+  .target-card .goal-shell{grid-template-columns:minmax(170px,220px) minmax(0,1fr)}
+  .target-card .goal-ring{width:min(188px,100%)}
 }
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
@@ -1661,7 +1931,16 @@ tbody tr:hover .row-del{opacity:1}
   .header-nav{order:2;width:100%;justify-content:center}
   .page{padding:28px 20px 60px}
   .section-head{flex-wrap:wrap}
-  .card-value{font-size:34px}
+  .target-card{min-height:auto;padding:24px 20px 22px}
+  .target-card .section-head{display:grid;grid-template-columns:1fr;margin-bottom:22px}
+  .target-card .section-title{padding-top:0}
+  .target-card .section-meta{width:100%;min-width:0}
+  .target-card .goal-shell{grid-template-columns:1fr;gap:18px}
+  .target-card .goal-ring{width:min(210px,100%)}
+  .target-card .goal-controls{padding:16px}
+  .card{min-height:190px;padding:24px 18px 20px}
+  .card-value{font-size:32px}
+  .card-value--text{font-size:21px}
   .daily-bars{gap:4px}
   .mark{gap:8px;flex-direction:column;align-items:flex-start}
   .heatmap-meta{grid-template-columns:1fr}
@@ -1671,10 +1950,18 @@ tbody tr:hover .row-del{opacity:1}
   .heatmap-stage-values{gap:6px}
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
+  .recent-stats{grid-template-columns:1fr}
+  .recent-stat-value{font-size:23px}
   .field-grid{grid-template-columns:1fr}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion: reduce){
+  .card,
+  .target-card{transition:border-color .2s ease, background .2s ease, box-shadow .2s ease}
+  .card:hover,
+  .target-card:hover{transform:none}
 }
 </style>
 </head>
@@ -1720,7 +2007,15 @@ tbody tr:hover .row-del{opacity:1}
   <div class="intro">
     <div>
       <h2 id="pageTitle">Dashboard </h2>
-      <div class="sub" id="pageSubtitle">Live · <span id="introDate"></span></div>
+      <div class="sub" id="pageSubtitle">
+        <span class="session-status" id="sessionStatus" data-state="live">
+          <span class="session-status__text" id="sessionStatusText">Live</span>
+          <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+            <span class="session-status__dot"></span>
+          </span>
+        </span>
+        · <span id="introDate"></span> · <span id="introTime"></span>
+      </div>
     </div>
   </div>
   <div id="app"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
@@ -1885,19 +2180,45 @@ function bindColorField(root) {
   sync(input.value);
 }
 
+function setIntroDates() {
+  const now = new Date();
+  const introDate = document.getElementById('introDate');
+  const introTime = document.getElementById('introTime');
+  if (introDate) {
+    introDate.textContent = now.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+  }
+  if (introTime) {
+    introTime.textContent = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+}
+
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
   document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
   document.getElementById('navSettings').classList.toggle('is-active', isSettings);
   document.getElementById('pageTitle').innerHTML = isSettings
     ? 'Workspace <em>settings</em>'
-    : 'Studio <em>dashboard</em>';
+    : '<strong class="page-title-dashboard">Dashboard</strong>';
   document.getElementById('pageSubtitle').innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
-    : 'Live · <span id="introDate"></span>';
+    : `
+      <span class="session-status" id="sessionStatus" data-state="live">
+        <span class="session-status__text" id="sessionStatusText">Live</span>
+        <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
+          <span class="session-status__dot"></span>
+        </span>
+      </span>
+      · <span id="introDate"></span> · <span id="introTime"></span>
+    `;
   if (!isSettings) {
-    document.getElementById('introDate').textContent =
-      new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    setIntroDates();
   }
 }
 
@@ -2613,6 +2934,54 @@ async function load() {
   }
 }
 
+function lastMonthPace(yearDaily, today = new Date()) {
+  if (!Array.isArray(yearDaily) || yearDaily.length === 0) return null;
+  const totals = new Map();
+  for (const row of yearDaily) {
+    if (row && row.day) totals.set(row.day, row.total_seconds || 0);
+  }
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const dayOfMonth = today.getDate();
+  const iso = (d) => {
+    const yy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  };
+  let thisSum = 0;
+  for (let d = 1; d <= dayOfMonth; d++) thisSum += totals.get(iso(new Date(y, m, d))) || 0;
+  const lastMonthEnd = new Date(y, m, 0).getDate();
+  const cap = Math.min(dayOfMonth, lastMonthEnd);
+  let lastSum = 0;
+  for (let d = 1; d <= cap; d++) lastSum += totals.get(iso(new Date(y, m - 1, d))) || 0;
+  if (lastSum <= 0) return null;
+  const pct = ((thisSum - lastSum) / lastSum) * 100;
+  return { pct: Math.round(pct), positive: pct >= 0 };
+}
+
+function longestStreak(yearDaily) {
+  if (!Array.isArray(yearDaily) || yearDaily.length === 0) return 0;
+  const sorted = yearDaily
+    .filter(r => r && r.day && (r.total_seconds || 0) > 0)
+    .map(r => r.day)
+    .sort();
+  if (sorted.length === 0) return 0;
+  const dayMs = 86400000;
+  let best = 1;
+  let cur = 1;
+  let prev = new Date(sorted[0] + 'T00:00:00');
+  for (let i = 1; i < sorted.length; i++) {
+    const d = new Date(sorted[i] + 'T00:00:00');
+    const gap = Math.round((d - prev) / dayMs);
+    if (gap === 1) cur += 1;
+    else if (gap > 1) cur = 1;
+    if (cur > best) best = cur;
+    prev = d;
+  }
+  return best;
+}
+
 function render(data) {
   if (data.error) {
     document.getElementById('app').innerHTML =
@@ -2627,6 +2996,8 @@ function render(data) {
     return;
   }
 
+  updateSessionStatus(summary);
+
   if (summary.live_project) {
     document.getElementById('liveBadge').style.display = 'inline-flex';
     document.getElementById('liveProject').textContent = summary.live_project;
@@ -2638,17 +3009,88 @@ function render(data) {
   const unsavedCount = summary.unsaved_closed_count || 0;
   const closedSessionCount = summary.closed_session_count || 0;
   const phantomCount = summary.phantom_closed_count || 0;
+  const todaySessionCount = summary.today_session_count || 0;
+  const todayProjectCount = summary.today_project_count || 0;
+
+  const pace = lastMonthPace(year_daily);
+  let paceChip;
+  if (!pace) {
+    paceChip = `<div class="card-chip">— vs last month</div>`;
+  } else {
+    const sign = pace.pct > 0 ? '+' : '';
+    const cls = pace.positive ? ' card-chip--good' : '';
+    paceChip = `<div class="card-chip${cls}">${sign}${pace.pct}% vs last month</div>`;
+  }
+
+  const best = longestStreak(year_daily);
+  const cur = summary.streak_days || 0;
+  let streakChip;
+  if (best === 0) {
+    streakChip = `<div class="card-chip">Best: —</div>`;
+  } else if (cur >= best && cur > 0) {
+    streakChip = `<div class="card-chip card-chip--record">New record</div>`;
+  } else {
+    streakChip = `<div class="card-chip">Best: ${best} day${best !== 1 ? 's' : ''}</div>`;
+  }
+
+  // Top project this month (uses month_seconds field added server-side)
+  const topProject = [...projects]
+    .filter(p => (p.month_seconds || 0) > 0)
+    .sort((a, b) => (b.month_seconds || 0) - (a.month_seconds || 0))[0];
+  const topProjectShare = topProject && summary.month_seconds > 0
+    ? Math.round((topProject.month_seconds / summary.month_seconds) * 100)
+    : 0;
+
+  // Best day this month from year_daily
+  const now = new Date();
+  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-`;
+  const bestDay = (year_daily || [])
+    .filter(r => r && r.day && r.day.startsWith(monthPrefix) && (r.total_seconds || 0) > 0)
+    .reduce((acc, r) => (!acc || r.total_seconds > acc.total_seconds ? r : acc), null);
+  let bestDayValue, bestDayChip, bestDaySub;
+  if (!bestDay) {
+    bestDayValue = '—';
+    bestDayChip = `<div class="card-chip">No activity yet</div>`;
+    bestDaySub = 'this month';
+  } else {
+    const bdDate = new Date(bestDay.day + 'T00:00:00');
+    const bdLabel = bdDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    bestDayValue = fmt.dur(bestDay.total_seconds);
+    bestDaySub = bdLabel;
+    bestDayChip = bestDay.day === todayKey
+      ? `<div class="card-chip card-chip--record">Today's the one</div>`
+      : `<div class="card-chip">Best day this month</div>`;
+  }
 
   document.getElementById('app').innerHTML = `
     <div class="cards">
       <div class="card">
+        <div class="card-label">Top Project</div>
+        ${topProject
+          ? `<div class="card-value card-value--text" title="${escapeHtml(topProject.project_name)}">${escapeHtml(topProject.project_name)}</div>
+             <div class="card-chip">${fmt.dur(topProject.month_seconds)} · ${topProjectShare}% of month</div>
+             <div class="card-sub"><span class="proj-dot" style="background:${projectColor(topProject, 0)}"></span>${topProject.category_label || 'Uncategorized'}</div>`
+          : `<div class="card-value">—</div>
+             <div class="card-chip">No projects yet</div>
+             <div class="card-sub">this month</div>`}
+      </div>
+      <div class="card">
+        <div class="card-label">Best Day</div>
+        <div class="card-value">${bestDayValue}</div>
+        ${bestDayChip}
+        <div class="card-sub">${bestDaySub}</div>
+      </div>
+      <div class="card">
         <div class="card-label">This Month</div>
         <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
+        ${paceChip}
         <div class="card-sub">${summary.month_project_count} project${summary.month_project_count !== 1 ? 's' : ''} · this month</div>
       </div>
       <div class="card">
         <div class="card-label">Streak</div>
         <div class="card-value">${summary.streak_days}<span class="unit">day${summary.streak_days !== 1 ? 's' : ''}</span></div>
+        ${streakChip}
         <div class="card-sub">consecutive</div>
       </div>
     </div>
@@ -2656,15 +3098,23 @@ function render(data) {
     <div class="rings-row">
       <div class="chart-card target-card">
         <div class="section-head">
-          <h3 class="section-title">Daily <em>target</em></h3>
-          <span class="section-meta">Today: <strong>${fmt.dur(summary.today_seconds || 0)}</strong></span>
+          <h3 class="section-title">Daily <em>Target</em></h3>
+          <div class="section-meta">
+            <span>Today</span>
+            <strong>${fmt.dur(summary.today_seconds || 0)}</strong>
+            <span class="section-meta-note" id="dailyGoalRemaining"></span>
+          </div>
         </div>
         <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
       </div>
       <div class="chart-card target-card">
         <div class="section-head">
-          <h3 class="section-title">Weekly <em>target</em></h3>
-          <span class="section-meta">This Week: <strong>${fmt.dur(summary.week_seconds || 0)}</strong></span>
+          <h3 class="section-title">Weekly <em>Target</em></h3>
+          <div class="section-meta">
+            <span>This Week</span>
+            <strong>${fmt.dur(summary.week_seconds || 0)}</strong>
+            <span class="section-meta-note" id="weeklyGoalRemaining"></span>
+          </div>
         </div>
         <div class="chart-wrap"><div id="weeklyGoalCard"></div></div>
       </div>
@@ -2752,6 +3202,23 @@ function render(data) {
           </button>
         </div>
       </div>
+      <div class="recent-stats" aria-label="Today's session stats">
+        <div class="recent-stat">
+          <span class="recent-stat-label">Avg session</span>
+          <strong class="recent-stat-value">${fmt.dur(summary.today_average_session_seconds || 0)}</strong>
+          <span class="recent-stat-note">across today</span>
+        </div>
+        <div class="recent-stat">
+          <span class="recent-stat-label">Sessions worked</span>
+          <strong class="recent-stat-value">${todaySessionCount}</strong>
+          <span class="recent-stat-note">today</span>
+        </div>
+        <div class="recent-stat">
+          <span class="recent-stat-label">Projects touched</span>
+          <strong class="recent-stat-value">${todayProjectCount}</strong>
+          <span class="recent-stat-note">distinct ${todayProjectCount === 1 ? 'project' : 'projects'}</span>
+        </div>
+      </div>
       ${recent.length === 0
         ? '<div class="empty"><p>No sessions logged</p><small>start Ableton to begin</small></div>'
         : `<div class="table-scroll"><table>
@@ -2806,6 +3273,42 @@ function render(data) {
   renderDailyGoal(summary);
   renderProjectChart(projects);
   renderCategoryChart(projects);
+}
+
+function updateSessionStatus(summary) {
+  const status = document.getElementById('sessionStatus');
+  const label = document.getElementById('sessionStatusText');
+  const indicator = document.getElementById('sessionStatusIndicator');
+  if (!status || !label || !indicator) return;
+
+  let state = 'off';
+  let text = 'Off';
+  let indicatorHtml = '<span class="session-status__dot"></span>';
+
+  if (summary?.live_project) {
+    state = 'live';
+    text = 'Live';
+    indicator.className = 'session-status__indicator session-status__indicator--live';
+    indicatorHtml = '<span class="session-status__dot"></span>';
+  } else if (summary?.ableton_running) {
+    state = 'booting';
+    text = 'Booting up';
+    indicator.className = 'session-status__indicator session-status__indicator--booting';
+    indicatorHtml = `
+      <span class="session-status__dot"></span>
+      <span class="session-status__dot"></span>
+      <span class="session-status__dot"></span>
+    `;
+  } else {
+    state = 'off';
+    text = 'Off';
+    indicator.className = 'session-status__indicator session-status__indicator--off';
+    indicatorHtml = '<span class="session-status__dot"></span>';
+  }
+
+  status.dataset.state = state;
+  label.textContent = text;
+  indicator.innerHTML = indicatorHtml;
 }
 
 function renderActivityHeatmap(yearDaily, yearHourly) {
@@ -3000,35 +3503,80 @@ function renderGoalCard({
   rangeLabel,
   goalLabel,
   helperLabel,
+  remainingId,
   presets,
 }) {
   const mount = document.getElementById(mountId);
   if (!mount) return;
 
   const completedHours = Math.round(((completedSeconds || 0) / 3600) * 10) / 10;
+  const remainingMount = remainingId ? document.getElementById(remainingId) : null;
+  const coldColor = '#1677ff';
+  const coolColor = '#33c7ff';
+  const warmColor = '#ffc247';
+  const hotColor = '#ff3b30';
+
+  function lerpColor(a, b, amount) {
+    const parse = color => [1, 3, 5].map(start => parseInt(color.slice(start, start + 2), 16));
+    const from = parse(a);
+    const to = parse(b);
+    return '#' + from.map((part, index) => {
+      const value = Math.round(part + (to[index] - part) * amount);
+      return value.toString(16).padStart(2, '0');
+    }).join('');
+  }
+
+  function ringColorStops(progressClamped) {
+    if (progressClamped <= 1 / 3) {
+      const endColor = lerpColor(coldColor, coolColor, progressClamped * 3);
+      return { cool: endColor, warm: endColor, hot: endColor };
+    }
+    if (progressClamped <= 2 / 3) {
+      const endColor = lerpColor(coolColor, warmColor, (progressClamped - 1 / 3) * 3);
+      return { cool: coolColor, warm: endColor, hot: endColor };
+    }
+    const endColor = lerpColor(warmColor, hotColor, (progressClamped - 2 / 3) * 3);
+    return { cool: coolColor, warm: warmColor, hot: endColor };
+  }
+
+  function remainingGoalLabel(goalHours) {
+    const goalSeconds = goalHours * 3600;
+    const deltaSeconds = Math.round(goalSeconds - (completedSeconds || 0));
+    if (deltaSeconds <= 0) {
+      const overSeconds = Math.abs(deltaSeconds);
+      return overSeconds > 0
+        ? `Goal met · ${fmt.dur(overSeconds)} extra`
+        : 'Goal met right on target';
+    }
+    return `${fmt.dur(deltaSeconds)} left to goal`;
+  }
 
   function paint(goalHours) {
     const safeGoalHours = clamp(Math.round(goalHours * 10) / 10, 1, 100);
     const progress = completedHours / safeGoalHours;
     const progressClamped = clamp(progress, 0, 1);
     const progressDegrees = Math.round(progressClamped * 360);
-    const progressMidDegrees = Math.round(progressDegrees * 0.48);
-    const progressHotDegrees = Math.round(progressDegrees * 0.78);
+    const progressMidDegrees = Math.min(progressDegrees, 120);
+    const progressHotDegrees = Math.min(progressDegrees, 240);
+    const ringStops = ringColorStops(progressClamped);
     const percent = Math.round(progress * 100);
     const percentLabel = `${Math.min(percent, 999)}%`;
     const helperMarkup = helperLabel ? `<span>${helperLabel}</span>` : '';
+    if (remainingMount) {
+      remainingMount.textContent = remainingGoalLabel(safeGoalHours);
+    }
 
     mount.innerHTML = `
       <div class="goal-shell">
-        <div class="goal-range">${rangeLabel}</div>
         <div class="goal-ring-wrap">
-          <div class="goal-ring ${progress >= 1 ? 'is-complete' : ''}" style="--goal-progress:${progressDegrees}deg;--goal-progress-mid:${progressMidDegrees}deg;--goal-progress-hot:${progressHotDegrees}deg" aria-label="${percentLabel} complete">
+          <div class="goal-ring ${progress >= 1 ? 'is-complete' : ''}" style="--goal-progress:${progressDegrees}deg;--goal-progress-mid:${progressMidDegrees}deg;--goal-progress-hot:${progressHotDegrees}deg;--goal-cool:${ringStops.cool};--goal-warm:${ringStops.warm};--goal-hot:${ringStops.hot}" aria-label="${percentLabel} complete">
             <div class="goal-ring-core">
               <div class="goal-value">${percentLabel}</div>
             </div>
           </div>
         </div>
         <div class="goal-controls">
+          <div class="goal-range">${rangeLabel}</div>
           <div class="goal-input-row">
             <label class="goal-label" for="${mountId}Input">
               <strong>${goalLabel}</strong>
@@ -3081,6 +3629,7 @@ function renderWeeklyGoal(summary) {
     completedSeconds: summary.week_seconds || 0,
     rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets Friday`,
     goalLabel: 'Weekly goal',
+    remainingId: 'weeklyGoalRemaining',
     presets: [10, 20, 30, 40],
   });
 }
@@ -3098,6 +3647,7 @@ function renderDailyGoal(summary) {
     completedSeconds: summary.today_seconds || 0,
     rangeLabel: `${todayLabel} · resets tomorrow`,
     goalLabel: 'Daily goal',
+    remainingId: 'dailyGoalRemaining',
     presets: [1, 2, 3, 5],
   });
 }
@@ -3246,10 +3796,22 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/data"):
             self._json(get_stats())
         else:
-            body = HTML.encode()
+            html = HTML
+            if os.environ.get("ABLETON_TRACKER_DEV") == "1":
+                try:
+                    source = Path(__file__).read_text(encoding="utf-8")
+                    start = source.index('HTML = """') + len('HTML = """')
+                    end = source.index('"""', start)
+                    html = source[start:end]
+                except (OSError, ValueError):
+                    pass
+            body = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(body)
 

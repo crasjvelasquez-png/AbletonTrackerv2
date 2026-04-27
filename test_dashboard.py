@@ -295,6 +295,44 @@ class DashboardRolloverTests(unittest.TestCase):
 
         self.assertEqual(stats["summary"]["streak_days"], 2)
 
+    def test_today_reflection_stats_use_only_todays_allocated_time(self):
+        late_start_ts = datetime(2026, 4, 24, 23, 50).timestamp()
+        late_end_ts = datetime(2026, 4, 25, 0, 10).timestamp()
+        today_1_start_ts = datetime(2026, 4, 25, 10, 0).timestamp()
+        today_1_end_ts = datetime(2026, 4, 25, 10, 20).timestamp()
+        today_2_start_ts = datetime(2026, 4, 25, 13, 0).timestamp()
+        today_2_end_ts = datetime(2026, 4, 25, 13, 15).timestamp()
+        yesterday_start_ts = datetime(2026, 4, 24, 14, 0).timestamp()
+        yesterday_end_ts = datetime(2026, 4, 24, 14, 30).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    ("Song A", late_start_ts, late_end_ts, late_end_ts, 1200.0),
+                    ("Song A", today_1_start_ts, today_1_end_ts, today_1_end_ts, 1200.0),
+                    ("Song B", today_2_start_ts, today_2_end_ts, today_2_end_ts, 900.0),
+                    ("Yesterday", yesterday_start_ts, yesterday_end_ts, yesterday_end_ts, 1800.0),
+                ],
+            )
+            conn.commit()
+
+        class FrozenDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 4, 25)
+
+        with patch.object(dashboard, "date", FrozenDate):
+            stats = dashboard.get_stats()
+
+        self.assertEqual(stats["summary"]["today_seconds"], 2700.0)
+        self.assertEqual(stats["summary"]["today_session_count"], 3)
+        self.assertEqual(stats["summary"]["today_project_count"], 2)
+        self.assertEqual(stats["summary"]["today_average_session_seconds"], 900.0)
+
 
 if __name__ == "__main__":
     unittest.main()
