@@ -1,0 +1,201 @@
+<div class="settings-shell" data-settings-root>
+  <!-- ─────────────────────────────  GOALS  ───────────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="goals">
+    <div class="section-head">
+      <h3 class="section-title">Time <em>goals</em></h3>
+      <span class="section-meta" data-goals-meta>—</span>
+    </div>
+    <p class="settings-copy">
+      Set how many hours you want to spend in Ableton each day and week. Progress is tracked automatically as
+      sessions are logged. Weekly progress resets every Friday morning.
+    </p>
+
+    <div class="goals-grid">
+      <form class="goal-form" data-goal-form="daily" novalidate>
+        <div class="goal-form-head">
+          <span class="goal-form-label">Daily target</span>
+          <span class="goal-form-progress" data-daily-progress>—</span>
+        </div>
+        <div class="goal-form-row">
+          <label class="field" style="flex:1;">
+            <span class="field-label">Hours per day</span>
+            <input
+              class="text-input"
+              data-daily-input
+              type="number"
+              min="0.1"
+              max="100"
+              step="0.1"
+              placeholder="e.g. 2"
+              required
+            >
+          </label>
+          <button class="btn" type="submit">Save</button>
+        </div>
+        <div class="goal-form-feedback" data-daily-feedback hidden></div>
+      </form>
+
+      <form class="goal-form" data-goal-form="weekly" novalidate>
+        <div class="goal-form-head">
+          <span class="goal-form-label">Weekly target</span>
+          <span class="goal-form-progress" data-weekly-progress>—</span>
+        </div>
+        <div class="goal-form-row">
+          <label class="field" style="flex:1;">
+            <span class="field-label">Hours per week</span>
+            <input
+              class="text-input"
+              data-weekly-input
+              type="number"
+              min="0.5"
+              max="168"
+              step="0.5"
+              placeholder="e.g. 12"
+              required
+            >
+          </label>
+          <button class="btn" type="submit">Save</button>
+        </div>
+        <div class="goal-form-feedback" data-weekly-feedback hidden></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────  CATEGORIES  ─────────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="categories-intro">
+    <div class="section-head">
+      <h3 class="section-title">Custom <em>categories</em></h3>
+      <span class="section-meta" data-categories-meta>—</span>
+    </div>
+    <p class="settings-copy" data-categories-copy>
+      Create personal categories with your own color palette. They become available in the project category picker right away.
+    </p>
+  </section>
+
+  <div class="settings-grid">
+    <div class="chart-card settings-card" data-settings-section="categories-create">
+      <div class="section-head">
+        <h3 class="section-title">Create a <em>category</em></h3>
+        <span class="section-meta" data-create-meta>—</span>
+      </div>
+      <form class="category-form" data-category-create-form>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field-label">Category name</span>
+            <input
+              class="text-input"
+              data-category-name-input
+              name="label"
+              type="text"
+              maxlength="32"
+              placeholder="Ex. Sound Design"
+              required
+            >
+          </label>
+          <label class="field">
+            <span class="field-label">Color</span>
+            <span data-category-color-mount></span>
+          </label>
+        </div>
+        <div class="field-note">Pick a color from the palette or open the browser picker for something custom.</div>
+        <div class="settings-actions">
+          <button class="btn" type="submit" data-category-submit>Save category</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="settings-stack">
+      <div class="chart-card settings-card" data-settings-section="categories-glance">
+        <div class="section-head">
+          <h3 class="section-title">At a <em>glance</em></h3>
+        </div>
+        <div class="settings-kpis">
+          <div class="settings-kpi">
+            <div class="settings-kpi-label">Categories</div>
+            <div class="settings-kpi-value" data-kpi-categories>0</div>
+          </div>
+          <div class="settings-kpi">
+            <div class="settings-kpi-label">Available</div>
+            <div class="settings-kpi-value" data-kpi-available>0</div>
+          </div>
+          <div class="settings-kpi">
+            <div class="settings-kpi-label">Limit</div>
+            <div class="settings-kpi-value" data-kpi-limit>0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card" data-settings-section="categories-library">
+    <div class="section-head">
+      <h3 class="section-title">Category <em>library</em></h3>
+      <span class="section-meta" data-library-meta>0 total</span>
+    </div>
+    <div class="category-library">
+      <div class="category-library-grid" data-category-library-grid></div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────  DATA MANAGEMENT  ──────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="data">
+    <div class="section-head">
+      <h3 class="section-title">Data <em>management</em></h3>
+      <span class="section-meta">cleanup &amp; maintenance</span>
+    </div>
+    <p class="settings-copy">
+      Tidy up your tracking history. These actions only touch closed sessions — anything Ableton is recording right
+      now is preserved.
+    </p>
+
+    <div class="action-list">
+      <div class="action-row" data-action-row="clear-recent">
+        <div class="action-row-text">
+          <h4 class="action-row-title">Clear all session logs</h4>
+          <p class="action-row-desc">Permanently deletes every closed session from your history.</p>
+        </div>
+        <button class="btn danger" type="button" data-action="clear-recent">Clear logs</button>
+      </div>
+      <div class="action-row" data-action-row="clear-unsaved">
+        <div class="action-row-text">
+          <h4 class="action-row-title">Remove unsaved-project sessions</h4>
+          <p class="action-row-desc">Drops closed sessions logged against <code>Untitled</code> or <code>Untitled Project</code>.</p>
+        </div>
+        <button class="btn danger" type="button" data-action="clear-unsaved">Remove drafts</button>
+      </div>
+      <div class="action-row" data-action-row="clear-phantoms">
+        <div class="action-row-text">
+          <h4 class="action-row-title">Clear phantom sessions</h4>
+          <p class="action-row-desc">Removes rows that came from export dialogs or plugin windows instead of real Live sets.</p>
+        </div>
+        <button class="btn danger" type="button" data-action="clear-phantoms">Clean phantoms</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────  APPEARANCE  ────────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="appearance">
+    <div class="section-head">
+      <h3 class="section-title">Appearance</h3>
+      <span class="section-meta" data-theme-meta>system</span>
+    </div>
+    <p class="settings-copy">
+      Choose how the dashboard looks. <strong>System</strong> follows your operating system's appearance setting and
+      switches automatically.
+    </p>
+    <div class="theme-picker" role="radiogroup" aria-label="Theme">
+      <button class="theme-option" type="button" role="radio" data-theme-option="light">
+        <span class="theme-option-swatch theme-option-swatch--light" aria-hidden="true"></span>
+        <span class="theme-option-label">Light</span>
+      </button>
+      <button class="theme-option" type="button" role="radio" data-theme-option="dark">
+        <span class="theme-option-swatch theme-option-swatch--dark" aria-hidden="true"></span>
+        <span class="theme-option-label">Dark</span>
+      </button>
+      <button class="theme-option" type="button" role="radio" data-theme-option="system">
+        <span class="theme-option-swatch theme-option-swatch--system" aria-hidden="true"></span>
+        <span class="theme-option-label">System</span>
+      </button>
+    </div>
+  </section>
+</div>

@@ -23,6 +23,16 @@ from tracker import (
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
+TEMPLATES_DIR = Path(__file__).with_name("templates").resolve()
+STATIC_DIR = Path(__file__).with_name("static").resolve()
+STATIC_CONTENT_TYPES = {
+    ".js":   "application/javascript; charset=utf-8",
+    ".css":  "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".svg":  "image/svg+xml",
+    ".png":  "image/png",
+    ".json": "application/json; charset=utf-8",
+}
 PORT = 7421
 UNTITLED_NAMES = {"untitled", "untitled project"}
 MAX_CUSTOM_CATEGORIES = 12
@@ -4093,8 +4103,41 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self, base_dir: Path, relative: str) -> bool:
+        relative = relative.lstrip("/")
+        if not relative:
+            self._json({"error": "not found"}, status=404)
+            return True
+        candidate = (base_dir / relative).resolve()
+        try:
+            candidate.relative_to(base_dir)
+        except ValueError:
+            self._json({"error": "forbidden"}, status=403)
+            return True
+        if not candidate.is_file():
+            self._json({"error": "not found"}, status=404)
+            return True
+        ctype = STATIC_CONTENT_TYPES.get(candidate.suffix.lower())
+        if not ctype:
+            self._json({"error": "forbidden"}, status=403)
+            return True
+        body = candidate.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/static/"):
+            self._serve_static(STATIC_DIR, parsed.path[len("/static/"):])
+            return
+        if parsed.path.startswith("/partials/"):
+            self._serve_static(TEMPLATES_DIR, parsed.path[len("/partials/"):])
+            return
         if parsed.path == "/api/data":
             self._json(get_stats())
         elif parsed.path == "/api/daily-target":

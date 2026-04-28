@@ -1,0 +1,12 @@
+.git/
+.git/**
+.claude/
+.claude/**
+__pycache__/
+*.pyc
+.DS_Store
+AbletonTrackerDashboard.app/
+*.app
+*.icns
+*.png
+engineering_handoff.md

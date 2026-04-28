@@ -50,7 +50,20 @@
       "Bash(python3 -m unittest test_dashboard)",
       "Bash(python -m pytest test_dashboard.py -x -q)",
       "Bash(python3 -m pytest test_dashboard.py -x -q)",
-      "Bash(python3 -c \"import dashboard; print\\('imports ok'\\)\")"
+      "Bash(python3 -c \"import dashboard; print\\('imports ok'\\)\")",
+      "Bash(grep -c \"^</style>$\\\\|^</head>$\\\\|^</body>$\\\\|^</html>$\" /Users/c4milo/Desktop/AbletonTracker/templates/dashboard.html)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('dashboard.py'\\).read\\(\\)\\)\")",
+      "Bash(node --check static/js/settings.js)",
+      "Bash(curl -s -o /dev/null -w \"static: %{http_code}\\\\npartial: %{http_code}\\\\n\" http://127.0.0.1:7421/static/js/settings.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:7421/partials/settings.html)",
+      "Bash(pkill -f \"dashboard.py\")",
+      "Bash(curl -s -o /tmp/static_check.js -w \"static js: %{http_code} %{content_type} bytes=%{size_download}\\\\n\" http://127.0.0.1:7421/static/js/settings.js)",
+      "Bash(curl -s -o /tmp/partial_check.html -w \"partial: %{http_code} %{content_type} bytes=%{size_download}\\\\n\" http://127.0.0.1:7421/partials/settings.html)",
+      "Bash(curl -s -o /tmp/traversal.json -w \"traversal: %{http_code}\\\\n\" \"http://127.0.0.1:7421/static/../dashboard.py\")",
+      "Bash(curl -s -o /dev/null -w \"missing: %{http_code}\\\\n\" http://127.0.0.1:7421/static/js/missing.js)",
+      "Read(//tmp/**)",
+      "Bash(curl -s --path-as-is -o /tmp/trav.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/../dashboard.py\")",
+      "Bash(curl -s --path-as-is -o /tmp/trav2.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/..%2Fdashboard.py\")"
     ]
   }
 }
