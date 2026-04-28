@@ -22,6 +22,7 @@ from tracker import (
 )
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
+TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
 PORT = 7421
 UNTITLED_NAMES = {"untitled", "untitled project"}
 MAX_CUSTOM_CATEGORIES = 12
@@ -861,6 +862,11 @@ def get_stats() -> dict:
 # ─────────────────────────────────────────────────────────────
 #  HTML template
 # ─────────────────────────────────────────────────────────────
+
+def _load_html() -> str:
+    if TEMPLATE_PATH.exists():
+        return TEMPLATE_PATH.read_text(encoding="utf-8")
+    return HTML
 
 HTML = """<!DOCTYPE html>
 <html lang="en">

@@ -158,6 +158,11 @@
   --shadow-card-hover:0 16px 30px rgba(0,0,0,.34), 0 30px 62px rgba(255,255,255,.117);
 }
 :root[data-theme="light"]{color-scheme:light}
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after{
+  transition:none !important;
+}
 html{font-size:15px}
 body{
   font-family:var(--font-body);
@@ -350,6 +355,13 @@ header{
   z-index:2;
 }
 .card:hover::after{opacity:1}
+.card[data-detail]{cursor:pointer}
+.card[data-detail]:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:4px;
+}
+.card[data-detail]:hover .card-label,
+.card[data-detail]:focus-visible .card-label{color:var(--accent)}
 .card-label{
   font-size:12px;font-weight:650;color:var(--ink-3);margin-bottom:18px;
   text-transform:uppercase;letter-spacing:.04em;
@@ -672,6 +684,20 @@ header{
   color:var(--text-secondary);
   line-height:1.35;
 }
+.goal-progress-copy{
+  display:grid;
+  gap:5px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink-4);
+}
+.goal-progress-copy strong{
+  color:var(--ink-2);
+  font-weight:780;
+}
+.goal-progress-copy .goal-left{
+  color:var(--target-accent, var(--accent));
+}
 .goal-input-row{
   display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;
 }
@@ -729,7 +755,11 @@ header{
   font-size:11px;padding:6px 9px;
 }
 .target-card .goal-controls{
+  display:grid;
   gap:16px;
+  align-content:center;
+  justify-items:center;
+  text-align:center;
 }
 .target-card .goal-input-wrap{
   padding:9px 11px;
@@ -742,10 +772,15 @@ header{
   font-size:11px;
 }
 .target-card .goal-presets{
-  gap:6px;
+  width:100%;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  justify-content:space-between;
 }
 .target-card .goal-chip{
-  padding:7px 11px;
+  width:100%;
+  padding:8px 10px;
 }
 .target-card .section-head{
   align-items:flex-start;
@@ -761,31 +796,21 @@ header{
   font-weight:780;
 }
 .target-card .section-meta{
-  display:grid;
-  gap:4px;
-  justify-items:start;
-  text-align:left;
-  min-width:190px;
-  padding:11px 14px 12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  min-width:170px;
+  padding:10px 14px;
   border:1px solid var(--border);
-  border-radius:20px;
+  border-radius:999px;
   background:color-mix(in srgb, var(--control-bg) 76%, transparent);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
-  font-size:12px;
-  font-weight:700;
-  color:var(--ink-2);
-  letter-spacing:.01em;
-  font-variant-numeric:tabular-nums;
-}
-.target-card .section-meta strong{
-  display:block;
-  margin-top:1px;
-  font-family:var(--font-display);
-  font-size:25px;
-  line-height:1;
-  letter-spacing:-.045em;
+  font-size:13px;
+  font-weight:760;
   color:var(--ink);
-  font-weight:780;
+  letter-spacing:.015em;
+  font-variant-numeric:tabular-nums;
 }
 .section-meta-note{
   display:block;
@@ -896,6 +921,18 @@ header{
   font-size:12px;
   color:var(--ink-4);
   line-height:1.45;
+}
+.goal-input-row{
+  width:100%;
+  display:grid;
+  gap:10px;
+  justify-items:center;
+}
+.goal-label{
+  justify-items:center;
+}
+.goal-label strong{
+  text-align:center;
 }
 .weekly-target-breakdown{
   display:grid;
@@ -1044,6 +1081,113 @@ header{
   border:1px solid var(--border);
 }
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+.detail-modal-backdrop{
+  position:fixed;inset:0;z-index:95;
+  display:none;align-items:center;justify-content:center;
+  padding:24px;background:var(--modal-backdrop);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.detail-modal-backdrop.is-open{display:flex}
+.detail-modal{
+  width:min(760px,100%);
+  max-width:760px;
+  max-height:80vh;
+  display:grid;grid-template-rows:auto minmax(0,1fr);
+  padding:0;overflow:hidden;
+}
+.detail-modal-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+  padding:24px 26px 18px;border-bottom:1px solid var(--border);
+}
+.detail-modal-title{
+  font-family:var(--font-display);font-size:24px;font-weight:680;
+  letter-spacing:-.025em;color:var(--ink);
+}
+.detail-modal-subtitle{
+  margin-top:5px;font-size:13px;color:var(--ink-4);line-height:1.4;
+}
+.detail-modal-close{
+  width:34px;height:34px;border-radius:999px;border:1px solid var(--border);
+  background:var(--control-bg);color:var(--ink-2);display:grid;place-items:center;
+  cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;
+}
+.detail-modal-close:hover{background:var(--control-bg-strong);color:var(--ink)}
+.detail-modal-body{
+  overflow:auto;padding:22px 26px 26px;
+}
+.detail-stack{display:grid;gap:18px}
+.detail-kpis{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;
+}
+.detail-kpi{
+  border:1px solid var(--border);border-radius:16px;background:var(--control-bg);
+  padding:14px 15px;
+}
+.detail-kpi span{
+  display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--ink-4);margin-bottom:8px;
+}
+.detail-kpi strong{
+  display:block;font-family:var(--font-display);font-size:22px;line-height:1.1;
+  letter-spacing:-.025em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.detail-section-title{
+  font-size:12px;font-weight:750;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--ink-3);margin-bottom:10px;
+}
+.detail-list{display:grid;gap:9px}
+.detail-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;
+  padding:12px 0;border-bottom:1px solid var(--row-border);
+}
+.detail-row:first-child{padding-top:0}
+.detail-row:last-child{border-bottom:none;padding-bottom:0}
+.detail-row-main{display:grid;gap:6px;min-width:0}
+.detail-row-title{
+  display:flex;align-items:center;gap:8px;min-width:0;
+  font-size:14px;font-weight:700;color:var(--ink);
+}
+.detail-row-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-row-meta{font-size:12px;color:var(--ink-4)}
+.detail-row-value{
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--ink-2);
+  white-space:nowrap;font-variant-numeric:tabular-nums;
+}
+.detail-dot{
+  width:9px;height:9px;border-radius:999px;flex:0 0 auto;
+  background:var(--detail-color, var(--accent));
+}
+.detail-bar{
+  height:7px;border-radius:999px;background:var(--bar-bg);overflow:hidden;
+}
+.detail-bar span{
+  display:block;height:100%;width:var(--detail-pct,0%);
+  border-radius:inherit;background:var(--detail-color, var(--accent));
+}
+.detail-day-chart{
+  display:grid;grid-template-columns:repeat(31,minmax(5px,1fr));gap:4px;
+  align-items:end;height:140px;padding-top:8px;
+}
+.detail-day-bar{
+  min-height:3px;height:var(--detail-height,3%);
+  border-radius:999px 999px 3px 3px;background:var(--accent);
+  opacity:.82;
+}
+.detail-heatmap{
+  display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:5px;
+}
+.detail-heat-cell{
+  aspect-ratio:1;border-radius:5px;background:rgba(120,120,128,.12);
+  box-shadow:inset 0 0 0 1px rgba(120,120,128,.08);
+}
+.detail-heat-cell[data-level="1"]{background:color-mix(in srgb, var(--accent) 22%, transparent)}
+.detail-heat-cell[data-level="2"]{background:color-mix(in srgb, var(--accent) 42%, transparent)}
+.detail-heat-cell[data-level="3"]{background:color-mix(in srgb, var(--accent) 64%, transparent)}
+.detail-heat-cell[data-level="4"]{background:var(--accent)}
+.detail-empty{
+  padding:34px 16px;text-align:center;color:var(--ink-4);
+  border:1px dashed var(--border);border-radius:16px;font-size:13px;
+}
 .category-modal{
   max-width:520px;
 }
@@ -1472,6 +1616,11 @@ tbody tr:hover .row-del{opacity:1}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .detail-modal-backdrop{padding:14px}
+  .detail-modal-head{padding:20px 20px 16px}
+  .detail-modal-body{padding:18px 20px 22px}
+  .detail-kpis{grid-template-columns:1fr}
+  .detail-heatmap{grid-template-columns:repeat(10,minmax(0,1fr))}
 }
 @media (prefers-reduced-motion: reduce){
   .card,
@@ -1625,8 +1774,13 @@ function applyStoredTheme() {
 }
 
 function toggleTheme() {
+  const root = document.documentElement;
+  root.classList.add('theme-switching');
   localStorage.setItem(THEME_STORAGE_KEY, activeTheme() === 'dark' ? 'light' : 'dark');
   applyStoredTheme();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => root.classList.remove('theme-switching'));
+  });
 }
 
 function syncCategoryOptions(options) {
@@ -1909,6 +2063,256 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function monthProjectRows(projects) {
+  return [...(projects || [])]
+    .filter(project => (project.month_seconds || 0) > 0)
+    .sort((a, b) => (b.month_seconds || 0) - (a.month_seconds || 0));
+}
+
+function currentMonthDays(yearDaily, today = new Date()) {
+  const totals = new Map();
+  (yearDaily || []).forEach(row => {
+    if (row && row.day) totals.set(row.day, row.total_seconds || 0);
+  });
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(today.getFullYear(), today.getMonth(), index + 1);
+    const day = localDateKey(date);
+    return { day, total_seconds: totals.get(day) || 0 };
+  });
+}
+
+function detailRow({ title, meta, value, color, pct }) {
+  const width = clamp(Math.round(pct || 0), 0, 100);
+  return `
+    <div class="detail-row">
+      <div class="detail-row-main">
+        <div class="detail-row-title">
+          <span class="detail-dot" style="--detail-color:${color || 'var(--accent)'}"></span>
+          <span class="detail-row-name">${escapeHtml(title)}</span>
+        </div>
+        <div class="detail-row-meta">${escapeHtml(meta || '')}</div>
+        <div class="detail-bar" style="--detail-color:${color || 'var(--accent)'};--detail-pct:${width}%"><span></span></div>
+      </div>
+      <div class="detail-row-value">${value}</div>
+    </div>
+  `;
+}
+
+function renderTopProjectDetail({ summary, projects }) {
+  const rows = monthProjectRows(projects);
+  const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
+  if (rows.length === 0) return '<div class="detail-empty">No project activity this month.</div>';
+  return `
+    <div class="detail-list">
+      ${rows.map((project, index) => {
+        const seconds = project.month_seconds || 0;
+        const pct = total > 0 ? (seconds / total) * 100 : 0;
+        return detailRow({
+          title: project.project_name || 'Untitled',
+          meta: project.category_label || getCategoryMeta(project.category_key)?.label || 'Uncategorized',
+          value: `${fmt.dur(seconds)} · ${Math.round(pct)}%`,
+          color: projectColor(project, index),
+          pct,
+        });
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderBestDayDetail({ year_daily }) {
+  const days = currentMonthDays(year_daily);
+  const activeDays = days
+    .filter(day => day.total_seconds > 0)
+    .sort((a, b) => b.total_seconds - a.total_seconds)
+    .slice(0, 10);
+  const max = Math.max(...days.map(day => day.total_seconds), 1);
+  return `
+    <div class="detail-stack">
+      <div>
+        <div class="detail-section-title">Top days this month</div>
+        ${activeDays.length === 0
+          ? '<div class="detail-empty">No daily activity this month.</div>'
+          : `<div class="detail-list">
+              ${activeDays.map(day => {
+                const pct = (day.total_seconds / max) * 100;
+                return detailRow({
+                  title: longDailyTargetLabel(day.day),
+                  meta: day.day,
+                  value: fmt.dur(day.total_seconds),
+                  color: 'var(--accent)',
+                  pct,
+                });
+              }).join('')}
+            </div>`}
+      </div>
+      <div>
+        <div class="detail-section-title">Every day</div>
+        <div class="detail-day-chart">
+          ${days.map(day => {
+            const height = day.total_seconds > 0 ? Math.max(3, (day.total_seconds / max) * 100) : 3;
+            return `<div class="detail-day-bar" style="--detail-height:${height}%" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderThisMonthDetail({ summary, projects }) {
+  const rows = monthProjectRows(projects);
+  const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
+  const activeProjectCount = summary.month_project_count || rows.length;
+  const today = new Date();
+  const average = total > 0 ? Math.round(total / today.getDate()) : 0;
+  const buckets = new Map();
+  rows.forEach(project => {
+    const seconds = project.month_seconds || 0;
+    if (seconds <= 0) return;
+    const key = project.category_key || '__uncategorized';
+    const meta = project.category_key ? getCategoryMeta(project.category_key) : null;
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        label: meta?.label || project.category_label || 'Uncategorized',
+        color: meta?.color || project.category_color || '#8E8E93',
+        total_seconds: 0,
+      });
+    }
+    buckets.get(key).total_seconds += seconds;
+  });
+  const categories = [...buckets.values()].sort((a, b) => b.total_seconds - a.total_seconds);
+  return `
+    <div class="detail-stack">
+      <div class="detail-kpis">
+        <div class="detail-kpi"><span>Total time</span><strong>${fmt.dur(total)}</strong></div>
+        <div class="detail-kpi"><span>Projects</span><strong>${activeProjectCount}</strong></div>
+        <div class="detail-kpi"><span>Daily average</span><strong>${fmt.dur(average)}</strong></div>
+      </div>
+      <div>
+        <div class="detail-section-title">Category breakdown</div>
+        ${categories.length === 0
+          ? '<div class="detail-empty">No category activity this month.</div>'
+          : `<div class="detail-list">
+              ${categories.map(category => {
+                const pct = total > 0 ? (category.total_seconds / total) * 100 : 0;
+                return detailRow({
+                  title: category.label,
+                  meta: `${Math.round(pct)}% of month`,
+                  value: fmt.dur(category.total_seconds),
+                  color: category.color,
+                  pct,
+                });
+              }).join('')}
+            </div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderStreakDetail({ summary, year_daily }) {
+  const totals = new Map();
+  (year_daily || []).forEach(row => {
+    if (row && row.day) totals.set(row.day, row.total_seconds || 0);
+  });
+  const today = new Date();
+  const days = Array.from({ length: 90 }, (_, index) => {
+    const date = addDays(today, index - 89);
+    const day = localDateKey(date);
+    return { day, total_seconds: totals.get(day) || 0 };
+  });
+  const max = Math.max(...days.map(day => day.total_seconds), 1);
+  return `
+    <div class="detail-stack">
+      <div class="detail-kpis">
+        <div class="detail-kpi"><span>Current streak</span><strong>${summary.streak_days || 0} day${(summary.streak_days || 0) !== 1 ? 's' : ''}</strong></div>
+        <div class="detail-kpi"><span>Longest streak</span><strong>${longestStreak(year_daily)} day${longestStreak(year_daily) !== 1 ? 's' : ''}</strong></div>
+        <div class="detail-kpi"><span>Window</span><strong>90 days</strong></div>
+      </div>
+      <div>
+        <div class="detail-section-title">Recent activity</div>
+        <div class="detail-heatmap">
+          ${days.map(day => {
+            const ratio = day.total_seconds / max;
+            const level = day.total_seconds <= 0 ? 0 : ratio > .75 ? 4 : ratio > .45 ? 3 : ratio > .2 ? 2 : 1;
+            return `<div class="detail-heat-cell" data-level="${level}" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDetail(kind, data) {
+  if (kind === 'top-project') {
+    return { title: 'Top Project', subtitle: 'All active projects this month', body: renderTopProjectDetail(data) };
+  }
+  if (kind === 'best-day') {
+    return { title: 'Best Day', subtitle: 'Top days and the current month shape', body: renderBestDayDetail(data) };
+  }
+  if (kind === 'this-month') {
+    return { title: 'This Month', subtitle: 'Monthly total, pace, and category mix', body: renderThisMonthDetail(data) };
+  }
+  if (kind === 'streak') {
+    return { title: 'Streak', subtitle: 'Current run and recent active days', body: renderStreakDetail(data) };
+  }
+  return null;
+}
+
+let detailModalAbort = null;
+
+function bindDetailCards(data) {
+  if (detailModalAbort) detailModalAbort.abort();
+  detailModalAbort = new AbortController();
+  const { signal } = detailModalAbort;
+  const cards = document.querySelector('.cards');
+  const modal = document.getElementById('detailModal');
+  const panel = document.getElementById('detailModalPanel');
+  const title = document.getElementById('detailModalTitle');
+  const subtitle = document.getElementById('detailModalSubtitle');
+  const body = document.getElementById('detailModalBody');
+  const closeBtn = document.getElementById('detailModalClose');
+  if (!cards || !modal || !panel || !title || !subtitle || !body || !closeBtn) return;
+
+  function closeDetail() {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openDetail(kind) {
+    const detail = renderDetail(kind, data);
+    if (!detail) return;
+    title.textContent = detail.title;
+    subtitle.textContent = detail.subtitle;
+    body.innerHTML = detail.body;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    closeBtn.focus();
+  }
+
+  cards.addEventListener('click', event => {
+    const card = event.target.closest('[data-detail]');
+    if (!card || !cards.contains(card)) return;
+    openDetail(card.dataset.detail);
+  }, { signal });
+
+  cards.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const card = event.target.closest('[data-detail]');
+    if (!card || !cards.contains(card)) return;
+    event.preventDefault();
+    openDetail(card.dataset.detail);
+  }, { signal });
+
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeDetail();
+  }, { signal });
+  panel.addEventListener('click', event => event.stopPropagation(), { signal });
+  closeBtn.addEventListener('click', closeDetail, { signal });
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && modal.classList.contains('is-open')) closeDetail();
+  }, { signal });
+}
+
 function targetTone(progressRatio, hasGoal = true) {
   if (!hasGoal) {
     return { className: 'is-empty', accent: '#8e8e93', glow: 'rgba(142,142,147,.12)', glowAlpha: 0.12, ratio: 0 };
@@ -1965,7 +2369,7 @@ function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMa
   const tone = targetTone(progressRatio, hasGoal);
   const percent = progressPercent(progressRatio, hasGoal);
   const gradientId = `goalRingGradient-${id}`;
-  const strokeRef = hasGoal ? `url(#${gradientId})` : 'var(--target-track)';
+  const strokeRef = hasGoal ? tone.accent : 'var(--target-track)';
   return `
     <div
       class="goal-ring ${hasGoal && progressRatio >= 1 ? 'is-complete' : ''} ${hasGoal ? '' : 'is-empty'}"
@@ -2621,6 +3025,10 @@ function longestStreak(yearDaily) {
 }
 
 function render(data) {
+  if (detailModalAbort) {
+    detailModalAbort.abort();
+    detailModalAbort = null;
+  }
   if (data.error) {
     document.getElementById('app').innerHTML =
       `<div class="empty"><p>${escapeHtml(data.error)}</p><small>run start_tracker.command</small></div>`;
@@ -2703,7 +3111,7 @@ function render(data) {
 
   document.getElementById('app').innerHTML = `
     <div class="cards">
-      <div class="card">
+      <div class="card" role="button" tabindex="0" data-detail="top-project">
         <div class="card-label">Top Project</div>
         ${topProject
           ? `<div class="card-value card-value--text" title="${escapeHtml(topProject.project_name)}">${escapeHtml(topProject.project_name)}</div>
@@ -2713,19 +3121,19 @@ function render(data) {
              <div class="card-chip">No projects yet</div>
              <div class="card-sub">this month</div>`}
       </div>
-      <div class="card">
+      <div class="card" role="button" tabindex="0" data-detail="best-day">
         <div class="card-label">Best Day</div>
         <div class="card-value">${bestDayValue}</div>
         ${bestDayChip}
         <div class="card-sub">${bestDaySub}</div>
       </div>
-      <div class="card">
+      <div class="card" role="button" tabindex="0" data-detail="this-month">
         <div class="card-label">This Month</div>
         <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
         ${paceChip}
         <div class="card-sub">${summary.month_project_count} project${summary.month_project_count !== 1 ? 's' : ''} · this month</div>
       </div>
-      <div class="card">
+      <div class="card" role="button" tabindex="0" data-detail="streak">
         <div class="card-label">Streak</div>
         <div class="card-value">${summary.streak_days}<span class="unit">day${summary.streak_days !== 1 ? 's' : ''}</span></div>
         ${streakChip}
@@ -2753,8 +3161,6 @@ function render(data) {
             </div>
             <div class="section-meta">
               <span id="dailyTargetViewedLabel">Today</span>
-              <strong id="dailyTargetProgress">${fmt.dur(summary.today_seconds || 0)}</strong>
-              <span class="section-meta-note" id="dailyGoalRemaining">Loading target…</span>
             </div>
           </div>
         </div>
@@ -2778,9 +3184,7 @@ function render(data) {
               <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
             </div>
             <div class="section-meta">
-              <span id="weeklyTargetRangeLabel">${shortRange(summary.goal_week_start, summary.goal_week_end)}</span>
-              <strong id="weeklyTargetProgress">${fmt.dur(summary.week_seconds || 0)}</strong>
-              <span class="section-meta-note" id="weeklyGoalRemaining">Loading target…</span>
+              <span id="weeklyTargetRangeLabel">Current Week</span>
             </div>
           </div>
         </div>
@@ -2925,6 +3329,19 @@ function render(data) {
             </tbody>
           </table></div>`}
     </div>
+
+    <div class="detail-modal-backdrop" id="detailModal" aria-hidden="true">
+      <div class="modal detail-modal" id="detailModalPanel" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+        <div class="detail-modal-head">
+          <div>
+            <h3 class="detail-modal-title" id="detailModalTitle"></h3>
+            <div class="detail-modal-subtitle" id="detailModalSubtitle"></div>
+          </div>
+          <button class="detail-modal-close" id="detailModalClose" type="button" aria-label="Close detail view">×</button>
+        </div>
+        <div class="detail-modal-body" id="detailModalBody"></div>
+      </div>
+    </div>
   `;
 
   const br = document.getElementById('btnClearRecent');
@@ -2935,6 +3352,7 @@ function render(data) {
   if (bu) bu.addEventListener('click', clearUnsaved);
   bindCategoryTriggers();
   bindRowDeleteTriggers();
+  bindDetailCards({ summary, projects, year_daily });
 
   renderActivityHeatmap(year_daily, year_hourly);
   renderWeeklyGoal(summary);
@@ -3293,17 +3711,10 @@ function currentFridayWeekStartKey() {
   return localDateKey(startOfFridayWeek(new Date()));
 }
 
-function updateWeeklyTargetMeta({ weekStart, weekEnd, progressSeconds = 0, note = 'Loading target…', toneClass = '' }) {
+function updateWeeklyTargetMeta({ weekStart }) {
   const rangeLabel = document.getElementById('weeklyTargetRangeLabel');
-  const progressLabel = document.getElementById('weeklyTargetProgress');
-  const remainingLabel = document.getElementById('weeklyGoalRemaining');
   const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
-  if (rangeLabel) rangeLabel.textContent = shortRange(weekStart, weekEnd);
-  if (progressLabel) progressLabel.textContent = fmt.dur(progressSeconds || 0);
-  if (remainingLabel) {
-    remainingLabel.textContent = note;
-    remainingLabel.className = `section-meta-note ${toneClass}`.trim();
-  }
+  if (rangeLabel) rangeLabel.textContent = weekStart === currentFridayWeekStartKey() ? 'Current Week' : 'Selected Week';
   if (currentBtn) currentBtn.hidden = weekStart === currentFridayWeekStartKey();
 }
 
@@ -3314,21 +3725,16 @@ function renderWeeklyTargetCard(target) {
   const progressSeconds = Math.max(0, target.progress_seconds || 0);
   const progressHours = Math.round((progressSeconds / 3600) * 10) / 10;
   const savedWeeklyGoal = Number(localStorage.getItem(WEEKLY_GOAL_STORAGE_KEY));
-  const goalHours = clamp(Math.round(((Number.isFinite(savedWeeklyGoal) && savedWeeklyGoal > 0) ? savedWeeklyGoal : 5) * 10) / 10, 1, 100);
+  const goalHours = clamp(Math.round(((Number.isFinite(savedWeeklyGoal) && savedWeeklyGoal > 0) ? savedWeeklyGoal : 20) * 10) / 10, 1, 100);
   const hasGoal = goalHours > 0;
   const progress = hasGoal ? progressHours / goalHours : 0;
   const percent = hasGoal ? Math.round(progress * 100) : 0;
-  const remainingSeconds = Math.round((goalHours * 3600) - progressSeconds);
   const tone = targetTone(progress, hasGoal);
-  const note = goalRemainingText(goalHours * 3600, progressSeconds);
-  const resetCountdown = formatResetCountdown(target.seconds_until_reset);
+  const remainingLabel = goalRemainingText(goalHours * 3600, progressSeconds);
 
   updateWeeklyTargetMeta({
     weekStart: target.week_start,
     weekEnd: target.week_end,
-    progressSeconds,
-    note,
-    toneClass: tone.className,
   });
 
   mount.innerHTML = `
@@ -3340,20 +3746,22 @@ function renderWeeklyTargetCard(target) {
           label: `${Math.min(percent, 999)}% complete`,
         })}
       </div>
-      <div class="goal-controls">
-        <div class="goal-range">${shortRange(target.week_start, target.week_end)} · Friday-to-Thursday</div>
+      <div class="goal-controls" style="--target-accent:${tone.accent}">
+        <div class="goal-progress-copy">
+          <span>Time spent: <strong>${fmt.dur(progressSeconds)}</strong></span>
+          <span class="goal-left">Time left to meet goal: ${remainingLabel}</span>
+        </div>
         <div class="goal-input-row">
           <label class="goal-label" for="weeklyGoalCardInput">
             <strong>Weekly goal</strong>
-            <span class="goal-context">${resetCountdown}</span>
           </label>
           <div class="goal-input-wrap">
             <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${goalHours}">
             <span class="goal-unit">hours</span>
           </div>
         </div>
-        <div class="goal-presets" style="--target-accent:${tone.accent}">
-          ${[1, 2, 3, 5].map(hours => `
+        <div class="goal-presets">
+          ${[10, 20, 30, 40].map(hours => `
             <button class="goal-chip ${Math.abs(goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
           `).join('')}
         </div>
@@ -3451,17 +3859,10 @@ function renderWeeklyGoal(summary) {
   loadWeeklyTarget(summary);
 }
 
-function updateDailyTargetMeta({ dateKey, progressSeconds = 0, note = 'Loading target…', toneClass = '' }) {
+function updateDailyTargetMeta({ dateKey }) {
   const viewedLabel = document.getElementById('dailyTargetViewedLabel');
-  const progressLabel = document.getElementById('dailyTargetProgress');
-  const remainingLabel = document.getElementById('dailyGoalRemaining');
   const todayBtn = document.getElementById('dailyTargetTodayBtn');
-  if (viewedLabel) viewedLabel.textContent = humanDailyTargetLabel(dateKey);
-  if (progressLabel) progressLabel.textContent = fmt.dur(progressSeconds || 0);
-  if (remainingLabel) {
-    remainingLabel.textContent = note;
-    remainingLabel.className = `section-meta-note ${toneClass}`.trim();
-  }
+  if (viewedLabel) viewedLabel.textContent = longDailyTargetLabel(dateKey);
   if (todayBtn) todayBtn.hidden = dateKey === localDateKey(new Date());
 }
 
@@ -3475,31 +3876,13 @@ function renderDailyTargetCard(target) {
   const hasGoal = Number.isFinite(target.goal_hours) && target.goal_hours > 0;
   const goalHours = hasGoal ? Math.round(target.goal_hours * 10) / 10 : null;
 
-  function remainingGoalLabel(hours) {
-    const goalSeconds = hours * 3600;
-    const deltaSeconds = Math.round(goalSeconds - progressSeconds);
-    if (deltaSeconds <= 0) {
-      const overSeconds = Math.abs(deltaSeconds);
-      return overSeconds > 0
-        ? `Goal met · ${fmt.dur(overSeconds)} extra`
-        : 'Goal met right on target';
-    }
-    return `${fmt.dur(deltaSeconds)} left to goal`;
-  }
-
-  const descriptiveLabel = longDailyTargetLabel(dateKey);
   if (hasGoal) {
     const progress = progressHours / goalHours;
     const percent = Math.round(progress * 100);
     const percentLabel = `${Math.min(percent, 999)}%`;
     const tone = targetTone(progress, true);
-    const note = remainingGoalLabel(goalHours);
-    updateDailyTargetMeta({
-      dateKey,
-      progressSeconds,
-      note,
-      toneClass: tone.className,
-    });
+    const remainingLabel = goalRemainingText(goalHours * 3600, progressSeconds);
+    updateDailyTargetMeta({ dateKey });
     mount.innerHTML = `
       <div class="goal-shell">
         <div class="goal-ring-wrap">
@@ -3509,19 +3892,21 @@ function renderDailyTargetCard(target) {
             label: `${percentLabel} complete`,
           })}
         </div>
-        <div class="goal-controls">
-          <div class="goal-range">${descriptiveLabel} · progress from session history</div>
+        <div class="goal-controls" style="--target-accent:${tone.accent}">
+          <div class="goal-progress-copy">
+            <span>Time: <strong>${fmt.dur(progressSeconds)}</strong></span>
+            <span class="goal-left">Time left to meet goal: ${remainingLabel}</span>
+          </div>
           <div class="goal-input-row">
             <label class="goal-label" for="dailyGoalCardInput">
               <strong>Daily goal</strong>
-              <span>Saved to the dashboard database for this date.</span>
             </label>
             <div class="goal-input-wrap">
               <input class="goal-input" id="dailyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${goalHours}">
               <span class="goal-unit">hours</span>
             </div>
           </div>
-          <div class="goal-presets" style="--target-accent:${tone.accent}">
+          <div class="goal-presets">
             ${[1, 2, 3, 5].map(hours => `
               <button class="goal-chip ${Math.abs(goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-daily-goal-hours="${hours}">${hours}h</button>
             `).join('')}
@@ -3530,11 +3915,7 @@ function renderDailyTargetCard(target) {
       </div>
     `;
   } else {
-    updateDailyTargetMeta({
-      dateKey,
-      progressSeconds,
-      note: 'No target set',
-    });
+    updateDailyTargetMeta({ dateKey });
     mount.innerHTML = `
       <div class="goal-shell">
         <div class="goal-ring-wrap">
@@ -3545,12 +3926,14 @@ function renderDailyTargetCard(target) {
             valueMarkup: `<span class="goal-value--stack"><span>${progressHours > 0 ? progressHours.toFixed(progressHours % 1 === 0 ? 0 : 1) : '0'}<small>h</small></span><span class="goal-value-caption">Worked</span></span>`,
           })}
         </div>
-        <div class="goal-controls">
-          <div class="goal-range">${descriptiveLabel} · progress from session history</div>
+        <div class="goal-controls" style="--target-accent:var(--ink-4)">
+          <div class="goal-progress-copy">
+            <span>Time: <strong>${fmt.dur(progressSeconds)}</strong></span>
+            <span class="goal-left">Time left to meet goal: set a goal first</span>
+          </div>
           <div class="goal-input-row">
             <label class="goal-label" for="dailyGoalCardInput">
-              <strong>Set daily goal</strong>
-              <span>No target has been saved for this date yet.</span>
+              <strong>Daily goal</strong>
             </label>
             <div class="goal-input-wrap">
               <input class="goal-input" id="dailyGoalCardInput" type="number" min="1" max="100" step="0.5" value="3">
@@ -3562,7 +3945,6 @@ function renderDailyTargetCard(target) {
               <button class="goal-chip ${hours === 3 ? 'is-active' : ''}" type="button" data-daily-goal-hours="${hours}">${hours}h</button>
             `).join('')}
           </div>
-          <div class="goal-empty-note">Choose a goal and it will be saved for ${humanDailyTargetLabel(dateKey).toLowerCase()}.</div>
         </div>
       </div>
     `;
