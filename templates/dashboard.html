@@ -160,10 +160,7 @@
 :root[data-theme="light"]{color-scheme:light}
 html.theme-switching *,
 html.theme-switching *::before,
-html.theme-switching *::after,
-html.view-switching *,
-html.view-switching *::before,
-html.view-switching *::after{
+html.theme-switching *::after{
   transition:none !important;
 }
 html{font-size:15px}
@@ -176,15 +173,12 @@ body{
   text-rendering:optimizeLegibility;
   font-feature-settings:"ss01","cv11";
   letter-spacing:-0.01em;
-  transition:background-color .3s ease, color .3s ease;
-}
-.page-bg{
-  position:fixed;inset:0;
-  z-index:-1;pointer-events:none;
   background-image:
     var(--page-wash),
     var(--page-glow-a),
     var(--page-glow-b);
+  background-attachment:fixed;
+  transition:background-color .3s ease, color .3s ease;
 }
 
 header{
@@ -340,37 +334,26 @@ header{
   border-radius:var(--radius);
   min-height:203px;
   padding:28px 22px 24px;
-  position:relative;
+  position:relative;overflow:hidden;
   display:flex;flex-direction:column;align-items:flex-start;
   transform:translateZ(0);
   transform-origin:center top;
   will-change:transform;
-  transition:transform .26s cubic-bezier(.2,.8,.2,1);
+  transition:border-color .22s ease, background .22s ease, box-shadow .26s ease, transform .26s cubic-bezier(.2,.8,.2,1);
 }
-.card::before{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  border-radius:inherit;
-  background:var(--surface-2);
-  border:1px solid var(--border-strong);
-  box-shadow:var(--shadow-card-hover);
-  opacity:0;
-  transition:opacity .26s ease;
-  z-index:0;
-}
-.card > *{position:relative;z-index:1}
 .card::after{
   content:"";position:absolute;inset:0;pointer-events:none;
-  border-radius:inherit;
   background:var(--glass-highlight);
   opacity:.75;
   transition:opacity .24s ease;
-  z-index:1;
 }
 .card:hover{
+  border-color:var(--border-strong);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-card-hover);
   transform:scale(1.025);
   z-index:2;
 }
-.card:hover::before{opacity:1}
 .card:hover::after{opacity:1}
 .card[data-detail]{cursor:pointer}
 .card[data-detail]:focus-visible{
@@ -445,38 +428,27 @@ header{
   display:grid;grid-template-rows:auto 1fr;
   min-height:410px;
   padding:28px 30px 26px;
-  position:relative;
+  position:relative;overflow:hidden;
   background:var(--bg-card);
   box-shadow:var(--target-shadow);
   transform-origin:center top;
   backdrop-filter:none;
   -webkit-backdrop-filter:none;
-  transition:transform .26s cubic-bezier(.2,.8,.2,1);
+  transition:border-color .3s ease, background .3s ease, box-shadow .3s ease, transform .26s cubic-bezier(.2,.8,.2,1);
 }
-.target-card::before{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  border-radius:inherit;
-  background:var(--bg-card-strong);
-  border:1px solid var(--border-strong);
-  box-shadow:var(--shadow-card-hover);
-  opacity:0;
-  transition:opacity .3s ease;
-  z-index:0;
-}
-.target-card > *{position:relative;z-index:1}
 .target-card::after{
   content:"";position:absolute;inset:0;pointer-events:none;
-  border-radius:inherit;
   background:var(--glass-highlight);
   opacity:.72;
   transition:opacity .24s ease;
-  z-index:1;
 }
 .target-card:hover{
+  border-color:var(--border-strong);
+  background:var(--bg-card-strong);
+  box-shadow:var(--shadow-card-hover);
   transform:scale(1.02);
   z-index:2;
 }
-.target-card:hover::before{opacity:1}
 .target-card:hover::after{opacity:1}
 .target-card .chart-wrap{
   min-height:0;height:100%;
@@ -515,7 +487,7 @@ header{
   width:34px;height:34px;border-radius:999px;border:1px solid rgba(45,70,39,.12);
   background:var(--control-bg-strong);color:var(--ink-2);display:grid;place-items:center;
   box-shadow:0 10px 24px rgba(34,57,31,.08);
-  transition:transform .16s ease;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
 }
 .heatmap-nav-btn:hover{
   transform:translateY(-1px);
@@ -601,6 +573,7 @@ header{
 }
 .heatmap-cell{
   height:13px;background:transparent;
+  transition:background-color .1s;
 }
 .heatmap-cell:hover{background:rgba(255,255,255,.08);cursor:default}
 .heatmap-foot{
@@ -633,6 +606,7 @@ header{
   position:relative;
   display:grid;place-items:center;
   isolation:isolate;
+  transition:filter .3s ease;
 }
 .goal-ring-svg{
   position:absolute;inset:0;
@@ -659,7 +633,7 @@ header{
     drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
     drop-shadow(0 0 8px var(--target-glow))
     drop-shadow(0 0 18px color-mix(in srgb, var(--target-accent) calc(var(--target-glow-alpha) * 70%), transparent));
-  transition:stroke-dashoffset .3s ease, stroke .3s ease;
+  transition:stroke-dashoffset .3s ease, stroke .3s ease, filter .3s ease;
 }
 .goal-ring.is-complete .goal-ring-progress{
   filter:
@@ -1191,13 +1165,37 @@ header{
   border-radius:inherit;background:var(--detail-color, var(--accent));
 }
 .detail-day-chart{
-  display:grid;grid-template-columns:repeat(31,minmax(5px,1fr));gap:4px;
+  display:grid;grid-template-columns:repeat(var(--chart-cols,31),minmax(5px,1fr));gap:4px;
   align-items:end;height:140px;padding-top:8px;
 }
 .detail-day-bar{
   min-height:3px;height:var(--detail-height,3%);
   border-radius:999px 999px 3px 3px;background:var(--accent);
   opacity:.82;
+}
+.detail-day-bar.is-future{
+  opacity:.18;background:var(--ink-4,rgba(120,120,128,.4));
+}
+.detail-day-bar.is-today{
+  opacity:1;box-shadow:0 0 0 1px var(--accent);
+}
+.detail-modal-body[data-detail-kind="best-day"]{
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+  padding-top:18px;padding-bottom:18px;
+}
+.bestday-layout{
+  flex:1;min-height:0;display:flex;flex-direction:column;gap:18px;
+}
+.bestday-list-region{
+  flex:1;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;
+  padding-right:4px;
+}
+.bestday-list-region .detail-list{flex:0 0 auto}
+.bestday-chart-region{
+  flex-shrink:0;
+  border-top:1px solid var(--border);
+  padding-top:14px;
 }
 .detail-heatmap{
   display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:5px;
@@ -1435,104 +1433,6 @@ header{
   display:flex;gap:8px;flex-wrap:wrap;
 }
 
-/* === Settings: Goals === */
-.goals-grid{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:18px;
-}
-.goal-form{
-  display:grid;gap:12px;padding:18px;border-radius:18px;
-  background:var(--control-bg);border:1px solid var(--border);
-}
-.goal-form-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-}
-.goal-form-label{
-  font-size:12px;font-weight:700;color:var(--ink-3);
-  text-transform:uppercase;letter-spacing:.08em;
-}
-.goal-form-progress{
-  font-family:var(--font-mono);font-size:12px;color:var(--ink-3);
-  text-align:right;
-}
-.goal-form-row{
-  display:flex;align-items:end;gap:12px;
-}
-.goal-form-row .field{flex:1;min-width:0}
-.goal-form-row .btn{height:48px;align-self:end;white-space:nowrap}
-.goal-form-feedback{
-  font-size:12px;line-height:1.5;padding:8px 12px;border-radius:10px;
-}
-.goal-form-feedback[data-kind="success"]{
-  color:var(--ink-2);background:color-mix(in srgb, var(--accent) 10%, transparent);
-  border:1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.goal-form-feedback[data-kind="error"]{
-  color:var(--danger);background:var(--danger-soft);
-  border:1px solid color-mix(in srgb, var(--danger) 24%, transparent);
-}
-
-/* === Settings: Data management === */
-.action-list{
-  display:grid;gap:10px;margin-top:18px;
-}
-.action-row{
-  display:flex;align-items:center;justify-content:space-between;gap:18px;
-  padding:16px 18px;border-radius:18px;
-  background:var(--control-bg);border:1px solid var(--border);
-}
-.action-row-text{display:grid;gap:4px;min-width:0}
-.action-row-title{
-  margin:0;font-size:14px;font-weight:650;color:var(--ink);
-}
-.action-row-desc{
-  margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-3);
-}
-.action-row-desc code{
-  font-family:var(--font-mono);font-size:12px;
-  padding:1px 6px;border-radius:6px;background:var(--surface-hover);
-}
-
-/* === Settings: Appearance === */
-.theme-picker{
-  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px;
-}
-.theme-option{
-  display:flex;flex-direction:column;align-items:center;gap:10px;
-  padding:14px 12px;border-radius:18px;cursor:pointer;
-  background:var(--control-bg);border:1px solid var(--border);
-  font:inherit;color:var(--ink-2);font-weight:650;font-size:13px;
-  transition:border-color .18s ease, background .18s ease, transform .12s ease, box-shadow .18s ease;
-}
-.theme-option:hover{
-  border-color:var(--border-strong);background:var(--control-bg-strong);
-}
-.theme-option.is-active{
-  border-color:var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--control-bg));
-  color:var(--ink);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.theme-option-swatch{
-  width:46px;height:30px;border-radius:10px;border:1px solid var(--border);
-  display:block;
-}
-.theme-option-swatch--light{
-  background:linear-gradient(135deg,#ffffff 0%,#f1f1f4 100%);
-}
-.theme-option-swatch--dark{
-  background:linear-gradient(135deg,#1c1c1e 0%,#2c2c2e 100%);
-  border-color:rgba(255,255,255,.08);
-}
-.theme-option-swatch--system{
-  background:linear-gradient(135deg,#ffffff 0%,#ffffff 50%,#1c1c1e 50%,#1c1c1e 100%);
-}
-
-/* === Settings: misc === */
-.empty-mini{
-  padding:22px;border-radius:14px;text-align:center;
-  font-size:13px;color:var(--ink-4);background:var(--surface-hover);
-  border:1px dashed var(--border-strong);
-}
-.category-form.is-disabled{opacity:.55}
-
 .table-card{
   border-radius:var(--radius);
   padding:24px 26px;margin-bottom:24px;
@@ -1748,18 +1648,13 @@ tbody tr:hover .row-del{opacity:1}
 }
 @media (prefers-reduced-motion: reduce){
   .card,
-  .target-card{transition:none}
-  .card::before,
-  .card::after,
-  .target-card::before,
-  .target-card::after{transition:none}
+  .target-card{transition:border-color .2s ease, background .2s ease, box-shadow .2s ease}
   .card:hover,
   .target-card:hover{transform:none}
 }
 </style>
 </head>
 <body>
-<div class="page-bg" aria-hidden="true"></div>
 <header>
   <div class="logo">
     <div class="logo-icon">
@@ -1812,10 +1707,7 @@ tbody tr:hover .row-del{opacity:1}
       </div>
     </div>
   </div>
-  <div id="app">
-    <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
-    <div id="appSettings" hidden></div>
-  </div>
+  <div id="app"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
   <div class="mark">
     <span>Ableton Tracker · <em>v1</em></span>
     <span id="markDb">local</span>
@@ -2032,40 +1924,13 @@ function updateHeaderForView() {
 }
 
 function setActiveView(nextView, { pushHash = true } = {}) {
-  const prevView = activeView;
   activeView = nextView === 'settings' ? 'settings' : 'dashboard';
   if (pushHash) {
     const nextHash = activeView === 'settings' ? '#settings' : '#dashboard';
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
   }
   updateHeaderForView();
-
-  const dashEl = document.getElementById('appDashboard');
-  const setEl  = document.getElementById('appSettings');
-  if (dashEl && setEl) {
-    const root = document.documentElement;
-    const viewChanged = prevView !== activeView;
-    if (viewChanged) root.classList.add('view-switching');
-    if (activeView === 'settings') {
-      // Always ensure the partial is mounted; render() is a no-op if data hasn't loaded yet.
-      loadSettingsPartial().then(() => {
-        if (latestDashboardData) {
-          window.Settings?.render(latestDashboardData);
-          setEl.dataset.rendered = 'true';
-        }
-      });
-      setEl.hidden = false;
-      dashEl.hidden = true;
-    } else {
-      dashEl.hidden = false;
-      setEl.hidden = true;
-    }
-    if (viewChanged) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => root.classList.remove('view-switching'));
-      });
-    }
-  }
+  if (latestDashboardData) render(latestDashboardData);
 }
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
@@ -2228,17 +2093,33 @@ function monthProjectRows(projects) {
     .sort((a, b) => (b.month_seconds || 0) - (a.month_seconds || 0));
 }
 
+function startOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
 function currentMonthDays(yearDaily, today = new Date()) {
   const totals = new Map();
   (yearDaily || []).forEach(row => {
     if (row && row.day) totals.set(row.day, row.total_seconds || 0);
   });
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  return Array.from({ length: daysInMonth }, (_, index) => {
-    const date = new Date(today.getFullYear(), today.getMonth(), index + 1);
-    const day = localDateKey(date);
-    return { day, total_seconds: totals.get(day) || 0 };
-  });
+  const start = startOfMonth(today);
+  const end = endOfMonth(today);
+  const todayKey = localDateKey(today);
+  const days = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const day = localDateKey(d);
+    days.push({
+      day,
+      total_seconds: totals.get(day) || 0,
+      isFuture: day > todayKey,
+      isToday: day === todayKey,
+    });
+  }
+  return days;
 }
 
 function detailRow({ title, meta, value, color, pct }) {
@@ -2286,9 +2167,10 @@ function renderBestDayDetail({ year_daily }) {
     .sort((a, b) => b.total_seconds - a.total_seconds)
     .slice(0, 10);
   const max = Math.max(...days.map(day => day.total_seconds), 1);
+  const chartCols = days.length;
   return `
-    <div class="detail-stack">
-      <div>
+    <div class="bestday-layout">
+      <div class="bestday-list-region">
         <div class="detail-section-title">Top days this month</div>
         ${activeDays.length === 0
           ? '<div class="detail-empty">No daily activity this month.</div>'
@@ -2305,12 +2187,15 @@ function renderBestDayDetail({ year_daily }) {
               }).join('')}
             </div>`}
       </div>
-      <div>
+      <div class="bestday-chart-region">
         <div class="detail-section-title">Every day</div>
-        <div class="detail-day-chart">
+        <div class="detail-day-chart" style="--chart-cols:${chartCols}">
           ${days.map(day => {
             const height = day.total_seconds > 0 ? Math.max(3, (day.total_seconds / max) * 100) : 3;
-            return `<div class="detail-day-bar" style="--detail-height:${height}%" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
+            const cls = ['detail-day-bar'];
+            if (day.isFuture) cls.push('is-future');
+            if (day.isToday) cls.push('is-today');
+            return `<div class="${cls.join(' ')}" style="--detail-height:${height}%" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
           }).join('')}
         </div>
       </div>
@@ -2443,6 +2328,7 @@ function bindDetailCards(data) {
     title.textContent = detail.title;
     subtitle.textContent = detail.subtitle;
     body.innerHTML = detail.body;
+    body.dataset.detailKind = kind;
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     closeBtn.focus();
@@ -2801,35 +2687,246 @@ function openCategoryPicker({ projectName, categoryKey }) {
   list.querySelector('[data-category-value]')?.focus();
 }
 
-// Settings view: HTML/CSS/JS lives in templates/settings.html and static/js/settings.js.
-// This thin shim fetches the partial on first activation, then defers to window.Settings.
-let __settingsPartialPromise = null;
-function loadSettingsPartial() {
-  if (__settingsPartialPromise) return __settingsPartialPromise;
-  __settingsPartialPromise = fetch('/partials/settings.html')
-    .then(res => {
-      if (!res.ok) throw new Error(`partial ${res.status}`);
-      return res.text();
-    })
-    .then(html => {
-      const container = document.getElementById('appSettings');
-      if (container) container.innerHTML = html;
-      window.Settings?.init();
-    })
-    .catch(err => {
-      __settingsPartialPromise = null;
-      console.error('Failed to load settings partial', err);
-      const container = document.getElementById('appSettings');
-      if (container) {
-        container.innerHTML = `<div class="empty"><p>Could not load settings.</p><small>${escapeHtml(err.message || 'unknown error')}</small></div>`;
+function renderSettings(data) {
+  const categoryOptions = data.category_options || [];
+  const customLimit = data.custom_category_limit || CUSTOM_CATEGORY_LIMIT_FALLBACK;
+  const customCount = data.custom_category_count || 0;
+  const remaining = Math.max(customLimit - customCount, 0);
+
+  document.getElementById('app').innerHTML = `
+    <div class="settings-shell">
+      <div class="chart-card settings-card">
+        <div class="section-head">
+          <h3 class="section-title">Custom <em>categories</em></h3>
+          <span class="section-meta">${customCount}/${customLimit} used</span>
+        </div>
+        <p class="settings-copy">
+          Create up to ${customLimit} personal categories with your own color palette.
+          Anything you add here becomes available in the project category picker right away.
+        </p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="chart-card settings-card">
+          <div class="section-head">
+            <h3 class="section-title">Create a <em>category</em></h3>
+            <span class="section-meta">${remaining} slot${remaining === 1 ? '' : 's'} left</span>
+          </div>
+          <form class="category-form" id="categoryCreateForm">
+            <div class="field-grid">
+              <label class="field">
+                <span class="field-label">Category name</span>
+                <input
+                  class="text-input"
+                  id="categoryNameInput"
+                  name="label"
+                  type="text"
+                  maxlength="32"
+                  placeholder="Ex. Sound Design"
+                  ${remaining === 0 ? 'disabled' : ''}
+                  required
+                >
+              </label>
+              <label class="field">
+                <span class="field-label">Color</span>
+                ${renderColorField({ inputId: 'categoryColorInput', value: '#7C5CFF', disabled: remaining === 0 })}
+              </label>
+            </div>
+            <div class="field-note">Pick a color from the palette or open the browser picker for something custom.</div>
+            <div class="settings-actions">
+              <button class="btn" type="submit" ${remaining === 0 ? 'disabled' : ''}>Save category</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-stack">
+          <div class="chart-card settings-card">
+            <div class="section-head">
+              <h3 class="section-title">At a <em>glance</em></h3>
+            </div>
+            <div class="settings-kpis">
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Categories</div>
+                <div class="settings-kpi-value">${customCount}</div>
+              </div>
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Available</div>
+                <div class="settings-kpi-value">${remaining}</div>
+              </div>
+              <div class="settings-kpi">
+                <div class="settings-kpi-label">Limit</div>
+                <div class="settings-kpi-value">${customLimit}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="section-head">
+          <h3 class="section-title">Category <em>library</em></h3>
+          <span class="section-meta">${categoryOptions.length} total</span>
+        </div>
+        <div class="category-library">
+          <div class="category-library-grid">
+            ${categoryOptions.map(option => `
+              <div class="category-library-card" data-category-card="${option.key}">
+                <div class="category-library-head">
+                  <div class="category-library-title">
+                    <span class="category-library-swatch" style="--category-color:${option.color}"></span>
+                    <span class="category-library-name">${escapeHtml(option.label)}</span>
+                  </div>
+                </div>
+                <div class="category-library-meta">
+                  <span>${option.assignment_count || 0} assigned project${option.assignment_count === 1 ? '' : 's'}</span>
+                  <div class="category-library-actions">
+                    <button class="btn subtle small" type="button" data-category-edit="${option.key}">Edit</button>
+                    <button class="btn danger small" type="button" data-category-delete="${option.key}" data-category-label="${escapeHtml(option.label)}" data-category-assignments="${option.assignment_count || 0}">Delete</button>
+                  </div>
+                </div>
+                <form class="category-editor" data-category-editor="${option.key}" hidden>
+                  <div class="category-editor-head">
+                    <span class="category-editor-title">Edit category</span>
+                    <button class="btn subtle small" type="button" data-category-cancel="${option.key}">Cancel</button>
+                  </div>
+                  <div class="field-grid">
+                    <label class="field">
+                      <span class="field-label">Category name</span>
+                      <input
+                        class="text-input"
+                        name="label"
+                        type="text"
+                        maxlength="32"
+                        value="${escapeHtml(option.label)}"
+                        required
+                      >
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Color</span>
+                      ${renderColorField({ value: option.color, showPresets: false })}
+                    </label>
+                  </div>
+                  <div class="category-editor-actions">
+                    <button class="btn small" type="submit">Save changes</button>
+                    <button class="btn danger small" type="button" data-category-delete="${option.key}" data-category-label="${escapeHtml(option.label)}" data-category-assignments="${option.assignment_count || 0}">Delete</button>
+                  </div>
+                </form>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('categoryCreateForm');
+  if (!form) return;
+  bindColorField(form);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const nameInput = document.getElementById('categoryNameInput');
+    const colorInput = document.getElementById('categoryColorInput');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const label = nameInput.value.trim();
+    const color = colorInput.value;
+    if (!label) {
+      toast('Add a category name first');
+      nameInput.focus();
+      return;
+    }
+    submitButton.disabled = true;
+    try {
+      const result = await postJson('/api/category-options', { label, color });
+      toast(`Created ${result.category.label}`);
+      form.reset();
+      colorInput.value = '#7C5CFF';
+      bindColorField(form);
+      await load();
+    } catch (error) {
+      toast(error.message || 'Failed to create category');
+    } finally {
+      submitButton.disabled = remaining === 0;
+    }
+  });
+
+  const toggleEditor = (key, open) => {
+    document.querySelectorAll('[data-category-editor]').forEach(editor => {
+      const isOpen = editor.dataset.categoryEditor === key && open;
+      editor.hidden = !isOpen;
+      editor.closest('[data-category-card]')?.classList.toggle('is-editing', isOpen);
+    });
+    document.querySelectorAll('[data-category-edit]').forEach(button => {
+      const isOpen = button.dataset.categoryEdit === key && open;
+      button.setAttribute('aria-expanded', String(isOpen));
+      button.textContent = isOpen ? 'Close' : 'Edit';
+    });
+  };
+
+  document.querySelectorAll('[data-category-edit]').forEach(button => {
+    button.addEventListener('click', () => {
+      const editor = document.querySelector(`[data-category-editor="${button.dataset.categoryEdit}"]`);
+      const shouldOpen = !editor || editor.hidden;
+      toggleEditor(button.dataset.categoryEdit, shouldOpen);
+      if (!shouldOpen) return;
+      document
+        .querySelector(`[data-category-editor="${button.dataset.categoryEdit}"] input[name="label"]`)
+        ?.focus();
+    });
+  });
+
+  document.querySelectorAll('[data-category-cancel]').forEach(button => {
+    button.addEventListener('click', () => toggleEditor(button.dataset.categoryCancel, false));
+  });
+
+  document.querySelectorAll('[data-category-editor]').forEach(editor => {
+    bindColorField(editor);
+    editor.addEventListener('submit', async event => {
+      event.preventDefault();
+      const key = editor.dataset.categoryEditor;
+      const submitButton = editor.querySelector('button[type="submit"]');
+      const label = editor.querySelector('input[name="label"]').value.trim();
+      const color = editor.querySelector('input[name="color"]').value;
+      submitButton.disabled = true;
+      try {
+        const result = await postJson('/api/category-options/update', { key, label, color });
+        toast(`Updated ${result.category.label}`);
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to update category');
+      } finally {
+        submitButton.disabled = false;
       }
     });
-  return __settingsPartialPromise;
-}
+  });
 
-async function renderSettings(data) {
-  await loadSettingsPartial();
-  if (data && window.Settings) window.Settings.render(data);
+  document.querySelectorAll('[data-category-delete]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const key = button.dataset.categoryDelete;
+      const label = button.dataset.categoryLabel || 'this category';
+      const assignments = Number(button.dataset.categoryAssignments || '0');
+      const ok = await confirmDialog({
+        title: 'Delete custom <em>category</em>?',
+        body: assignments > 0
+          ? `Deletes <code>${label}</code> and clears it from ${assignments} assigned project${assignments === 1 ? '' : 's'}.`
+          : `Deletes <code>${label}</code> from your category library.`,
+        confirmLabel: 'Delete category',
+      });
+      if (!ok) return;
+      button.disabled = true;
+      try {
+        const result = await postJson('/api/category-options/delete', { key });
+        toast(
+          result.cleared_assignments > 0
+            ? `Deleted ${result.category.label} and cleared ${result.cleared_assignments} project${result.cleared_assignments === 1 ? '' : 's'}`
+            : `Deleted ${result.category.label}`
+        );
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to delete category');
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 async function clearRecent(){
@@ -2978,25 +3075,16 @@ function render(data) {
     detailModalAbort = null;
   }
   if (data.error) {
-    const errHtml = `<div class="empty"><p>${escapeHtml(data.error)}</p><small>run start_tracker.command</small></div>`;
-    const dashEl = document.getElementById('appDashboard');
-    const setEl  = document.getElementById('appSettings');
-    if (dashEl) dashEl.innerHTML = errHtml;
-    if (setEl)  { setEl.innerHTML = errHtml; setEl.dataset.rendered = 'true'; }
+    document.getElementById('app').innerHTML =
+      `<div class="empty"><p>${escapeHtml(data.error)}</p><small>run start_tracker.command</small></div>`;
     return;
   }
   syncCategoryOptions(data.category_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
 
-  // New data invalidates any previously-rendered settings view.
-  // It will be re-rendered next time the user switches to it.
-  const setEl = document.getElementById('appSettings');
-  if (setEl) setEl.dataset.rendered = '';
-
-  // If user is currently on settings, refresh it now so the visible data stays fresh.
   if (activeView === 'settings') {
     renderSettings(data);
-    // fall through and also refresh the (hidden) dashboard so the next switch is instant
+    return;
   }
 
   updateSessionStatus(summary);
@@ -3066,7 +3154,7 @@ function render(data) {
       : `<div class="card-chip">Best day this month</div>`;
   }
 
-  document.getElementById('appDashboard').innerHTML = `
+  document.getElementById('app').innerHTML = `
     <div class="cards">
       <div class="card" role="button" tabindex="0" data-detail="top-project">
         <div class="card-label">Top Project</div>
@@ -3705,7 +3793,7 @@ function renderWeeklyTargetCard(target) {
       </div>
       <div class="goal-controls" style="--target-accent:${tone.accent}">
         <div class="goal-progress-copy">
-          <span>Time spent: <strong>${fmt.dur(progressSeconds)}</strong></span>
+          <span>Time: <strong>${fmt.dur(progressSeconds)}</strong></span>
           <span class="goal-left">Time left to meet goal: ${remainingLabel}</span>
         </div>
         <div class="goal-input-row">
@@ -4113,6 +4201,5 @@ function renderCategoryChart(projects) {
 load();
 setInterval(load, 60_000);
 </script>
-<script src="/static/js/settings.js"></script>
 </body>
 </html>
