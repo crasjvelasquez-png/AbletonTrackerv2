@@ -63,7 +63,10 @@
       "Bash(curl -s -o /dev/null -w \"missing: %{http_code}\\\\n\" http://127.0.0.1:7421/static/js/missing.js)",
       "Read(//tmp/**)",
       "Bash(curl -s --path-as-is -o /tmp/trav.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/../dashboard.py\")",
-      "Bash(curl -s --path-as-is -o /tmp/trav2.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/..%2Fdashboard.py\")"
+      "Bash(curl -s --path-as-is -o /tmp/trav2.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/..%2Fdashboard.py\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ps -p 19175 -o pid,command)",
+      "Bash(kill 19175)"
     ]
   }
 }
