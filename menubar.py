@@ -22,9 +22,7 @@ from tracker import (
     STATE_PAUSED,
     STATE_TRACKING,
     day_seconds,
-    setup_db,
     Tracker,
-    close_stale_open_sessions,
 )
 
 DASHBOARD_PORT = 7421
@@ -67,18 +65,23 @@ def today_seconds() -> float:
 
 
 class TrackerThread(threading.Thread):
-    """Runs the tracker loop; respects a pause flag."""
+    """Runs the tracker loop in a background thread; respects the pause flag."""
 
     def __init__(self):
         super().__init__(daemon=True)
         self.tracker = Tracker()
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        setup_db()
-        stale = close_stale_open_sessions()
-        if stale:
-            print(f"closed {stale} stale open session{'s' if stale != 1 else ''}")
-        self.tracker.maybe_run_cleanup(force=True)
+
+    @property
+    def consecutive_failures(self) -> int:
+        with self._lock:
+            return self.tracker._consecutive_failures
+
+    @property
+    def last_error(self) -> str | None:
+        with self._lock:
+            return self.tracker._last_error
 
     def stop(self):
         self._stop.set()
@@ -98,13 +101,11 @@ class TrackerThread(threading.Thread):
             return self.tracker.status()
 
     def run(self):
-        while not self._stop.is_set():
-            try:
-                self.poll_now(paused=PAUSE_FILE.exists())
-                self.tracker.maybe_run_cleanup()
-            except Exception as e:
-                print(f"tracker error: {e}", file=sys.stderr)
-            self._stop.wait(TRACKER_WAKE_INTERVAL)
+        self.tracker.run(
+            stop_event=self._stop,
+            wake_interval=TRACKER_WAKE_INTERVAL,
+            _lock=self._lock,
+        )
 
 
 class DashboardProcess:
@@ -163,6 +164,16 @@ class AbletonTrackerApp(rumps.App):
     def _refresh(self, _):
         paused = PAUSE_FILE.exists()
         self.pause_item.title = "Resume tracking" if paused else "Pause tracking"
+
+        failures = self.tracker_thread.consecutive_failures
+        last_error = self.tracker_thread.last_error
+        if failures > 0:
+            self.title = "⚠"
+            trunc = (last_error or "unknown")[:60]
+            self.status_item.title = f"Error ({failures}): {trunc}"
+            self.today_item.title = f"Today: {fmt_dur(today_seconds())}"
+            return
+
         status = self.tracker_thread.status()
         today = today_seconds()
         frac = fmt_quarter(today)

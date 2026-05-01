@@ -4,7 +4,9 @@
 import os
 import sqlite3
 import json
+import hashlib
 import time
+import traceback
 import webbrowser
 import threading
 from datetime import date, datetime, timedelta
@@ -52,7 +54,7 @@ LEGACY_CATEGORY_KEYS = [
 def clear_all_sessions() -> dict:
     if not DB_PATH.exists():
         return {"ok": True, "deleted": 0}
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         cur = conn.execute("DELETE FROM sessions WHERE end_time IS NOT NULL")
         conn.commit()
         return {"ok": True, "deleted": cur.rowcount}
@@ -62,7 +64,7 @@ def clear_unsaved_projects() -> dict:
     if not DB_PATH.exists():
         return {"ok": True, "deleted": 0}
     placeholders = ",".join("?" * len(UNTITLED_NAMES))
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         cur = conn.execute(
             f"""
             DELETE FROM sessions
@@ -94,7 +96,7 @@ def delete_sessions(session_ids) -> dict:
         return {"ok": True, "deleted": 0, "skipped_live": 0}
 
     placeholders = ",".join("?" * len(clean_ids))
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         live_rows = conn.execute(
             f"SELECT id FROM sessions WHERE id IN ({placeholders}) AND end_time IS NULL",
             clean_ids,
@@ -265,7 +267,7 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
 
     normalized_key = (category_key or "").strip().lower() or None
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         _, category_by_key = get_category_maps(conn)
         if normalized_key is not None and normalized_key not in category_by_key:
@@ -332,7 +334,7 @@ def create_category(label: str, color: str) -> dict:
     if not normalized_color:
         return {"error": "Pick a valid hex color."}
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         custom_count = conn.execute(
             "SELECT COUNT(*) FROM category_definitions"
@@ -394,7 +396,7 @@ def update_category(category_key: str, label: str, color: str) -> dict:
     if not normalized_color:
         return {"error": "Pick a valid hex color."}
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             """
@@ -446,7 +448,7 @@ def delete_category(category_key: str) -> dict:
     if not normalized_key:
         return {"error": "Category key is required."}
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             """
@@ -539,8 +541,6 @@ def get_range_progress_seconds(conn: sqlite3.Connection, start_date: date, end_d
         """,
         (range_end, range_start),
     ).fetchall()
-    start_key = start_date.isoformat()
-    end_key = end_date.isoformat()
     total_seconds = 0.0
     for row in rows:
         end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
@@ -549,7 +549,7 @@ def get_range_progress_seconds(conn: sqlite3.Connection, start_date: date, end_d
             end_time,
             row["active_seconds"],
         ):
-            if start_key <= day_key <= end_key:
+            if start_date <= date.fromisoformat(day_key) <= end_date:
                 total_seconds += seconds
     return round(total_seconds)
 
@@ -566,7 +566,7 @@ def get_daily_target(date_value: str) -> dict:
             "has_target": False,
         }
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         row = conn.execute(
@@ -599,7 +599,7 @@ def set_daily_target(date_value: str, goal_hours: object) -> dict:
         raise ValueError("invalid goal")
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         conn.execute(
@@ -639,7 +639,7 @@ def get_weekly_target(date_value: str = "") -> dict:
     if not DB_PATH.exists():
         return base
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         return {
@@ -651,11 +651,29 @@ def get_weekly_target(date_value: str = "") -> dict:
 #  Data layer
 # ─────────────────────────────────────────────────────────────
 
+def _compute_data_etag(month_value: str = "") -> str:
+    """Lightweight hash of DB state — returns None if no DB."""
+    if not DB_PATH.exists():
+        return ""
+    with sqlite3.connect(DB_PATH, timeout=5) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        s = conn.execute(
+            "SELECT COUNT(*), MAX(rowid), MAX(COALESCE(last_seen_time, start_time)),"
+            "  (SELECT COUNT(*) FROM sessions WHERE end_time IS NULL)"
+            " FROM sessions"
+        ).fetchone()
+        cd = conn.execute("SELECT COUNT(*), MAX(rowid) FROM category_definitions").fetchone()
+        pc = conn.execute("SELECT COUNT(*), MAX(rowid) FROM project_categories").fetchone()
+        dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
+        raw = f"{s}|{cd}|{pc}|{dm}|{month_value}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
 def get_stats(month_value: str = "") -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.row_factory = sqlite3.Row
             category_options, _ = get_category_maps(conn)
@@ -867,8 +885,11 @@ def get_stats(month_value: str = "") -> dict:
                 "custom_category_limit": MAX_CUSTOM_CATEGORIES,
                 "custom_category_count": len(category_options),
             }
-    except Exception as e:
+    except sqlite3.Error as e:
         return {"error": str(e)}
+    except Exception:
+        traceback.print_exc()
+        raise
 
 
 # ─────────────────────────────────────────────────────────────
@@ -4090,18 +4111,20 @@ class Handler(BaseHTTPRequestHandler):
     def _request_json(self):
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
-            return {}
+            return None
         raw = self.rfile.read(length)
         if not raw:
-            return {}
+            return None
         return json.loads(raw.decode("utf-8"))
 
-    def _json(self, payload, status=200):
+    def _json(self, payload, status=200, etag=None):
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        if etag:
+            self.send_header("ETag", etag)
         self.end_headers()
         self.wfile.write(body)
 
@@ -4142,8 +4165,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/data":
             month_value = parse_qs(parsed.query).get("month", [""])[0]
+            etag = _compute_data_etag(month_value)
+            if_none_match = self.headers.get("If-None-Match", "")
+            if etag and if_none_match == etag:
+                self.send_response(304)
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                return
             try:
-                self._json(get_stats(month_value))
+                self._json(get_stats(month_value), etag=etag)
             except ValueError as exc:
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/daily-target":
@@ -4182,6 +4212,9 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, status=400)
                 return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
             result = delete_sessions(payload.get("session_ids") or [])
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-category":
@@ -4189,6 +4222,9 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self._request_json()
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
                 return
             result = set_project_category(
                 payload.get("project_name", ""),
@@ -4201,6 +4237,9 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, status=400)
                 return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
             result = create_category(
                 payload.get("label", ""),
                 payload.get("color", ""),
@@ -4211,6 +4250,9 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self._request_json()
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
                 return
             result = update_category(
                 payload.get("key", ""),
@@ -4224,11 +4266,17 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._json({"error": "invalid json"}, status=400)
                 return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
             result = delete_category(payload.get("key", ""))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/daily-target":
             try:
                 payload = self._request_json()
+                if payload is None:
+                    self._json({"error": "request body is required"}, status=400)
+                    return
                 result = set_daily_target(
                     payload.get("date", ""),
                     payload.get("goal_hours"),
@@ -4246,7 +4294,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         run_schema_migrations(conn)
     server = HTTPServer(("127.0.0.1", PORT), Handler)

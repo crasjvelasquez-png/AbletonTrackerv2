@@ -32,6 +32,7 @@ AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
+PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 UNTITLED_NAMES = {"untitled", "untitled project"}
 LIVE_TITLE_SUFFIX_RE = re.compile(
     r"\s*[-–—]\s*(Ableton\s*)?Live\s*\d*\s*(Suite|Standard|Lite|Intro|Trial)?\s*$",
@@ -58,7 +59,7 @@ _ALS_SUFFIX_RE = re.compile(r"\.als\s*$", re.IGNORECASE)
 
 def setup_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
@@ -118,7 +119,7 @@ def _phantom_session_ids(conn: sqlite3.Connection) -> list[int]:
 def count_phantom_sessions() -> int:
     if not DB_PATH.exists():
         return 0
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         return len(_phantom_session_ids(conn))
 
 
@@ -127,7 +128,7 @@ def cleanup_phantom_sessions() -> dict:
     if not DB_PATH.exists():
         return {"ok": True, "deleted": 0}
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         ids = _phantom_session_ids(conn)
         if not ids:
             return {"ok": True, "deleted": 0}
@@ -143,7 +144,7 @@ def close_stale_open_sessions() -> int:
     if not DB_PATH.exists():
         return 0
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         rows = conn.execute(
             """
             SELECT id, COALESCE(last_seen_time, start_time)
@@ -267,7 +268,7 @@ def day_seconds(target_day: date) -> float:
     if not DB_PATH.exists():
         return 0.0
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             """
@@ -334,14 +335,14 @@ def get_idle_seconds() -> float:
         )
     except Exception as e:
         _set_idle_error(f"subprocess: {e}")
-        return 0.0
+        return float("inf")
     if r.returncode != 0:
         _set_idle_error(f"ioreg exit {r.returncode}: {r.stderr.strip()[:200]}")
-        return 0.0
+        return float("inf")
     m = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', r.stdout)
     if not m:
         _set_idle_error(f"no HIDIdleTime in {len(r.stdout)} bytes of ioreg output")
-        return 0.0
+        return float("inf")
     _set_idle_error(None)
     return int(m.group(1)) / 1_000_000_000  # ns → s
 
@@ -725,10 +726,22 @@ class Tracker:
         self.last_audio_idle = float("inf")
         self.last_checked_at = 0.0
         self.last_state = STATE_ABLETON_CLOSED
+        self._consecutive_failures = 0
+        self._last_error: str | None = None
+
+        # --- One-time initialization (unified entry point) ---
+        setup_db()
+        stale = close_stale_open_sessions()
+        if stale:
+            print(f"[{_ts()}] closed {stale} stale open session{'s' if stale != 1 else ''}")
+        self.maybe_run_cleanup(force=True)
+        # Pay swiftc compile cost up front so the first audio probe doesn't stall a poll.
+        if _ensure_audio_probe_binary() is None:
+            print(f"[{_ts()}] audio probe unavailable at startup — will retry on first use")
 
     def _start(self, project: str):
         now = time.time()
-        with closing(sqlite3.connect(DB_PATH)) as conn:
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
             resumed_row = conn.execute(
                 """
                 SELECT id
@@ -777,7 +790,7 @@ class Tracker:
         # Cap elapsed to 2× poll interval so computer sleep isn't counted
         elapsed = min(now - self.last_tick, POLL_INTERVAL * 2) if self.last_tick else POLL_INTERVAL
         self.last_tick = now
-        with closing(sqlite3.connect(DB_PATH)) as conn:
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
             cur = conn.execute(
                 """
                 UPDATE sessions
@@ -800,7 +813,7 @@ class Tracker:
         now = time.time()
         name = (self.project_name or "").strip().lower()
         project_name = self.project_name
-        with closing(sqlite3.connect(DB_PATH)) as conn:
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
             row = conn.execute(
                 "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
             ).fetchone()
@@ -869,6 +882,14 @@ class Tracker:
         self.last_running = True
 
         self.last_hid_idle = get_idle_seconds()
+        if self.last_hid_idle == float("inf"):
+            self.last_audio_is_active = False
+            self.last_audio_idle = float("inf")
+            if self.session_id is None and self.resume_hint_project:
+                self._start(self.resume_hint_project)
+            self._tick()
+            self.last_state = STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
+            return
         should_check_audio = (
             self.last_hid_idle >= IDLE_THRESHOLD
             or self.last_state == STATE_IDLE_PAUSED
@@ -944,33 +965,60 @@ class Tracker:
             print(f"[{_ts()}] cleaned {deleted} phantom session{'s' if deleted != 1 else ''}")
         self.next_cleanup_at = now + CLEANUP_INTERVAL
 
-    def run(self):
-        setup_db()
-        stale = close_stale_open_sessions()
-        if stale:
-            print(f"[{_ts()}] closed {stale} stale open session{'s' if stale != 1 else ''}")
-        self.maybe_run_cleanup(force=True)
-        # Pay swiftc compile cost up front so the first audio probe doesn't stall a poll.
-        if _ensure_audio_probe_binary() is None:
-            print(f"[{_ts()}] audio probe unavailable at startup — will retry on first use")
-        print(f"Ableton Tracker  |  poll every {POLL_INTERVAL}s  |  db: {DB_PATH}")
-        print("Ctrl+C to stop\n")
+    MAX_RETRIES = 5
+    MAX_BACKOFF = 60
 
-        def shutdown(sig, frame):
-            print("\nStopping tracker…")
-            self._close()
-            sys.exit(0)
+    def run(self, stop_event: threading.Event | None = None, wake_interval: float = POLL_INTERVAL, _lock: threading.Lock | None = None):
+        """Sole public loop entry point.
 
-        signal.signal(signal.SIGTERM, shutdown)
-        signal.signal(signal.SIGINT, shutdown)
+        Standalone (stop_event=None): registers OS signal handlers, runs forever.
+        Threaded (stop_event + _lock provided): loops until the event is set; checks
+        PAUSE_FILE each cycle and uses the lock for thread-safe access when the menu
+        bar UI may call poll_now() concurrently.  Tracks consecutive failures with
+        exponential backoff for the menu bar error display.
+        """
+        if stop_event is None:
+            print(f"Ableton Tracker  |  poll every {POLL_INTERVAL}s  |  db: {DB_PATH}")
+            print("Ctrl+C to stop\n")
+
+            def shutdown(sig, frame):
+                print("\nStopping tracker…")
+                self._close()
+                sys.exit(0)
+
+            signal.signal(signal.SIGTERM, shutdown)
+            signal.signal(signal.SIGINT, shutdown)
 
         while True:
+            if stop_event and stop_event.is_set():
+                break
             try:
-                self.poll_once()
-                self.maybe_run_cleanup()
+                paused = PAUSE_FILE.exists() if _lock is not None else False
+                if _lock is not None:
+                    with _lock:
+                        self.poll_once(paused=paused)
+                        self.maybe_run_cleanup()
+                else:
+                    self.poll_once(paused=paused)
+                    self.maybe_run_cleanup()
+                self._consecutive_failures = 0
+                self._last_error = None
             except Exception as e:
-                print(f"[{_ts()}] error: {e}")
-            time.sleep(POLL_INTERVAL)
+                self._consecutive_failures += 1
+                self._last_error = str(e)
+                if _lock is not None:
+                    print(f"tracker error ({self._consecutive_failures}): {e}", file=sys.stderr)
+                    if self._consecutive_failures >= self.MAX_RETRIES:
+                        print("tracker: max retries reached, polling suspended", file=sys.stderr)
+                else:
+                    print(f"[{_ts()}] error: {e}")
+            wait = wake_interval
+            if _lock is not None and self._consecutive_failures > 0:
+                wait = min(2 ** self._consecutive_failures, self.MAX_BACKOFF)
+            if stop_event:
+                stop_event.wait(wait)
+            else:
+                time.sleep(wait)
 
 
 if __name__ == "__main__":
