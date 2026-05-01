@@ -183,9 +183,14 @@ def ensure_daily_metrics_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def purge_legacy_categories(conn: sqlite3.Connection) -> None:
+def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_category_definitions_table(conn)
     ensure_project_category_table(conn)
+    ensure_daily_metrics_table(conn)
+    purge_legacy_categories(conn)
+
+
+def purge_legacy_categories(conn: sqlite3.Connection) -> None:
     placeholders = ",".join("?" * len(LEGACY_CATEGORY_KEYS))
     conn.execute(
         f"DELETE FROM project_categories WHERE category_key IN ({placeholders})",
@@ -195,11 +200,10 @@ def purge_legacy_categories(conn: sqlite3.Connection) -> None:
         f"DELETE FROM category_definitions WHERE key IN ({placeholders})",
         LEGACY_CATEGORY_KEYS,
     )
+    conn.commit()
 
 
 def get_category_options(conn: sqlite3.Connection) -> list[dict]:
-    purge_legacy_categories(conn)
-    ensure_project_category_table(conn)
     rows = conn.execute(
         """
         SELECT category.key,
@@ -231,7 +235,6 @@ def get_category_maps(conn: sqlite3.Connection) -> tuple[list[dict], dict[str, d
 
 
 def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
-    ensure_project_category_table(conn)
     _, category_by_key = get_category_maps(conn)
     rows = conn.execute(
         """
@@ -264,7 +267,6 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        ensure_project_category_table(conn)
         _, category_by_key = get_category_maps(conn)
         if normalized_key is not None and normalized_key not in category_by_key:
             return {"error": "Unknown category."}
@@ -332,7 +334,6 @@ def create_category(label: str, color: str) -> dict:
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
         custom_count = conn.execute(
             "SELECT COUNT(*) FROM category_definitions"
         ).fetchone()[0]
@@ -395,7 +396,6 @@ def update_category(category_key: str, label: str, color: str) -> dict:
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
         row = conn.execute(
             """
             SELECT key
@@ -448,7 +448,6 @@ def delete_category(category_key: str) -> dict:
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        purge_legacy_categories(conn)
         row = conn.execute(
             """
             SELECT key, label, color
@@ -486,6 +485,13 @@ def parse_iso_date(value: str) -> date:
         return date.fromisoformat((value or "").strip())
     except ValueError as exc:
         raise ValueError("invalid date") from exc
+
+
+def parse_month_key(value: str) -> date:
+    try:
+        return date.fromisoformat(f"{(value or '').strip()}-01")
+    except ValueError as exc:
+        raise ValueError("invalid month") from exc
 
 
 def get_friday_week_range(target_date: date) -> tuple[date, date]:
@@ -563,7 +569,6 @@ def get_daily_target(date_value: str) -> dict:
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
-        ensure_daily_metrics_table(conn)
         row = conn.execute(
             """
             SELECT goal_hours
@@ -597,7 +602,6 @@ def set_daily_target(date_value: str, goal_hours: object) -> dict:
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
-        ensure_daily_metrics_table(conn)
         conn.execute(
             """
             INSERT INTO daily_metrics (metric_date, goal_hours, updated_at)
@@ -647,7 +651,7 @@ def get_weekly_target(date_value: str = "") -> dict:
 #  Data layer
 # ─────────────────────────────────────────────────────────────
 
-def get_stats() -> dict:
+def get_stats(month_value: str = "") -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
     try:
@@ -678,6 +682,14 @@ def get_stats() -> dict:
             """).fetchall()
 
             today = date.today()
+            selected_month_start = parse_month_key(month_value) if month_value else today.replace(day=1)
+            current_month_start = today.replace(day=1)
+            if selected_month_start > current_month_start:
+                selected_month_start = current_month_start
+            selected_month_end = (
+                selected_month_start.replace(day=28) + timedelta(days=4)
+            ).replace(day=1) - timedelta(days=1)
+            selected_month_key = selected_month_start.strftime("%Y-%m")
             last_year_ago = (today - timedelta(days=364)).isoformat()
             year_daily = [
                 {"day": day, "total_seconds": total_seconds}
@@ -702,12 +714,15 @@ def get_stats() -> dict:
 
             today_str   = today.isoformat()
             goal_week_start, goal_week_end = get_friday_week_range(today)
-            month_start = today.replace(day=1).isoformat()
+            month_start_key = selected_month_start.isoformat()
+            month_end_key = selected_month_end.isoformat()
 
             today_session_seconds = []
             today_project_names = set()
+            month_per_project = {}
             for row in activity_rows:
                 row_today_seconds = 0.0
+                row_month_seconds = 0.0
                 end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
                 for day_key, _hour, seconds in allocate_session_activity(
                     row["start_time"],
@@ -716,9 +731,14 @@ def get_stats() -> dict:
                 ):
                     if day_key == today_str:
                         row_today_seconds += seconds
+                    if month_start_key <= day_key <= month_end_key:
+                        row_month_seconds += seconds
                 if row_today_seconds > 0:
                     today_session_seconds.append(row_today_seconds)
                     today_project_names.add(row["project_name"])
+                if row_month_seconds > 0:
+                    project_name = row["project_name"]
+                    month_per_project[project_name] = month_per_project.get(project_name, 0.0) + row_month_seconds
 
             today_session_count = len(today_session_seconds)
             today_avg_session_seconds = (
@@ -737,20 +757,8 @@ def get_stats() -> dict:
                 for day_key, seconds in daily_totals.items()
                 if goal_week_start.isoformat() <= day_key <= goal_week_end.isoformat()
             )
-            month_s  = sum(
-                seconds
-                for day_key, seconds in daily_totals.items()
-                if day_key >= month_start
-            )
-            month_project_count = scalar(
-                """
-                SELECT COUNT(DISTINCT project_name)
-                FROM sessions
-                WHERE active_seconds > 0
-                  AND date(start_time,'unixepoch','localtime') >= ?
-                """,
-                month_start,
-            )
+            month_s  = sum(month_per_project.values())
+            month_project_count = len(month_per_project)
             closed_session_count = scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NOT NULL")
 
             placeholders = ",".join("?" * len(UNTITLED_NAMES))
@@ -797,17 +805,6 @@ def get_stats() -> dict:
                     0.0,
                 )
 
-            month_per_project = dict(conn.execute(
-                """
-                SELECT project_name, COALESCE(SUM(active_seconds), 0) AS month_seconds
-                FROM sessions
-                WHERE active_seconds > 0
-                  AND date(start_time, 'unixepoch', 'localtime') >= ?
-                GROUP BY project_name
-                """,
-                (month_start,),
-            ).fetchall())
-
             project_rows = []
             for row in projects:
                 project = dict(row)
@@ -846,6 +843,11 @@ def get_stats() -> dict:
                     "goal_week_end": goal_week_end.isoformat(),
                     "month_seconds":  month_s,
                     "month_project_count": month_project_count,
+                    "selected_month": selected_month_key,
+                    "selected_month_start": month_start_key,
+                    "selected_month_end": month_end_key,
+                    "selected_month_label": selected_month_start.strftime("%B %Y"),
+                    "selected_month_is_current": selected_month_key == current_month_start.strftime("%Y-%m"),
                     "project_count":  len(projects),
                     "streak_days":    streak,
                     "live_project":   live["project_name"] if live else None,
@@ -4139,7 +4141,11 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_static(TEMPLATES_DIR, parsed.path[len("/partials/"):])
             return
         if parsed.path == "/api/data":
-            self._json(get_stats())
+            month_value = parse_qs(parsed.query).get("month", [""])[0]
+            try:
+                self._json(get_stats(month_value))
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/daily-target":
             date_value = parse_qs(parsed.query).get("date", [""])[0]
             try:
@@ -4239,6 +4245,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        run_schema_migrations(conn)
     server = HTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://localhost:{PORT}"
     print(f"Dashboard running at {url}")

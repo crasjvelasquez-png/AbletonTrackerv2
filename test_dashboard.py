@@ -19,6 +19,8 @@ class DashboardCategoryTests(unittest.TestCase):
         tracker.DB_PATH = self.db_path
         dashboard.DB_PATH = self.db_path
         tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
 
     def _cleanup_db(self):
         for suffix in ("", "-shm", "-wal"):
@@ -168,6 +170,7 @@ class DashboardCategoryTests(unittest.TestCase):
                 ("Legacy Song", "production"),
             )
             conn.commit()
+            dashboard.purge_legacy_categories(conn)
 
         stats = dashboard.get_stats()
         self.assertFalse(any(item["key"] == "production" for item in stats["category_options"]))
@@ -217,6 +220,8 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
         tracker.DB_PATH = self.db_path
         dashboard.DB_PATH = self.db_path
         tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
 
     def _cleanup_db(self):
         for suffix in ("", "-shm", "-wal"):
@@ -313,6 +318,8 @@ class DashboardRolloverTests(unittest.TestCase):
         tracker.DB_PATH = self.db_path
         dashboard.DB_PATH = self.db_path
         tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
 
     def _cleanup_db(self):
         for suffix in ("", "-shm", "-wal"):
@@ -428,6 +435,50 @@ class DashboardRolloverTests(unittest.TestCase):
         self.assertEqual(stats["summary"]["today_session_count"], 3)
         self.assertEqual(stats["summary"]["today_project_count"], 2)
         self.assertEqual(stats["summary"]["today_average_session_seconds"], 900.0)
+
+    def test_selected_month_uses_allocated_time_within_that_month(self):
+        april_start_ts = datetime(2026, 4, 15, 10, 0).timestamp()
+        april_end_ts = datetime(2026, 4, 15, 12, 0).timestamp()
+        crossing_start_ts = datetime(2026, 4, 30, 23, 30).timestamp()
+        crossing_end_ts = datetime(2026, 5, 1, 0, 30).timestamp()
+        may_start_ts = datetime(2026, 5, 3, 9, 0).timestamp()
+        may_end_ts = datetime(2026, 5, 3, 10, 0).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    ("April Song", april_start_ts, april_end_ts, april_end_ts, 7200.0),
+                    ("Boundary Song", crossing_start_ts, crossing_end_ts, crossing_end_ts, 3600.0),
+                    ("May Song", may_start_ts, may_end_ts, may_end_ts, 3600.0),
+                ],
+            )
+            conn.commit()
+
+        class FrozenDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 5, 10)
+
+        with patch.object(dashboard, "date", FrozenDate):
+            april_stats = dashboard.get_stats("2026-04")
+            may_stats = dashboard.get_stats("2026-05")
+
+        april_projects = {row["project_name"]: row["month_seconds"] for row in april_stats["projects"]}
+        may_projects = {row["project_name"]: row["month_seconds"] for row in may_stats["projects"]}
+
+        self.assertEqual(april_stats["summary"]["selected_month"], "2026-04")
+        self.assertEqual(april_stats["summary"]["month_seconds"], 9000.0)
+        self.assertEqual(april_stats["summary"]["month_project_count"], 2)
+        self.assertEqual(april_projects["April Song"], 7200.0)
+        self.assertEqual(april_projects["Boundary Song"], 1800.0)
+        self.assertEqual(may_stats["summary"]["selected_month"], "2026-05")
+        self.assertEqual(may_stats["summary"]["month_seconds"], 5400.0)
+        self.assertEqual(may_projects["Boundary Song"], 1800.0)
+        self.assertEqual(may_projects["May Song"], 3600.0)
 
 
 if __name__ == "__main__":

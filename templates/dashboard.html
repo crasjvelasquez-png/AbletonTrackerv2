@@ -285,6 +285,18 @@ header{
   font-size:13px;color:var(--ink-4);margin-top:12px;
 }
 .intro .sub > span:not(.session-status){color:var(--ink-2)}
+.month-nav{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.month-nav-label{
+  min-width:132px;
+  text-align:center;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.02em;
+  color:var(--ink);
+}
+.month-nav-reset[hidden]{display:none}
 .session-status{
   display:inline-flex;align-items:center;gap:10px;
   color:var(--ink-2);
@@ -1811,6 +1823,20 @@ tbody tr:hover .row-del{opacity:1}
         · <span id="introDate"></span> · <span id="introTime"></span>
       </div>
     </div>
+    <div class="month-nav" id="monthNav" aria-label="Dashboard month navigation">
+      <button class="btn small month-nav-reset" id="monthNavReset" type="button" hidden>This Month</button>
+      <button class="daily-target-nav-btn" id="monthNavPrev" type="button" aria-label="Show previous month">
+        <svg viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
+        </svg>
+      </button>
+      <span class="month-nav-label" id="monthNavLabel">This Month</span>
+      <button class="daily-target-nav-btn" id="monthNavNext" type="button" aria-label="Show next month">
+        <svg viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
+        </svg>
+      </button>
+    </div>
   </div>
   <div id="app">
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
@@ -1872,6 +1898,9 @@ let latestDashboardData = null;
 let activeView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
+const dashboardMonthState = {
+  selectedMonth: null,
+};
 const dailyTargetState = {
   viewedDate: localDateKey(new Date()),
   requestToken: 0,
@@ -2008,6 +2037,19 @@ function setIntroDates() {
   }
 }
 
+function updateMonthNav(summary = null) {
+  const monthKey = summary?.selected_month || currentMonthStateKey();
+  const label = document.getElementById('monthNavLabel');
+  const nextBtn = document.getElementById('monthNavNext');
+  const resetBtn = document.getElementById('monthNavReset');
+  const monthNav = document.getElementById('monthNav');
+  const isSettings = activeView === 'settings';
+  if (monthNav) monthNav.hidden = isSettings;
+  if (label) label.textContent = summary?.selected_month_label || monthLabel(monthKey);
+  if (nextBtn) nextBtn.disabled = monthKey >= currentMonthKey();
+  if (resetBtn) resetBtn.hidden = monthKey === currentMonthKey();
+}
+
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
   document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
@@ -2029,6 +2071,7 @@ function updateHeaderForView() {
   if (!isSettings) {
     setIntroDates();
   }
+  updateMonthNav(latestDashboardData?.summary || null);
 }
 
 function setActiveView(nextView, { pushHash = true } = {}) {
@@ -2075,6 +2118,19 @@ systemTheme.addEventListener('change', () => {
 applyStoredTheme();
 document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
 document.getElementById('navSettings').addEventListener('click', () => setActiveView('settings'));
+document.getElementById('monthNavPrev').addEventListener('click', () => {
+  dashboardMonthState.selectedMonth = monthKeyFromDate(addMonths(dateFromMonthKey(currentMonthStateKey()), -1));
+  load();
+});
+document.getElementById('monthNavNext').addEventListener('click', () => {
+  if (currentMonthStateKey() >= currentMonthKey()) return;
+  dashboardMonthState.selectedMonth = monthKeyFromDate(addMonths(dateFromMonthKey(currentMonthStateKey()), 1));
+  load();
+});
+document.getElementById('monthNavReset').addEventListener('click', () => {
+  dashboardMonthState.selectedMonth = currentMonthKey();
+  load();
+});
 window.addEventListener('hashchange', () => {
   const nextView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
   if (nextView !== activeView) setActiveView(nextView, { pushHash: false });
@@ -2167,6 +2223,37 @@ function localDateKey(d) {
   return `${year}-${month}-${day}`;
 }
 
+function monthKeyFromDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function currentMonthKey() {
+  return monthKeyFromDate(new Date());
+}
+
+function dateFromMonthKey(key) {
+  const [year, month] = String(key).split('-').map(Number);
+  return new Date(year, (month || 1) - 1, 1, 12);
+}
+
+function addMonths(base, amount) {
+  return new Date(base.getFullYear(), base.getMonth() + amount, 1, 12);
+}
+
+function monthLabel(monthKey) {
+  return dateFromMonthKey(monthKey).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function currentMonthStateKey() {
+  if (!dashboardMonthState.selectedMonth) {
+    dashboardMonthState.selectedMonth = currentMonthKey();
+  }
+  return dashboardMonthState.selectedMonth;
+}
+
 function dateFromKey(key) {
   const [year, month, day] = String(key).split('-').map(Number);
   return new Date(year, month - 1, day, 12);
@@ -2233,12 +2320,26 @@ function currentMonthDays(yearDaily, today = new Date()) {
   (yearDaily || []).forEach(row => {
     if (row && row.day) totals.set(row.day, row.total_seconds || 0);
   });
+  const todayKey = localDateKey(new Date());
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   return Array.from({ length: daysInMonth }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth(), index + 1);
     const day = localDateKey(date);
-    return { day, total_seconds: totals.get(day) || 0 };
+    return {
+      day,
+      total_seconds: totals.get(day) || 0,
+      isFuture: day > todayKey,
+      isToday: day === todayKey,
+    };
   });
+}
+
+function selectedMonthDate(summary = {}) {
+  return dateFromMonthKey(summary.selected_month || currentMonthStateKey());
+}
+
+function selectedMonthLabel(summary = {}) {
+  return summary.selected_month_label || monthLabel(summary.selected_month || currentMonthStateKey());
 }
 
 function detailRow({ title, meta, value, color, pct }) {
@@ -2261,7 +2362,7 @@ function detailRow({ title, meta, value, color, pct }) {
 function renderTopProjectDetail({ summary, projects }) {
   const rows = monthProjectRows(projects);
   const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
-  if (rows.length === 0) return '<div class="detail-empty">No project activity this month.</div>';
+  if (rows.length === 0) return `<div class="detail-empty">No project activity in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
   return `
     <div class="detail-list">
       ${rows.map((project, index) => {
@@ -2279,8 +2380,8 @@ function renderTopProjectDetail({ summary, projects }) {
   `;
 }
 
-function renderBestDayDetail({ year_daily }) {
-  const days = currentMonthDays(year_daily);
+function renderBestDayDetail({ summary, year_daily }) {
+  const days = currentMonthDays(year_daily, selectedMonthDate(summary));
   const activeDays = days
     .filter(day => day.total_seconds > 0)
     .sort((a, b) => b.total_seconds - a.total_seconds)
@@ -2291,7 +2392,7 @@ function renderBestDayDetail({ year_daily }) {
       <div>
         <div class="detail-section-title">Top days this month</div>
         ${activeDays.length === 0
-          ? '<div class="detail-empty">No daily activity this month.</div>'
+          ? `<div class="detail-empty">No daily activity in ${escapeHtml(selectedMonthLabel(summary))}.</div>`
           : `<div class="detail-list">
               ${activeDays.map(day => {
                 const pct = (day.total_seconds / max) * 100;
@@ -2310,7 +2411,10 @@ function renderBestDayDetail({ year_daily }) {
         <div class="detail-day-chart">
           ${days.map(day => {
             const height = day.total_seconds > 0 ? Math.max(3, (day.total_seconds / max) * 100) : 3;
-            return `<div class="detail-day-bar" style="--detail-height:${height}%" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
+            const cls = ['detail-day-bar'];
+            if (day.isFuture) cls.push('is-future');
+            if (day.isToday) cls.push('is-today');
+            return `<div class="${cls.join(' ')}" style="--detail-height:${height}%" title="${escapeHtml(`${longDailyTargetLabel(day.day)} · ${fmt.dur(day.total_seconds)}`)}"></div>`;
           }).join('')}
         </div>
       </div>
@@ -2322,8 +2426,11 @@ function renderThisMonthDetail({ summary, projects }) {
   const rows = monthProjectRows(projects);
   const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
   const activeProjectCount = summary.month_project_count || rows.length;
-  const today = new Date();
-  const average = total > 0 ? Math.round(total / today.getDate()) : 0;
+  const monthDate = selectedMonthDate(summary);
+  const dayCount = summary.selected_month_is_current
+    ? new Date().getDate()
+    : new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const average = total > 0 ? Math.round(total / dayCount) : 0;
   const buckets = new Map();
   rows.forEach(project => {
     const seconds = project.month_seconds || 0;
@@ -2350,7 +2457,7 @@ function renderThisMonthDetail({ summary, projects }) {
       <div>
         <div class="detail-section-title">Category breakdown</div>
         ${categories.length === 0
-          ? '<div class="detail-empty">No category activity this month.</div>'
+          ? `<div class="detail-empty">No category activity in ${escapeHtml(selectedMonthLabel(summary))}.</div>`
           : `<div class="detail-list">
               ${categories.map(category => {
                 const pct = total > 0 ? (category.total_seconds / total) * 100 : 0;
@@ -2402,14 +2509,15 @@ function renderStreakDetail({ summary, year_daily }) {
 }
 
 function renderDetail(kind, data) {
+  const monthName = selectedMonthLabel(data.summary || {});
   if (kind === 'top-project') {
-    return { title: 'Top Project', subtitle: 'All active projects this month', body: renderTopProjectDetail(data) };
+    return { title: 'Top Project', subtitle: `All active projects in ${monthName}`, body: renderTopProjectDetail(data) };
   }
   if (kind === 'best-day') {
-    return { title: 'Best Day', subtitle: 'Top days and the current month shape', body: renderBestDayDetail(data) };
+    return { title: 'Best Day', subtitle: `Top days and the ${monthName} shape`, body: renderBestDayDetail(data) };
   }
   if (kind === 'this-month') {
-    return { title: 'This Month', subtitle: 'Monthly total, pace, and category mix', body: renderThisMonthDetail(data) };
+    return { title: 'Month', subtitle: `${monthName} total, pace, and category mix`, body: renderThisMonthDetail(data) };
   }
   if (kind === 'streak') {
     return { title: 'Streak', subtitle: 'Current run and recent active days', body: renderStreakDetail(data) };
@@ -2913,8 +3021,12 @@ async function clearPhantoms(){
 
 async function load() {
   try {
-    const res  = await fetch('/api/data');
+    const monthKey = currentMonthStateKey();
+    const res  = await fetch(`/api/data?month=${encodeURIComponent(monthKey)}`);
     const data = await res.json();
+    if (data?.summary?.selected_month) {
+      dashboardMonthState.selectedMonth = data.summary.selected_month;
+    }
     latestDashboardData = data;
     render(data);
     document.getElementById('updatedAt').textContent =
@@ -2932,7 +3044,9 @@ function lastMonthPace(yearDaily, today = new Date()) {
   }
   const y = today.getFullYear();
   const m = today.getMonth();
-  const dayOfMonth = today.getDate();
+  const dayOfMonth = monthKeyFromDate(today) === currentMonthKey()
+    ? new Date().getDate()
+    : new Date(y, m + 1, 0).getDate();
   const iso = (d) => {
     const yy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -2987,6 +3101,7 @@ function render(data) {
   }
   syncCategoryOptions(data.category_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
+  updateMonthNav(summary);
 
   // New data invalidates any previously-rendered settings view.
   // It will be re-rendered next time the user switches to it.
@@ -3015,7 +3130,12 @@ function render(data) {
   const todaySessionCount = summary.today_session_count || 0;
   const todayProjectCount = summary.today_project_count || 0;
 
-  const pace = lastMonthPace(year_daily);
+  const selectedMonth = selectedMonthDate(summary);
+  const monthName = selectedMonthLabel(summary);
+  const monthSub = summary.selected_month_is_current ? 'this month' : monthName;
+  const monthlyProjects = monthProjectRows(projects);
+  const monthlyProjectCount = summary.month_project_count || monthlyProjects.length;
+  const pace = lastMonthPace(year_daily, selectedMonth);
   let paceChip;
   if (!pace) {
     paceChip = `<div class="card-chip">— vs last month</div>`;
@@ -3037,33 +3157,29 @@ function render(data) {
   }
 
   // Top project this month (uses month_seconds field added server-side)
-  const topProject = [...projects]
-    .filter(p => (p.month_seconds || 0) > 0)
-    .sort((a, b) => (b.month_seconds || 0) - (a.month_seconds || 0))[0];
+  const topProject = monthlyProjects[0];
   const topProjectShare = topProject && summary.month_seconds > 0
     ? Math.round((topProject.month_seconds / summary.month_seconds) * 100)
     : 0;
 
   // Best day this month from year_daily
-  const now = new Date();
-  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-`;
-  const bestDay = (year_daily || [])
-    .filter(r => r && r.day && r.day.startsWith(monthPrefix) && (r.total_seconds || 0) > 0)
+  const todayKey = localDateKey(new Date());
+  const bestDay = currentMonthDays(year_daily, selectedMonth)
+    .filter(r => (r.total_seconds || 0) > 0)
     .reduce((acc, r) => (!acc || r.total_seconds > acc.total_seconds ? r : acc), null);
   let bestDayValue, bestDayChip, bestDaySub;
   if (!bestDay) {
     bestDayValue = '—';
     bestDayChip = `<div class="card-chip">No activity yet</div>`;
-    bestDaySub = 'this month';
+    bestDaySub = monthSub;
   } else {
     const bdDate = new Date(bestDay.day + 'T00:00:00');
     const bdLabel = bdDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     bestDayValue = fmt.dur(bestDay.total_seconds);
     bestDaySub = bdLabel;
     bestDayChip = bestDay.day === todayKey
       ? `<div class="card-chip card-chip--record">Today's the one</div>`
-      : `<div class="card-chip">Best day this month</div>`;
+      : `<div class="card-chip">Best day in ${monthName}</div>`;
   }
 
   document.getElementById('appDashboard').innerHTML = `
@@ -3076,7 +3192,7 @@ function render(data) {
              <div class="card-sub"><span class="proj-dot" style="background:${projectColor(topProject, 0)}"></span>${topProject.category_label || 'Uncategorized'}</div>`
           : `<div class="card-value">—</div>
              <div class="card-chip">No projects yet</div>
-             <div class="card-sub">this month</div>`}
+             <div class="card-sub">${monthSub}</div>`}
       </div>
       <div class="card" role="button" tabindex="0" data-detail="best-day">
         <div class="card-label">Best Day</div>
@@ -3085,10 +3201,10 @@ function render(data) {
         <div class="card-sub">${bestDaySub}</div>
       </div>
       <div class="card" role="button" tabindex="0" data-detail="this-month">
-        <div class="card-label">This Month</div>
+        <div class="card-label">${summary.selected_month_is_current ? 'This Month' : 'Month'}</div>
         <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
         ${paceChip}
-        <div class="card-sub">${summary.month_project_count} project${summary.month_project_count !== 1 ? 's' : ''} · this month</div>
+        <div class="card-sub">${monthlyProjectCount} project${monthlyProjectCount !== 1 ? 's' : ''} · ${monthSub}</div>
       </div>
       <div class="card" role="button" tabindex="0" data-detail="streak">
         <div class="card-label">Streak</div>
@@ -3160,7 +3276,7 @@ function render(data) {
     <div class="chart-card chart-card-wide">
       <div class="section-head">
         <h3 class="section-title">By <em>category</em></h3>
-        <span class="section-meta">hours per category</span>
+        <span class="section-meta">hours in ${escapeHtml(monthName)}</span>
       </div>
       <div class="chart-wrap"><div id="categoryChart"></div></div>
     </div>
@@ -3168,7 +3284,7 @@ function render(data) {
     <div class="chart-card chart-card-wide">
       <div class="section-head">
         <h3 class="section-title">By <em>project</em></h3>
-        <span class="section-meta">top 10 · hours</span>
+        <span class="section-meta">top 10 in ${escapeHtml(monthName)}</span>
       </div>
       <div class="chart-wrap"><div id="projectChart"></div></div>
     </div>
@@ -3314,8 +3430,8 @@ function render(data) {
   renderActivityHeatmap(year_daily, year_hourly);
   renderWeeklyGoal(summary);
   renderDailyGoal(summary);
-  renderProjectChart(projects);
-  renderCategoryChart(projects);
+  renderProjectChart(projects, summary);
+  renderCategoryChart(projects, summary);
 }
 
 function updateSessionStatus(summary) {
@@ -4003,20 +4119,19 @@ function renderDailyGoal(summary) {
   loadDailyTarget(summary);
 }
 
-function renderProjectChart(projects) {
+function renderProjectChart(projects, summary = {}) {
   const mount = document.getElementById('projectChart');
   if (!mount) return;
-  if (projects.length === 0) {
-    mount.innerHTML = '<div class="chart-empty">No project data yet</div>';
+  const top = monthProjectRows(projects).slice(0, 10);
+  if (top.length === 0) {
+    mount.innerHTML = `<div class="chart-empty">No project data in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
     return;
   }
-
-  const top = projects.slice(0, 10);
-  const totalSeconds = top.reduce((sum, project) => sum + (project.total_seconds || 0), 0) || 1;
+  const totalSeconds = top.reduce((sum, project) => sum + (project.month_seconds || 0), 0) || 1;
   const chartColors = top.map((_, index) => projectChartColor(index, top.length));
   let start = 0;
   const segments = top.map((project, index) => {
-    const share = (project.total_seconds || 0) / totalSeconds;
+    const share = (project.month_seconds || 0) / totalSeconds;
     const end = start + (share * 100);
     const segment = `${chartColors[index]} ${start}% ${end}%`;
     start = end;
@@ -4029,12 +4144,12 @@ function renderProjectChart(projects) {
       <div class="donut-chart" style="background:conic-gradient(${segments.join(', ')})">
         <div class="donut-hole">
           <div class="donut-total">${totalHours}h</div>
-          <div class="donut-caption">Top 10 total</div>
+          <div class="donut-caption">${escapeHtml(selectedMonthLabel(summary))}</div>
         </div>
       </div>
       <div class="donut-legend">
         ${top.map((project, index) => {
-          const hours = Math.round((project.total_seconds / 3600) * 10) / 10;
+          const hours = Math.round(((project.month_seconds || 0) / 3600) * 10) / 10;
           return `
             <div class="legend-item" title="${escapeHtml(project.project_name)}">
               <span class="legend-swatch" style="background:${chartColors[index]}"></span>
@@ -4048,13 +4163,13 @@ function renderProjectChart(projects) {
   `;
 }
 
-function renderCategoryChart(projects) {
+function renderCategoryChart(projects, summary = {}) {
   const mount = document.getElementById('categoryChart');
   if (!mount) return;
 
   const buckets = new Map();
   projects.forEach(project => {
-    const seconds = project.total_seconds || 0;
+    const seconds = project.month_seconds || 0;
     if (seconds <= 0) return;
     const key = project.category_key || '__uncategorized';
     const meta = project.category_key ? CATEGORY_BY_KEY[project.category_key] : null;
@@ -4071,7 +4186,7 @@ function renderCategoryChart(projects) {
     .sort((a, b) => b.total_seconds - a.total_seconds);
 
   if (entries.length === 0) {
-    mount.innerHTML = '<div class="chart-empty">No category data yet</div>';
+    mount.innerHTML = `<div class="chart-empty">No category data in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
     return;
   }
 
@@ -4091,7 +4206,7 @@ function renderCategoryChart(projects) {
       <div class="donut-chart" style="background:conic-gradient(${segments.join(', ')})">
         <div class="donut-hole">
           <div class="donut-total">${totalHours}h</div>
-          <div class="donut-caption">All categories</div>
+          <div class="donut-caption">${escapeHtml(selectedMonthLabel(summary))}</div>
         </div>
       </div>
       <div class="donut-legend">
