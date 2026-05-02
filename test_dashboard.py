@@ -232,19 +232,19 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
 
     def test_friday_week_range_uses_previous_friday_through_thursday(self):
         self.assertEqual(
-            dashboard.get_friday_week_range(date(2026, 4, 24)),
+            dashboard.get_week_range(date(2026, 4, 24), week_start_weekday=4),
             (date(2026, 4, 24), date(2026, 4, 30)),
         )
         self.assertEqual(
-            dashboard.get_friday_week_range(date(2026, 4, 27)),
+            dashboard.get_week_range(date(2026, 4, 27), week_start_weekday=4),
             (date(2026, 4, 24), date(2026, 4, 30)),
         )
         self.assertEqual(
-            dashboard.get_friday_week_range(date(2026, 4, 30)),
+            dashboard.get_week_range(date(2026, 4, 30), week_start_weekday=4),
             (date(2026, 4, 24), date(2026, 4, 30)),
         )
         self.assertEqual(
-            dashboard.get_friday_week_range(date(2026, 5, 1)),
+            dashboard.get_week_range(date(2026, 5, 1), week_start_weekday=4),
             (date(2026, 5, 1), date(2026, 5, 7)),
         )
 
@@ -306,6 +306,86 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
         self.assertEqual(after_daily_changes["goal_hours"], baseline["goal_hours"])
         self.assertFalse(after_daily_changes["has_target"])
         self.assertNotIn("goal_day_count", after_daily_changes)
+
+    # ── configurable week start ───────────────────────────────────
+
+    def test_week_range_defaults_to_friday(self):
+        self.assertEqual(
+            dashboard.get_week_range(date(2026, 4, 27)),
+            (date(2026, 4, 24), date(2026, 4, 30)),
+        )
+
+    def test_week_range_monday_start(self):
+        self.assertEqual(
+            dashboard.get_week_range(date(2026, 4, 27), week_start_weekday=0),
+            (date(2026, 4, 27), date(2026, 5, 3)),
+        )
+
+    def test_week_range_sunday_start(self):
+        self.assertEqual(
+            dashboard.get_week_range(date(2026, 4, 27), week_start_weekday=6),
+            (date(2026, 4, 26), date(2026, 5, 2)),
+        )
+
+    def test_week_range_saturday_start(self):
+        self.assertEqual(
+            dashboard.get_week_range(date(2026, 4, 27), week_start_weekday=5),
+            (date(2026, 4, 25), date(2026, 5, 1)),
+        )
+
+    def test_app_settings_set_and_get(self):
+        dashboard.set_app_setting("week_start_weekday", "2")
+        self.assertEqual(dashboard.get_app_setting("week_start_weekday"), "2")
+
+    def test_app_settings_default_when_missing(self):
+        self.assertEqual(dashboard.get_app_setting("nonexistent", "pancakes"), "pancakes")
+
+    def test_app_settings_none_default(self):
+        self.assertIsNone(dashboard.get_app_setting("never_set"))
+
+    def test_get_all_app_settings_returns_dict(self):
+        dashboard.set_app_setting("a", "1")
+        dashboard.set_app_setting("b", "2")
+        settings = dashboard.get_all_app_settings()
+        self.assertEqual(settings.get("a"), "1")
+        self.assertEqual(settings.get("b"), "2")
+
+    def test_weekly_target_includes_week_start_weekday(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Test", datetime(2026, 4, 24, 10, 0).timestamp(),
+                 datetime(2026, 4, 24, 12, 0).timestamp(),
+                 datetime(2026, 4, 24, 12, 0).timestamp(), 7200.0),
+            )
+            conn.commit()
+
+        target = dashboard.get_weekly_target("2026-04-27")
+        self.assertEqual(target["week_start_weekday"], 4)
+        self.assertEqual(target["week_start_weekday_name"], "Friday")
+
+    def test_weekly_target_respects_custom_week_start(self):
+        dashboard.set_app_setting("week_start_weekday", "0")  # Monday
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Test", datetime(2026, 4, 27, 10, 0).timestamp(),
+                 datetime(2026, 4, 27, 12, 0).timestamp(),
+                 datetime(2026, 4, 27, 12, 0).timestamp(), 7200.0),
+            )
+            conn.commit()
+
+        target = dashboard.get_weekly_target("2026-04-27")
+        self.assertEqual(target["week_start"], "2026-04-27")
+        self.assertEqual(target["week_end"], "2026-05-03")
+        self.assertEqual(target["week_start_weekday"], 0)
+        self.assertEqual(target["week_start_weekday_name"], "Monday")
 
 
 class DashboardRolloverTests(unittest.TestCase):

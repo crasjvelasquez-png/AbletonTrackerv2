@@ -22,6 +22,10 @@ from tracker import (
     STATE_PAUSED,
     STATE_TRACKING,
     day_seconds,
+    is_ableton_running,
+    streak_days,
+    week_seconds,
+    yesterday_seconds,
     Tracker,
 )
 
@@ -57,11 +61,43 @@ def fmt_quarter(seconds: float) -> str:
     return _QUARTER_GLYPH[frac]
 
 
+def fmt_goal_time(seconds: float, goal_hours: float | None) -> str:
+    """Format time with optional goal suffix like '1¾/3h'."""
+    frac = fmt_quarter(seconds)
+    if goal_hours is not None and goal_hours > 0:
+        g = f"{int(goal_hours)}h" if goal_hours == int(goal_hours) else f"{goal_hours}h"
+        prefix = frac if frac else "0m"
+        return f"{prefix}/{g}"
+    return frac if frac else "0m"
+
+
 def today_seconds() -> float:
     try:
         return day_seconds(date.today())
     except Exception:
         return 0
+
+
+def _get_default_goals() -> tuple[float | None, float | None]:
+    try:
+        from dashboard import get_app_setting
+        daily = get_app_setting("default_daily_goal_hours")
+        weekly = get_app_setting("default_weekly_goal_hours")
+        dh = float(daily) if daily else None
+        wh = float(weekly) if weekly else None
+        return dh, wh
+    except Exception:
+        return None, None
+
+
+def _find_ableton_app() -> str | None:
+    from glob import glob
+    candidates = sorted(glob("/Applications/Ableton Live *.app"))
+    if candidates:
+        return candidates[-1]
+    if Path("/Applications/Ableton Live.app").exists():
+        return "/Applications/Ableton Live.app"
+    return None
 
 
 class TrackerThread(threading.Thread):
@@ -122,7 +158,7 @@ class DashboardProcess:
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
             )
-            time.sleep(0.8)  # let server bind before browser hits it
+            time.sleep(0.8)
         webbrowser.open(DASHBOARD_URL)
 
     def stop(self):
@@ -137,20 +173,34 @@ class AbletonTrackerApp(rumps.App):
         self.tracker_thread = TrackerThread()
         self.dashboard = DashboardProcess()
 
+        self.open_ableton_item = rumps.MenuItem(
+            "Open Ableton", callback=self.open_ableton
+        )
         self.status_item = rumps.MenuItem("Idle")
         self.status_item.set_callback(None)
         self.today_item = rumps.MenuItem("Today: 0m")
         self.today_item.set_callback(None)
+        self.yesterday_item = rumps.MenuItem("Yesterday: —")
+        self.yesterday_item.set_callback(None)
+        self.week_item = rumps.MenuItem("This week: 0m")
+        self.week_item.set_callback(None)
+        self.streak_item = rumps.MenuItem("Streak: —")
+        self.streak_item.set_callback(None)
         self.pause_item = rumps.MenuItem(
             "Pause tracking" if not PAUSE_FILE.exists() else "Resume tracking",
             callback=self.toggle_pause,
         )
 
         self.menu = [
+            self.open_ableton_item,
+            None,
             self.status_item,
             self.today_item,
+            self.yesterday_item,
+            self.week_item,
+            self.streak_item,
             None,
-            rumps.MenuItem("Open dashboard", callback=self.open_dashboard),
+            rumps.MenuItem("Open Dashboard", callback=self.open_dashboard),
             self.pause_item,
             None,
             rumps.MenuItem("Quit", callback=self.quit_app),
@@ -165,46 +215,103 @@ class AbletonTrackerApp(rumps.App):
         paused = PAUSE_FILE.exists()
         self.pause_item.title = "Resume tracking" if paused else "Pause tracking"
 
+        daily_goal, weekly_goal = _get_default_goals()
+        today = today_seconds()
+        yesterday = yesterday_seconds()
+        streak = 0
+        week = 0.0
+        try:
+            streak = streak_days()
+            week = week_seconds()
+        except Exception:
+            pass
+
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error
         if failures > 0:
             self.title = "⚠"
             trunc = (last_error or "unknown")[:60]
             self.status_item.title = f"Error ({failures}): {trunc}"
-            self.today_item.title = f"Today: {fmt_dur(today_seconds())}"
+            self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
+            self.yesterday_item.title = f"Yesterday: {fmt_dur(yesterday)}"
+            self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
+            self._update_streak(streak)
+            self._update_open_ableton(False)
             return
 
         status = self.tracker_thread.status()
-        today = today_seconds()
-        frac = fmt_quarter(today)
-        suffix = f" {frac}" if frac else ""
+        ableton_up = status.state not in (STATE_ABLETON_CLOSED,)
 
         if status.state == STATE_PAUSED:
-            self.title = f"⏸{suffix}"
+            self.title = self._build_title("○", today, daily_goal, streak, active=False)
             self.status_item.title = "Paused"
         elif status.state == STATE_IDLE_PAUSED:
-            self.title = f"⏸{suffix}"
+            self.title = self._build_title("○", today, daily_goal, streak, active=False)
             idle_seconds = int(status.hid_idle_seconds)
             if idle_seconds < 60:
                 idle_label = f"{idle_seconds}s"
             else:
                 idle_label = f"{max(1, idle_seconds // 60)}m"
             project = status.resume_hint_project or "last project"
-            self.status_item.title = f"Paused: idle {idle_label} - {project}"
+            self.status_item.title = f"Idle {idle_label} — {project}"
         elif status.state == STATE_TRACKING and status.project_name:
-            self.title = f"●{suffix}"
-            self.status_item.title = f"Recording: {status.project_name}"
+            self.title = self._build_title("●", today, daily_goal, 0, active=True)
+            self.status_item.title = f"Working on: {status.project_name}"
         elif status.state == STATE_ABLETON_OPEN:
-            self.title = f"◐{suffix}"
+            self.title = self._build_title("◐", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton open (no project)"
         elif status.state == STATE_ABLETON_CLOSED:
-            self.title = f"○{suffix}"
+            self.title = self._build_title("○", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton not running"
         else:
-            self.title = f"○{suffix}"
+            self.title = self._build_title("○", today, daily_goal, streak, active=False)
             self.status_item.title = "Idle"
 
-        self.today_item.title = f"Today: {fmt_dur(today)}"
+        self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
+        self.yesterday_item.title = f"Yesterday: {fmt_dur(yesterday)}"
+        self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
+        self._update_streak(streak)
+        self._update_open_ableton(not ableton_up)
+
+    def _build_title(
+        self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
+    ) -> str:
+        parts = icon
+        time_str = fmt_goal_time(seconds, goal)
+        parts = f"{icon} {time_str}"
+        if streak > 0 and not active:
+            parts = f"{icon} {time_str} 💿{streak}"
+        return parts
+
+    def _update_streak(self, streak: int):
+        if streak > 0:
+            day_word = "day" if streak == 1 else "days"
+            self.streak_item.title = f"💿 Streak: {streak} {day_word}"
+        else:
+            self.streak_item.title = "Streak: —"
+
+    def _update_open_ableton(self, show: bool):
+        if show:
+            self.open_ableton_item.title = "Open Ableton"
+            self.open_ableton_item.set_callback(self.open_ableton)
+        else:
+            self.open_ableton_item.title = "Ableton is running"
+            self.open_ableton_item.set_callback(None)
+
+    def open_ableton(self, _):
+        app_path = _find_ableton_app()
+        if app_path:
+            subprocess.Popen(
+                ["open", "-a", app_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            subprocess.Popen(
+                ["open", "-a", "Ableton Live"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
     def open_dashboard(self, _):
         self.dashboard.open()

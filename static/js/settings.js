@@ -16,6 +16,16 @@
 
   const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
   const DEFAULT_NEW_COLOR = '#7C5CFF';
+  const WEEK_DAYS = [
+    { name: 'Monday',    abbrev: 'Mon', jsDay: 1 },
+    { name: 'Tuesday',   abbrev: 'Tue', jsDay: 2 },
+    { name: 'Wednesday', abbrev: 'Wed', jsDay: 3 },
+    { name: 'Thursday',  abbrev: 'Thu', jsDay: 4 },
+    { name: 'Friday',    abbrev: 'Fri', jsDay: 5 },
+    { name: 'Saturday',  abbrev: 'Sat', jsDay: 6 },
+    { name: 'Sunday',    abbrev: 'Sun', jsDay: 0 },
+  ];
+  let currentWeekStartDay = null;
 
   let inited = false;
   let lastData = null;
@@ -168,6 +178,79 @@
 
     // Bind color fields inside editors
     $all('[data-category-editor]', grid).forEach(editor => window.bindColorField(editor));
+  }
+
+  // ── week refresh day ──────────────────────────────────────────────
+  function renderWeekStartPicker() {
+    const root = $('[data-settings-root]');
+    const picker = $('[data-weekday-picker]', root);
+    if (!picker) return;
+
+    picker.innerHTML = WEEK_DAYS.map(day => {
+      const active = currentWeekStartDay === String(day.jsDay);
+      return `
+        <button class="weekday-option${active ? ' is-active' : ''}"
+                type="button" role="radio"
+                data-weekday-value="${day.jsDay}"
+                aria-checked="${active}">
+          <span class="weekday-option-abbrev">${day.abbrev}</span>
+          <span class="weekday-option-day">${day.name}</span>
+        </button>
+      `;
+    }).join('');
+
+    picker.querySelectorAll('[data-weekday-value]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const value = btn.dataset.weekdayValue;
+        try {
+          await window.postJson('/api/app-settings', {
+            key: 'week_start_weekday',
+            value: value,
+          });
+          currentWeekStartDay = String(value);
+          syncWeekStartPicker();
+          syncWeekRefreshMeta();
+          window.toast(`Week starts on ${WEEK_DAYS.find(d => String(d.jsDay) === String(value)).name}`);
+          window.load?.();
+        } catch (e) {
+          window.toast('Failed to save week start day');
+        }
+      });
+    });
+  }
+
+  function syncWeekStartPicker() {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    $all('[data-weekday-value]', root).forEach(btn => {
+      const active = btn.dataset.weekdayValue === currentWeekStartDay;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-checked', String(active));
+    });
+  }
+
+  function syncWeekRefreshMeta() {
+    const root = $('[data-settings-root]');
+    const meta = $('[data-week-refresh-meta]', root);
+    if (!meta) return;
+    const day = WEEK_DAYS.find(d => String(d.jsDay) === currentWeekStartDay);
+    if (day) {
+      meta.textContent = `resets ${day.name} morning`;
+    } else {
+      meta.textContent = 'not set';
+    }
+  }
+
+  async function loadWeekStartDay() {
+    try {
+      const res = await fetch('/api/app-settings');
+      const data = await res.json();
+      currentWeekStartDay = (data && data.week_start_weekday != null) ? String(data.week_start_weekday) : '5'; // Friday=5 default
+    } catch (_) {
+      currentWeekStartDay = '5';
+    }
+    renderWeekStartPicker();
+    syncWeekRefreshMeta();
   }
 
   function bindCategoryDelegation(root) {
@@ -348,18 +431,17 @@
     if (!root) return;
     const input = $('[data-weekly-input]', root);
     const progress = $('[data-weekly-progress]', root);
-    const stored = Number(localStorage.getItem(window.WEEKLY_GOAL_STORAGE_KEY));
-    const goal = Number.isFinite(stored) && stored > 0 ? stored : null;
     try {
       const res = await fetch(`/api/weekly-target?date=${todayIso()}`);
       const data = await res.json();
+      const goalHours = (data.has_target && Number.isFinite(data.goal_hours) && data.goal_hours > 0) ? data.goal_hours : null;
       if (input && document.activeElement !== input) {
-        input.value = goal != null ? goal : '';
+        input.value = goalHours != null ? goalHours : '';
       }
       if (progress) {
         const range = formatWeekRange(data.week_start, data.week_end);
-        if (goal != null) {
-          progress.textContent = `${fmtHours(data.progress_seconds)} of ${goal}h · ${range}`;
+        if (goalHours != null) {
+          progress.textContent = `${fmtHours(data.progress_seconds)} of ${goalHours}h · ${range}`;
         } else {
           progress.textContent = `${fmtHours(data.progress_seconds)} logged · ${range}`;
         }
@@ -417,7 +499,6 @@
       setFeedback(feedback, `Saved · ${fmtHours(result.progress_seconds)} of ${result.goal_hours}h today`, 'success');
       await refreshDaily();
       updateGoalsMeta();
-      // Refresh dashboard data so the daily target card reflects the change.
       window.load?.();
     } catch (error) {
       setFeedback(feedback, error.message || 'Failed to save daily target', 'error');
@@ -440,7 +521,7 @@
     setFeedback(feedback, '');
     try {
       const normalized = Math.round(value * 10) / 10;
-      localStorage.setItem(window.WEEKLY_GOAL_STORAGE_KEY, String(normalized));
+      await window.postJson('/api/weekly-target', { goal_hours: normalized });
       setFeedback(feedback, `Saved · target is ${normalized}h per week`, 'success');
       await refreshWeekly();
       updateGoalsMeta();
@@ -545,6 +626,7 @@
     bindCategoryDelegation(root);
     syncThemePicker();
     refreshGoals();
+    loadWeekStartDay();
   }
 
   function render(data) {

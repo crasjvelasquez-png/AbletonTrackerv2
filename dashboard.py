@@ -20,6 +20,7 @@ from tracker import (
     cleanup_phantom_sessions,
     condense_recent_sessions,
     count_phantom_sessions,
+    get_project_name,
     is_ableton_running,
 )
 
@@ -45,6 +46,11 @@ LEGACY_CATEGORY_KEYS = [
     "mastering",
     "instrumentation",
 ]
+WEEKDAY_NAMES = [
+    "Monday", "Tuesday", "Wednesday", "Thursday",
+    "Friday", "Saturday", "Sunday",
+]
+DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
 
 
 # ─────────────────────────────────────────────────────────────
@@ -185,10 +191,62 @@ def ensure_daily_metrics_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_app_settings_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key         TEXT PRIMARY KEY,
+            value       TEXT NOT NULL,
+            updated_at  INTEGER NOT NULL
+        )
+        """
+    )
+
+
+def get_app_setting(key: str, default: str | None = None) -> str | None:
+    if not DB_PATH.exists():
+        return default
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+
+def set_app_setting(key: str, value: str) -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(
+            """
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES (?, ?, strftime('%s', 'now'))
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (key, value),
+        )
+        conn.commit()
+
+
+def get_all_app_settings() -> dict[str, str]:
+    if not DB_PATH.exists():
+        return {}
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT key, value FROM app_settings ORDER BY key"
+        ).fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_category_definitions_table(conn)
     ensure_project_category_table(conn)
     ensure_daily_metrics_table(conn)
+    ensure_app_settings_table(conn)
     purge_legacy_categories(conn)
 
 
@@ -496,8 +554,11 @@ def parse_month_key(value: str) -> date:
         raise ValueError("invalid month") from exc
 
 
-def get_friday_week_range(target_date: date) -> tuple[date, date]:
-    week_start = target_date - timedelta(days=(target_date.weekday() - 4) % 7)
+def get_week_range(target_date: date, week_start_weekday: int | None = None) -> tuple[date, date]:
+    if week_start_weekday is None:
+        raw = get_app_setting("week_start_weekday")
+        week_start_weekday = int(raw) if raw is not None else DEFAULT_WEEK_START_WEEKDAY
+    week_start = target_date - timedelta(days=(target_date.weekday() - week_start_weekday) % 7)
     return week_start, week_start + timedelta(days=6)
 
 
@@ -581,6 +642,13 @@ def get_daily_target(date_value: str) -> dict:
         goal_hours = None
         if row and row["goal_hours"] is not None:
             goal_hours = round(float(row["goal_hours"]) * 10) / 10
+        if goal_hours is None:
+            default_raw = get_app_setting("default_daily_goal_hours")
+            if default_raw is not None:
+                try:
+                    goal_hours = round(float(default_raw) * 10) / 10
+                except (ValueError, TypeError):
+                    goal_hours = None
         return {
             "date": date_key,
             "goal_hours": goal_hours,
@@ -613,27 +681,35 @@ def set_daily_target(date_value: str, goal_hours: object) -> dict:
             (target_date.isoformat(), normalized_goal),
         )
         conn.commit()
+    set_app_setting("default_daily_goal_hours", str(normalized_goal))
     return get_daily_target(target_date.isoformat())
 
 
 def get_weekly_target(date_value: str = "") -> dict:
     target_date = parse_iso_date(date_value) if date_value else date.today()
-    week_start, week_end = get_friday_week_range(target_date)
+    week_start_weekday = int(get_app_setting("week_start_weekday") or DEFAULT_WEEK_START_WEEKDAY)
+    week_start, week_end = get_week_range(target_date, week_start_weekday)
     start_key = week_start.isoformat()
     end_key = week_end.isoformat()
-    reset_at = datetime.combine(week_end + timedelta(days=1), datetime.min.time())
-    seconds_until_reset = max(0, int(round(reset_at.timestamp() - datetime.now().timestamp())))
+
+    default_raw = get_app_setting("default_weekly_goal_hours")
+    goal_hours = None
+    if default_raw is not None:
+        try:
+            goal_hours = round(float(default_raw) * 10) / 10
+        except (ValueError, TypeError):
+            goal_hours = None
 
     base = {
         "week_start": start_key,
         "week_end": end_key,
         "weekly_start_date": start_key,
         "weekly_end_date": end_key,
-        "reset_at": reset_at.isoformat(),
-        "seconds_until_reset": seconds_until_reset,
-        "goal_hours": 0,
+        "goal_hours": goal_hours or 0,
         "progress_seconds": 0,
-        "has_target": False,
+        "has_target": goal_hours is not None and goal_hours > 0,
+        "week_start_weekday": week_start_weekday,
+        "week_start_weekday_name": WEEKDAY_NAMES[week_start_weekday],
     }
 
     if not DB_PATH.exists():
@@ -642,10 +718,26 @@ def get_weekly_target(date_value: str = "") -> dict:
     with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
+        reset_at = datetime.combine(week_end + timedelta(days=1), datetime.min.time())
+        seconds_until_reset = max(0, int(round(reset_at.timestamp() - datetime.now().timestamp())))
         return {
             **base,
+            "reset_at": reset_at.isoformat(),
+            "seconds_until_reset": seconds_until_reset,
             "progress_seconds": get_range_progress_seconds(conn, week_start, week_end),
         }
+
+
+def set_weekly_target(goal_hours: object) -> dict:
+    try:
+        normalized_goal = round(float(goal_hours) * 10) / 10
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid goal") from exc
+    if normalized_goal <= 0 or normalized_goal > 168:
+        raise ValueError("invalid goal")
+    set_app_setting("default_weekly_goal_hours", str(normalized_goal))
+    return get_weekly_target()
+
 
 # ─────────────────────────────────────────────────────────────
 #  Data layer
@@ -731,7 +823,8 @@ def get_stats(month_value: str = "") -> dict:
             recent = condense_recent_sessions(recent)[:60]
 
             today_str   = today.isoformat()
-            goal_week_start, goal_week_end = get_friday_week_range(today)
+            week_start_weekday = int(get_app_setting("week_start_weekday") or DEFAULT_WEEK_START_WEEKDAY)
+            goal_week_start, goal_week_end = get_week_range(today, week_start_weekday)
             month_start_key = selected_month_start.isoformat()
             month_end_key = selected_month_end.isoformat()
 
@@ -859,6 +952,9 @@ def get_stats(month_value: str = "") -> dict:
                     "week_seconds":   week_s,
                     "goal_week_start": goal_week_start.isoformat(),
                     "goal_week_end": goal_week_end.isoformat(),
+                    "week_start_weekday": week_start_weekday,
+                    "week_start_weekday_name": WEEKDAY_NAMES[week_start_weekday],
+                    "week_end_weekday_name": WEEKDAY_NAMES[(week_start_weekday + 6) % 7],
                     "month_seconds":  month_s,
                     "month_project_count": month_project_count,
                     "selected_month": selected_month_key,
@@ -872,6 +968,7 @@ def get_stats(month_value: str = "") -> dict:
                     "live_session_start_time": live_start_time,
                     "live_session_duration_seconds": live_duration_seconds,
                     "ableton_running": is_ableton_running(),
+                    "ableton_has_project": bool(get_project_name()),
                     "generated_at": now_ts,
                     "closed_session_count": closed_session_count,
                     "unsaved_closed_count": unsaved_closed_count,
@@ -2345,6 +2442,9 @@ const PROJECT_COLORS = [
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
 const WEEKLY_GOAL_STORAGE_KEY = 'ableton_tracker_weekly_goal_hours';
+const WEEK_START_DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DEFAULT_WEEK_START_BACKEND = 4;
+let WEEK_START_BACKEND_DAY = DEFAULT_WEEK_START_BACKEND;
 const DAILY_GOAL_STORAGE_KEY = 'ableton_tracker_daily_goal_hours';
 const THEME_STORAGE_KEY = 'ableton_tracker_theme';
 const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
@@ -2661,8 +2761,17 @@ function addDays(base, amount) {
   return d;
 }
 
-function startOfFridayWeek(base) {
-  return addDays(base, -((base.getDay() - 5 + 7) % 7));
+function startOfWeek(base) {
+  const jsDay = (WEEK_START_BACKEND_DAY + 1) % 7;
+  return addDays(base, -((base.getDay() - jsDay + 7) % 7));
+}
+
+function weekStartDayName() {
+  return WEEK_START_DAY_NAMES[WEEK_START_BACKEND_DAY] || 'Friday';
+}
+
+function weekEndDayName() {
+  return WEEK_START_DAY_NAMES[(WEEK_START_BACKEND_DAY + 6) % 7] || 'Thursday';
 }
 
 function shortDate(key) {
@@ -3309,6 +3418,9 @@ function render(data) {
   }
   syncCategoryOptions(data.category_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
+  if (summary.week_start_weekday != null) {
+    WEEK_START_BACKEND_DAY = summary.week_start_weekday;
+  }
 
   if (activeView === 'settings') {
     renderSettings(data);
@@ -3442,7 +3554,7 @@ function render(data) {
     <div class="chart-card chart-card-wide">
       <div class="section-head">
         <h3 class="section-title">Activity <em>calendar</em></h3>
-        <span class="section-meta">Friday to Thursday · browse week by week</span>
+        <span class="section-meta">${weekStartDayName()} to ${weekEndDayName()} · browse week by week</span>
       </div>
       <div class="chart-wrap"><div id="activityHeatmap"></div></div>
     </div>
@@ -3608,7 +3720,7 @@ function updateSessionStatus(summary) {
   let timerLabelText = 'Session';
   let timerBaseSeconds = 0;
 
-  if (summary?.live_project) {
+  if (summary?.ableton_has_project) {
     state = 'live';
     text = 'Live';
     indicator.className = 'session-status__indicator session-status__indicator--live';
@@ -3660,8 +3772,8 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
   const start = addDays(today, -364);
   const todayKey = localDateKey(today);
   const weeks = [];
-  let cursor = new Date(startOfFridayWeek(start));
-  const lastWeekStart = startOfFridayWeek(today);
+  let cursor = new Date(startOfWeek(start));
+  const lastWeekStart = startOfWeek(today);
 
   while (cursor <= lastWeekStart) {
     const days = [];
@@ -3680,7 +3792,7 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
   }
 
   if (weeks.length === 0) {
-    mount.innerHTML = '<div class="chart-empty">No Friday-to-Thursday weeks to show yet.</div>';
+    mount.innerHTML = `<div class="chart-empty">No ${weekStartDayName()}-to-${weekEndDayName()} weeks to show yet.</div>`;
     return;
   }
 
@@ -3752,7 +3864,7 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
 
     summaryEl.innerHTML = `
       <strong>${activeDays} active day${activeDays === 1 ? '' : 's'}</strong>
-      <span>${formatHoursNumber(totalHours)}h in this Friday-to-Thursday window</span>
+      <span>${formatHoursNumber(totalHours)}h in this ${weekStartDayName()}-to-${weekEndDayName()} window</span>
     `;
     weekLabelEl.textContent = `${shortRange(week.startKey, week.endKey)}${currentWeekIndex === weeks.length - 1 ? ' · current week' : ''}`;
 
@@ -3805,7 +3917,7 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
 
     footEl.textContent = peakDay
       ? `Peak this week: ${peakDay.date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} with ${formatHoursNumber(peakDay.value)}h.`
-      : 'No activity in this week yet. Use the arrows to browse older Friday-to-Thursday windows.';
+      : `No activity in this week yet. Use the arrows to browse older ${weekStartDayName()}-to-${weekEndDayName()} windows.`;
 
     prevBtn.disabled = currentWeekIndex === 0;
     nextBtn.disabled = currentWeekIndex === weeks.length - 1;
@@ -3957,7 +4069,7 @@ function renderWeeklyGoal(summary) {
     storageKey: WEEKLY_GOAL_STORAGE_KEY,
     fallbackGoalHours: 12,
     completedSeconds: summary.week_seconds || 0,
-    rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets Friday`,
+    rangeLabel: `${shortRange(summary.goal_week_start, summary.goal_week_end)} · resets ${weekStartDayName()}`,
     goalLabel: 'Weekly goal',
     remainingId: 'weeklyGoalRemaining',
     presets: [10, 20, 30, 40],
@@ -4188,6 +4300,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(get_weekly_target(date_value))
             except ValueError as exc:
                 self._json({"error": str(exc)}, status=400)
+        elif parsed.path == "/api/app-settings":
+            self._json(get_all_app_settings())
         else:
             body = _load_html().encode()
             self.send_response(200)
@@ -4288,6 +4402,36 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
                 return
             self._json(result)
+        elif self.path == "/api/weekly-target":
+            try:
+                payload = self._request_json()
+                if payload is None:
+                    self._json({"error": "request body is required"}, status=400)
+                    return
+                result = set_weekly_target(payload.get("goal_hours"))
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
+                return
+            self._json(result)
+        elif self.path == "/api/app-settings":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            key = (payload.get("key") or "").strip()
+            if not key:
+                self._json({"error": "key is required"}, status=400)
+                return
+            value = payload.get("value", "")
+            set_app_setting(key, str(value))
+            self._json({"ok": True, "key": key, "value": value})
         else:
             self._json({"error": "not found"}, status=404)
 

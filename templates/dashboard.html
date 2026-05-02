@@ -580,7 +580,7 @@ header{
 .heatmap-scale-row{display:inline-flex;align-items:center;gap:5px}
 .heatmap-swatch{
   width:14px;height:14px;border-radius:999px;border:none;
-  box-shadow:0 0 12px rgba(255,188,48,.22);
+  box-shadow:0 0 12px rgba(48,209,88,.22);
 }
 .heatmap-stage{
   padding:16px 16px 18px;overflow:hidden;border-radius:30px;
@@ -649,8 +649,15 @@ header{
 }
 .heatmap-cell:hover{background:rgba(255,255,255,.06);cursor:default}
 .heatmap-foot{
-  font-size:12px;color:var(--ink-4);
+  font-size:12px;color:var(--ink-4);line-height:1.5;
 }
+.heatmap-foot strong{color:var(--ink-2);font-weight:650}
+.heatmap-week-dots{display:flex;gap:6px;align-items:center}
+.heatmap-week-dot{width:7px;height:7px;border-radius:50%;background:rgba(120,120,128,.22);border:1.5px solid rgba(120,120,128,.22);transition:transform .15s ease}
+.heatmap-week-dot.is-active{background:var(--accent);border-color:var(--accent)}
+.heatmap-week-dot.is-today{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 22%,transparent)}
+.heatmap-message{font-size:12px;color:var(--ink-3);font-weight:500}
+.today-indicator{display:block;width:4px;height:4px;border-radius:50%;background:rgba(255,230,150,.9);margin:3px auto 0}
 .goal-shell{
   height:100%;
   display:grid;
@@ -673,8 +680,8 @@ header{
 .goal-ring{
   width:min(220px,100%);aspect-ratio:1;border-radius:50%;
   --target-progress-pct:0;
-  --target-accent:#0a84ff;
-  --target-glow:rgba(10,132,255,.22);
+  --target-accent:#aa4646;
+  --target-glow:rgba(170,70,70,.18);
   --target-glow-alpha:.18;
   position:relative;
   display:grid;place-items:center;
@@ -897,9 +904,9 @@ header{
   margin-top:2px;
   transition:color .3s ease;
 }
-.section-meta-note.is-far{color:#ff453a}
-.section-meta-note.is-mid{color:#ff9f0a}
-.section-meta-note.is-near{color:#0a84ff}
+.section-meta-note.is-far{color:#a05050}
+.section-meta-note.is-mid{color:#c89430}
+.section-meta-note.is-near{color:#7bc85a}
 .section-meta-note.is-met{color:#30d158}
 .daily-target-head{
   display:grid;
@@ -1618,6 +1625,55 @@ header{
   background:linear-gradient(135deg,#ffffff 0%,#ffffff 50%,#1c1c1e 50%,#1c1c1e 100%);
 }
 
+/* === Settings: weekly refresh === */
+.weekday-picker{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:14px;
+}
+.weekday-option{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:14px 12px;border-radius:18px;cursor:pointer;
+  background:var(--control-bg);border:1px solid var(--border);
+  font:inherit;color:var(--ink-2);font-weight:650;font-size:13px;
+  transition:border-color .18s ease, background .18s ease, transform .12s ease, box-shadow .18s ease;
+}
+.weekday-option:hover{
+  border-color:var(--border-strong);background:var(--control-bg-strong);
+}
+.weekday-option.is-active{
+  border-color:var(--accent);background:color-mix(in srgb, var(--accent) 8%, var(--control-bg));
+  color:var(--ink);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+  position:relative;
+}
+.weekday-option.is-active::after{
+  content:"";
+  position:absolute;top:8px;right:8px;
+  width:18px;height:18px;
+  background:var(--accent);
+  border-radius:50%;
+  display:grid;place-items:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+}
+.weekday-option.is-active::before{
+  content:"";
+  position:absolute;top:8px;right:8px;
+  width:18px;height:18px;
+  z-index:1;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:10px 10px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+}
+.weekday-option-day{
+  font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);
+}
+.weekday-option.is-active .weekday-option-day{
+  color:var(--accent);
+}
+.weekday-option-abbrev{
+  font-size:22px;font-weight:750;line-height:1.2;color:var(--ink);
+}
+
 /* === Settings: misc === */
 .empty-mini{
   padding:22px;border-radius:14px;text-align:center;
@@ -1795,6 +1851,7 @@ tbody tr:hover .row-del{opacity:1}
   .rings-row{grid-template-columns:1fr}
   .settings-grid{grid-template-columns:1fr}
   .settings-kpis{grid-template-columns:1fr}
+  .weekday-picker{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
   .goal-input-row{grid-template-columns:1fr}
@@ -1971,7 +2028,9 @@ const PROJECT_COLORS = [
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
 const THEME_STORAGE_KEY = 'ableton_tracker_theme';
-const WEEKLY_GOAL_STORAGE_KEY = 'ableton_tracker_weekly_visual_goal_hours';
+const WEEK_START_DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DEFAULT_WEEK_START_BACKEND = 4; // Friday in Python weekday()
+let WEEK_START_BACKEND_DAY = DEFAULT_WEEK_START_BACKEND; // 0=Mon ... 6=Sun (Python weekday)
 const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
 const CATEGORY_COLOR_PRESETS = [
   '#FF6B6B', '#FF9F43', '#FFD166', '#7BD389',
@@ -2354,8 +2413,17 @@ function addDays(base, amount) {
   return d;
 }
 
-function startOfFridayWeek(base) {
-  return addDays(base, -((base.getDay() - 5 + 7) % 7));
+function startOfWeek(base) {
+  const jsDay = (WEEK_START_BACKEND_DAY + 1) % 7; // convert Python weekday to JS getDay
+  return addDays(base, -((base.getDay() - jsDay + 7) % 7));
+}
+
+function weekStartDayName() {
+  return WEEK_START_DAY_NAMES[WEEK_START_BACKEND_DAY] || 'Friday';
+}
+
+function weekEndDayName() {
+  return WEEK_START_DAY_NAMES[(WEEK_START_BACKEND_DAY + 6) % 7] || 'Thursday';
 }
 
 function shortDate(key) {
@@ -2542,7 +2610,7 @@ function weeklyTargetRangeLabel(startKey, endKey) {
 }
 
 function humanWeeklyTargetLabel(startKey) {
-  const currentWeek = currentFridayWeekStartKey();
+  const currentWeek = currentWeekStartKey();
   const previousWeek = localDateKey(addDays(dateFromKey(currentWeek), -7));
   if (startKey === currentWeek) return 'Current week';
   if (startKey === previousWeek) return 'Last week';
@@ -2550,11 +2618,12 @@ function humanWeeklyTargetLabel(startKey) {
 }
 
 function buildWeeklyTargetModel(target) {
-  const weekStart = target?.week_start || currentFridayWeekStartKey();
+  const weekStart = target?.week_start || currentWeekStartKey();
   const weekEnd = target?.week_end || localDateKey(addDays(dateFromKey(weekStart), 6));
   const progressSeconds = Math.max(0, target?.progress_seconds || 0);
-  const savedWeeklyGoal = Number(localStorage.getItem(WEEKLY_GOAL_STORAGE_KEY));
-  const goalHours = clamp(Math.round(((Number.isFinite(savedWeeklyGoal) && savedWeeklyGoal > 0) ? savedWeeklyGoal : 20) * 10) / 10, 1, 100);
+  const goalHours = (Number.isFinite(target?.goal_hours) && target.goal_hours > 0)
+    ? clamp(Math.round(target.goal_hours * 10) / 10, 1, 100)
+    : 0;
   const hasGoal = goalHours > 0;
   const progressRatio = hasGoal ? progressSeconds / (goalHours * 3600) : 0;
   const tone = targetTone(progressRatio, hasGoal);
@@ -2835,7 +2904,7 @@ function bindDetailCards(data) {
       await loadDailyTargetHistory(dailyTargetState.viewedDate);
     }
     if (kind === 'weekly-target') {
-      await loadWeeklyTargetHistory(weeklyTargetState.currentWeekStartDate || currentFridayWeekStartKey());
+      await loadWeeklyTargetHistory(weeklyTargetState.currentWeekStartDate || currentWeekStartKey());
     }
     const detail = renderDetail(kind, data);
     if (!detail) return;
@@ -2881,17 +2950,20 @@ function targetTone(progressRatio, hasGoal = true) {
     return { className: 'is-empty', accent: '#8e8e93', glow: 'rgba(142,142,147,.12)', glowAlpha: 0.12, ratio: 0 };
   }
   const t = clamp(progressRatio, 0, 1);
-  const blue = [10, 132, 255];
-  const yellow = [255, 204, 0];
-  const red = [255, 69, 58];
-  const rgb = t < 0.5
-    ? mixColor(blue, yellow, t / 0.5)
-    : mixColor(yellow, red, (t - 0.5) / 0.5);
+  // Stay muted longer, then rush to bright green near the end
+  const easedT = Math.pow(t, 1.5);
+  const rgb = colorStops([
+    [170, 70, 70],   // muted red at 0%
+    [200, 130, 60],  // muted orange at ~33%
+    [210, 190, 70],  // muted yellow at ~66%
+    [48, 209, 88]    // bright green at 100%
+  ], easedT);
   const accent = rgbString(rgb);
-  let className = 'is-near';
-  if (t >= 0.66) className = 'is-far';
-  else if (t >= 0.33) className = 'is-mid';
-  const glowAlpha = Number((0.18 + Math.pow(t, 1.4) * 0.55).toFixed(2));
+  let className = 'is-far';
+  if (t >= 1) className = 'is-met';
+  else if (t >= 0.65) className = 'is-near';
+  else if (t >= 0.3) className = 'is-mid';
+  const glowAlpha = Number((0.12 + Math.pow(t, 1.8) * 0.6).toFixed(2));
   const glow = rgbaString(rgb, glowAlpha);
   return { className, accent, glow, glowAlpha, ratio: t };
 }
@@ -2909,7 +2981,8 @@ function goalRemainingText(goalSeconds, completedSeconds) {
 
 function formatResetCountdown(secondsUntilReset) {
   const seconds = Math.max(0, Math.round(Number(secondsUntilReset) || 0));
-  if (seconds <= 0) return 'Cycle resets now · new sprint starts Friday';
+  const dayName = weekStartDayName();
+  if (seconds <= 0) return `Cycle resets now · new sprint starts ${dayName}`;
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -2917,7 +2990,7 @@ function formatResetCountdown(secondsUntilReset) {
   if (days > 0) chunk = `${days}d ${hours}h`;
   else if (hours > 0) chunk = `${hours}h ${minutes}m`;
   else chunk = `${minutes}m`;
-  return `Resets Friday · ${chunk} left in this sprint`;
+  return `Resets ${dayName} · ${chunk} left in this sprint`;
 }
 
 function progressPercent(progressRatio, hasGoal = true) {
@@ -2944,9 +3017,9 @@ function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMa
       <svg class="goal-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
         <defs>
           <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#0a84ff"/>
-            <stop offset="50%" stop-color="#ffcc00"/>
-            <stop offset="100%" stop-color="#ff453a"/>
+            <stop offset="0%" stop-color="#aa4646"/>
+            <stop offset="50%" stop-color="#c89430"/>
+            <stop offset="100%" stop-color="#30d158"/>
           </linearGradient>
         </defs>
         <circle class="goal-ring-track" cx="50" cy="50" r="42" pathLength="100"></circle>
@@ -2990,19 +3063,17 @@ function rgbaString(parts, alpha) {
 }
 
 function heatmapColorParts(value, maxValue) {
-  const t = Math.pow(value / Math.max(maxValue, 1), 1.5);
+  const t = Math.pow(value / Math.max(maxValue, 1), 1.2);
   return colorStops([
-    [245, 228, 82],
-    [255, 211, 74],
-    [255, 177, 56],
-    [255, 136, 56],
-    [255, 92, 74],
-    [239, 58, 56],
+    [50, 145, 75],   // dim forest green
+    [90, 185, 85],   // mid green
+    [48, 209, 88],   // #30d158 bright ring green
+    [110, 255, 125], // peak lime
   ], t);
 }
 
 function heatmapColor(value, maxValue) {
-  if (value <= 0) return 'rgba(27, 48, 26, 0.18)';
+  if (value <= 0) return 'rgba(48, 209, 88, 0.08)';
   return rgbString(heatmapColorParts(value, maxValue));
 }
 
@@ -3023,8 +3094,8 @@ function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
 
   const cw = W / 7;
   const ch = H / 24;
-  // Tighter radius + faster falloff = sharper, less hazy cells.
-  const radius = Math.max(cw, ch) * 1.05;
+  // Very tight radius + fast falloff = small bright dots, not haze.
+  const radius = Math.max(cw, ch) * 0.48;
 
   for (let col = 0; col < days.length; col++) {
     const day = days[col];
@@ -3038,9 +3109,9 @@ function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
       const intensity = Math.pow(secs / 3600, 0.4);
       const [r, g, b] = heatmapColorParts(secs, 3600);
       const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      g2.addColorStop(0,    `rgba(${r},${g},${b},${Math.min(1, 1.2 * intensity)})`);
-      g2.addColorStop(0.45, `rgba(${r},${g},${b},${0.65 * intensity})`);
-      g2.addColorStop(0.8,  `rgba(${r},${g},${b},${0.18 * intensity})`);
+      g2.addColorStop(0,    `rgba(${r},${g},${b},${Math.min(1, 1.7 * intensity)})`);
+      g2.addColorStop(0.18, `rgba(${r},${g},${b},${0.45 * intensity})`);
+      g2.addColorStop(0.38, `rgba(${r},${g},${b},${0.08 * intensity})`);
       g2.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = g2;
       ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
@@ -3050,13 +3121,7 @@ function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
 
 function heatmapGlowColor(value, maxValue) {
   if (value <= 0) return 'transparent';
-  return rgbaString(colorStops([
-    [255, 229, 109],
-    [255, 206, 88],
-    [255, 163, 69],
-    [255, 114, 66],
-    [245, 72, 62],
-  ], Math.pow(value / Math.max(maxValue, 1), 1.5)), 0.58);
+  return rgbaString(heatmapColorParts(value, maxValue), 0.58);
 }
 
 function getStoredGoalHours(storageKey, fallbackHours) {
@@ -3414,6 +3479,9 @@ function render(data) {
   }
   syncCategoryOptions(data.category_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
+  if (summary.week_start_weekday != null) {
+    WEEK_START_BACKEND_DAY = summary.week_start_weekday;
+  }
   updateMonthNav(summary);
 
   // New data invalidates any previously-rendered settings view.
@@ -3533,6 +3601,7 @@ function render(data) {
           <h3 class="section-title">Daily <em>Target</em></h3>
           <div class="daily-target-head-side">
             <div class="daily-target-nav" aria-label="Daily target date navigation">
+              <button class="btn small daily-target-today-btn" id="dailyTargetTodayBtn" type="button" hidden>Today</button>
               <button class="daily-target-nav-btn" id="dailyTargetPrev" type="button" aria-label="Show previous date">
                 <svg viewBox="0 0 14 14" aria-hidden="true">
                   <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
@@ -3543,7 +3612,6 @@ function render(data) {
                   <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
                 </svg>
               </button>
-              <button class="btn small daily-target-today-btn" id="dailyTargetTodayBtn" type="button" hidden>Today</button>
             </div>
             <div class="section-meta">
               <span id="dailyTargetViewedLabel">Today</span>
@@ -3557,6 +3625,7 @@ function render(data) {
           <h3 class="section-title">Weekly <em>Target</em></h3>
           <div class="daily-target-head-side">
             <div class="daily-target-nav" aria-label="Weekly target date navigation">
+              <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
               <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week">
                 <svg viewBox="0 0 14 14" aria-hidden="true">
                   <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
@@ -3567,7 +3636,6 @@ function render(data) {
                   <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
                 </svg>
               </button>
-              <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
             </div>
             <div class="section-meta">
               <span id="weeklyTargetRangeLabel">Current Week</span>
@@ -3580,8 +3648,8 @@ function render(data) {
 
     <div class="chart-card chart-card-wide">
       <div class="section-head">
-        <h3 class="section-title">Activity <em>calendar</em></h3>
-        <span class="section-meta">Friday to Thursday · browse week by week</span>
+        <h3 class="section-title">Activity</h3>
+        <span class="section-meta" id="activityHeatmapWeekLabel2">Your weekly rhythm · ${weekStartDayName()} to ${weekEndDayName()}</span>
       </div>
       <div class="chart-wrap"><div id="activityHeatmap"></div></div>
     </div>
@@ -3757,7 +3825,7 @@ function updateSessionStatus(summary) {
   let text = 'Off';
   let indicatorHtml = '<span class="session-status__dot"></span>';
 
-  if (summary?.live_project) {
+  if (summary?.ableton_has_project) {
     state = 'live';
     text = 'Live';
     indicator.className = 'session-status__indicator session-status__indicator--live';
@@ -3802,8 +3870,8 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
   const start = addDays(today, -364);
   const todayKey = localDateKey(today);
   const weeks = [];
-  let cursor = new Date(startOfFridayWeek(start));
-  const lastWeekStart = startOfFridayWeek(today);
+  let cursor = new Date(startOfWeek(start));
+  const lastWeekStart = startOfWeek(today);
 
   while (cursor <= lastWeekStart) {
     const days = [];
@@ -3822,7 +3890,7 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
   }
 
   if (weeks.length === 0) {
-    mount.innerHTML = '<div class="chart-empty">No Friday-to-Thursday weeks to show yet.</div>';
+    mount.innerHTML = `<div class="chart-empty">No ${weekStartDayName()}-to-${weekEndDayName()} weeks to show yet.</div>`;
     return;
   }
 
@@ -3892,19 +3960,47 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
       d.value > 0 && (!best || d.value > best.value) ? d : best
     ), null);
 
+    const isCurrentWeek = currentWeekIndex === weeks.length - 1;
+    const todayInWeek = week.days.find(d => d.isToday);
+    const todayHasActivity = todayInWeek && todayInWeek.value > 0;
+
+    let message = '';
+    if (activeDays === 0) {
+      message = isCurrentWeek ? 'Fresh start.' : 'No activity.';
+    } else if (activeDays === visibleDays.length) {
+      message = '7 for 7 — solid week.';
+    } else if (isCurrentWeek && todayInWeek && !todayHasActivity) {
+      const nudges = ["Don't break the chain.", 'Log time today.', 'Keep the streak.'];
+      message = nudges[activeDays % nudges.length];
+    } else {
+      message = `${activeDays}/${visibleDays.length} days filled.`;
+    }
+
+    const weekDotsHTML = visibleDays.map(d => {
+      const active = d.value > 0 && !d.isUpcoming;
+      const today = d.isToday;
+      const cls = ['heatmap-week-dot', active ? 'is-active' : '', today ? 'is-today' : ''].filter(Boolean).join(' ');
+      const title = d.isUpcoming ? 'Upcoming' : active ? `${formatHoursNumber(d.value)}h` : 'No activity';
+      return `<div class="${cls}" title="${escapeHtml(title)}"></div>`;
+    }).join('');
+
     summaryEl.innerHTML = `
       <strong>${activeDays} active day${activeDays === 1 ? '' : 's'}</strong>
-      <span>${formatHoursNumber(totalHours)}h in this Friday-to-Thursday window</span>
+      <div class="heatmap-week-dots">${weekDotsHTML}</div>
+      <span>${formatHoursNumber(totalHours)}h this week</span>
+      <span class="heatmap-message">${message}</span>
     `;
     weekLabelEl.textContent = `${shortRange(week.startKey, week.endKey)}${currentWeekIndex === weeks.length - 1 ? ' · current week' : ''}`;
 
     const headersHTML = week.days.map(day => {
       const cls = ['heatmap-day-head', day.isToday ? 'is-today' : ''].filter(Boolean).join(' ');
       const dailyTotal = day.isUpcoming ? '' : day.value > 0 ? `${formatHoursNumber(day.value)}h` : '';
+      const todayIndicator = day.isToday ? '<span class="today-indicator"></span>' : '';
       return `
         <div class="${cls}">
           <strong>${day.date.toLocaleDateString('en-US', { weekday:'short' })}</strong>
           <span>${day.date.toLocaleDateString('en-US', { month:'short', day:'numeric' })}</span>
+          ${todayIndicator}
           <span class="day-total">${dailyTotal}</span>
         </div>
       `;
@@ -3945,9 +4041,25 @@ function renderActivityHeatmap(yearDaily, yearHourly) {
     heatmapResizeObserver = new ResizeObserver(paint);
     heatmapResizeObserver.observe(gridRows);
 
-    footEl.textContent = peakDay
-      ? `Peak this week: ${peakDay.date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })} with ${formatHoursNumber(peakDay.value)}h.`
-      : 'No activity in this week yet. Use the arrows to browse older Friday-to-Thursday windows.';
+    let footHTML = '';
+    if (peakDay) {
+      footHTML = `Peak this week: <strong>${peakDay.date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</strong> with ${formatHoursNumber(peakDay.value)}h.`;
+      // Find most productive hour of the week
+      let peakHour = -1, peakHourSecs = 0;
+      for (let h = 0; h < 24; h++) {
+        const hourTotal = week.days.reduce((sum, d) => sum + (activityByDayHour[`${d.key}_${h}`] || 0), 0);
+        if (hourTotal > peakHourSecs) {
+          peakHourSecs = hourTotal;
+          peakHour = h;
+        }
+      }
+      if (peakHour >= 0 && peakHourSecs > 0) {
+        footHTML += ` Most productive time: <strong>${hourLabel(peakHour)}</strong>.`;
+      }
+    } else {
+      footHTML = '';
+    }
+    footEl.innerHTML = footHTML;
 
     prevBtn.disabled = currentWeekIndex === 0;
     nextBtn.disabled = currentWeekIndex === weeks.length - 1;
@@ -3983,10 +4095,10 @@ function renderGoalCard({
 
   const completedHours = Math.round(((completedSeconds || 0) / 3600) * 10) / 10;
   const remainingMount = remainingId ? document.getElementById(remainingId) : null;
-  const coldColor = '#1677ff';
-  const coolColor = '#33c7ff';
-  const warmColor = '#ffc247';
-  const hotColor = '#ff3b30';
+  const coldColor = '#a05050';
+  const coolColor = '#c89430';
+  const warmColor = '#7bc85a';
+  const hotColor = '#30d158';
 
   function lerpColor(a, b, amount) {
     const parse = color => [1, 3, 5].map(start => parseInt(color.slice(start, start + 2), 16));
@@ -4093,15 +4205,15 @@ function renderGoalCard({
   paint(getStoredGoalHours(storageKey, fallbackGoalHours));
 }
 
-function currentFridayWeekStartKey() {
-  return localDateKey(startOfFridayWeek(new Date()));
+function currentWeekStartKey() {
+  return localDateKey(startOfWeek(new Date()));
 }
 
 function updateWeeklyTargetMeta({ weekStart }) {
   const rangeLabel = document.getElementById('weeklyTargetRangeLabel');
   const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
-  if (rangeLabel) rangeLabel.textContent = weekStart === currentFridayWeekStartKey() ? 'Current Week' : 'Selected Week';
-  if (currentBtn) currentBtn.hidden = weekStart === currentFridayWeekStartKey();
+  if (rangeLabel) rangeLabel.textContent = weekStart === currentWeekStartKey() ? 'Current Week' : 'Selected Week';
+  if (currentBtn) currentBtn.hidden = weekStart === currentWeekStartKey();
 }
 
 function renderWeeklyTargetCard(target) {
@@ -4158,10 +4270,18 @@ function renderWeeklyTargetCard(target) {
   mount.classList.add('is-fresh');
 
   const input = mount.querySelector('#weeklyGoalCardInput');
-  const repaint = nextValue => {
+  const repaint = async nextValue => {
     const normalized = clamp(Math.round((Number(nextValue) || model.goalHours) * 10) / 10, 1, 100);
-    localStorage.setItem(WEEKLY_GOAL_STORAGE_KEY, String(normalized));
-    renderWeeklyTargetCard(target);
+    mount.classList.add('is-loading');
+    try {
+      await postJson('/api/weekly-target', { goal_hours: normalized });
+      const res = await fetch(`/api/weekly-target?date=${encodeURIComponent(weeklyTargetState.currentWeekStartDate || currentWeekStartKey())}`);
+      const fresh = await res.json();
+      renderWeeklyTargetCard(fresh);
+    } catch (e) {
+      toast(e.message || 'Failed to save weekly target');
+      mount.classList.remove('is-loading');
+    }
   };
   if (input) {
     input.addEventListener('change', () => repaint(input.value));
@@ -4178,7 +4298,7 @@ async function loadWeeklyTarget(summary = {}) {
   const mount = document.getElementById('weeklyGoalCard');
   if (!mount) return;
   if (!weeklyTargetState.currentWeekStartDate) {
-    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentFridayWeekStartKey();
+    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
   }
   const weekStart = weeklyTargetState.currentWeekStartDate;
   const weekEnd = localDateKey(addDays(dateFromKey(weekStart), 6));
@@ -4223,7 +4343,7 @@ function renderWeeklyGoal(summary) {
   if (!prevBtn || !nextBtn || !currentBtn) return;
 
   if (!weeklyTargetState.currentWeekStartDate) {
-    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentFridayWeekStartKey();
+    weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
   }
 
   const moveByWeeks = amount => {
@@ -4234,7 +4354,7 @@ function renderWeeklyGoal(summary) {
   prevBtn.addEventListener('click', () => moveByWeeks(-1));
   nextBtn.addEventListener('click', () => moveByWeeks(1));
   currentBtn.addEventListener('click', () => {
-    weeklyTargetState.currentWeekStartDate = currentFridayWeekStartKey();
+    weeklyTargetState.currentWeekStartDate = currentWeekStartKey();
     loadWeeklyTarget(summary);
   });
 

@@ -282,6 +282,76 @@ def day_seconds(target_day: date) -> float:
     return daily.get(target_day.isoformat(), 0.0)
 
 
+def _all_daily_totals() -> dict[str, float]:
+    """Return {iso_date: total_active_seconds} for all tracked days."""
+    if not DB_PATH.exists():
+        return {}
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT start_time, last_seen_time, end_time, active_seconds
+            FROM sessions
+            WHERE active_seconds > 0
+            """
+        ).fetchall()
+    daily, _ = build_activity_rollups(rows)
+    return daily
+
+
+def compute_streak_days(
+    daily_totals: dict[str, float], today: date | None = None
+) -> int:
+    """Consecutive days with activity ending today (or yesterday right after midnight)."""
+    today = today or date.today()
+    yesterday = today - timedelta(days=1)
+    active_days = {day for day, seconds in daily_totals.items() if seconds > 0}
+    streak = 0
+    cursor = None
+    if today.isoformat() in active_days:
+        cursor = today
+    elif yesterday.isoformat() in active_days:
+        cursor = yesterday
+    while cursor and cursor.isoformat() in active_days:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def streak_days(today: date | None = None) -> int:
+    """Current streak from the DB."""
+    return compute_streak_days(_all_daily_totals(), today)
+
+
+def yesterday_seconds() -> float:
+    """Tracked seconds for yesterday."""
+    return day_seconds((date.today() - timedelta(days=1)))
+
+
+def week_seconds(target_date: date | None = None) -> float:
+    """Tracked seconds for the current tracking week (respects week_start_weekday setting)."""
+    target_date = target_date or date.today()
+    weekly_totals = _all_daily_totals()
+    raw = get_app_setting("week_start_weekday")
+    week_start_weekday = int(raw) if raw is not None else 4
+    week_start = target_date - timedelta(
+        days=(target_date.weekday() - week_start_weekday) % 7
+    )
+    week_end = week_start + timedelta(days=6)
+    total = 0.0
+    for day_key, seconds in weekly_totals.items():
+        if week_start.isoformat() <= day_key <= week_end.isoformat():
+            total += seconds
+    return total
+
+
+def get_app_setting(key: str, default: str | None = None) -> str | None:
+    """Read an app_setting from the DB (re-exports from dashboard for convenience)."""
+    from dashboard import get_app_setting as _gas
+
+    return _gas(key, default)
+
+
 def _live_pid() -> int | None:
     r = subprocess.run(["pgrep", "-x", "Live"], capture_output=True, text=True)
     if r.returncode != 0:
