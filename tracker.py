@@ -888,11 +888,10 @@ class Tracker:
                 "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
             ).fetchone()
             active = row[0] if row else 0
-            if name in UNTITLED_NAMES or active < 5:
-                # Drop untitled drafts and phantom sub-5s rows (title flickers).
+            if active < 5:
+                # Drop phantom sub-5s rows (title flickers).
                 conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
-                why = "unsaved" if name in UNTITLED_NAMES else "too short"
-                print(f"[{_ts()}] ✗  {self.project_name} ({why} — discarded)")
+                print(f"[{_ts()}] ✗  {self.project_name} (too short — discarded)")
             else:
                 conn.execute(
                     """
