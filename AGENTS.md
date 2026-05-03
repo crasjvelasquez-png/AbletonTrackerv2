@@ -1,91 +1,83 @@
 # AGENTS.md
 
 ## Purpose
-- Maintain a macOS Ableton activity tracker: a menu bar daemon (`menubar.py` + `tracker.py`), local dashboard server (`dashboard.py`), and SQLite state in `~/.ableton_tracker/sessions.db`.
+- macOS Ableton activity tracker: menu bar daemon (`menubar.py` + `tracker.py`), local dashboard server (`dashboard.py`), SQLite state in `~/.ableton_tracker/sessions.db`.
+- Python-first repo with a single-file frontend template (`templates/dashboard.html`). No framework, no bundler.
 - Optimize for runtime correctness over theoretical cleanup: preserve tracking behavior, session integrity, and dashboard/API parity.
-- Make focused edits with minimal traversal; this repo is Python-first with a large single-template frontend file.
-- Verify with the smallest relevant tests first, then broader checks only when needed.
 
 ## Commands
-- install: `./install.command`
-- dev: `python3 menubar.py`
-- dev (dashboard only): `./open_dashboard.command` or `python3 dashboard.py`
-- test (tracker): `python3 -m unittest -v test_tracker.py`
-- test (dashboard): `python3 -m unittest -v test_dashboard.py`
-- test (all): `python3 -m unittest -v test_tracker.py test_dashboard.py`
-- lint/syntax check (changed files): `python3 -m py_compile tracker.py dashboard.py menubar.py`
-- typecheck: `N/A (no static type checker configured)`
-- build app bundle: `python3 build_app.py`
-- restart runtime after code edits: `./restart.command`
-- diagnostics/preflight: `python3 debug.py`
+- Install: `./install.command` (creates LaunchAgent)
+- Dev (full): `python3 menubar.py`
+- Dev (dashboard only): `./open_dashboard.command` or `python3 dashboard.py` (port 7421)
+- Test (tracker): `python3 -m unittest -v test_tracker.py`
+- Test (dashboard): `python3 -m unittest -v test_dashboard.py`
+- Test (menubar): `python3 -m unittest -v test_menubar.py`
+- Test (all): `python3 -m unittest -v test_tracker.py test_dashboard.py test_menubar.py`
+- Syntax check: `python3 -m py_compile <changed_files>`
+- Build: `python3 build_app.py` or `./build_app.command`
+- Restart runtime: `./restart.command`
+- Diagnostics: `python3 debug.py` or `./debug.command`
+- Uninstall: `./uninstall.command`
+
+## Dependencies
+- **Runtime**: `rumps` (menu bar framework). Install: `python3 -m pip install --user rumps`. Bundles `PyObjC`; also imports `AVFoundation`, `CoreMedia`, `ScreenCaptureKit` (macOS-only audio probe).
+- **Build only**: `Pillow`. Install: `python3 -m pip install --user Pillow`. Used by `build_app.py` for icon generation.
+- No `requirements.txt`, `setup.py`, or `pyproject.toml`. Dependencies are ad-hoc pip installs.
 
 ## Project map
-- `tracker.py`: Core tracker daemon, Ableton detection, idle/audio logic, session writes, rollups.
-- `menubar.py`: Menu bar app entrypoint, tracker thread lifecycle, pause/resume UX, dashboard launcher hook.
-- `dashboard.py`: HTTP server (`:7421`), API routes, DB migrations, stats shaping, category/target endpoints.
-- `templates/dashboard.html`: Main dashboard UI (CSS + HTML + JS in one file); includes Dashboard + Settings views.
-- `templates/settings.html`: Settings UI fragments/styles tied to dashboard settings behavior.
-- `static/js/settings.js`: Settings-side client logic utilities.
-- `test_tracker.py`: Unit tests for tracker state transitions, idle/audio behavior, project switching.
-- `test_dashboard.py`: Unit tests for category APIs, migrations, targets, dashboard-side data behavior.
-- `debug.py`: Environment and LaunchAgent readiness checks.
-- `install.command`: LaunchAgent install/bootstrap.
-- `restart.command`: Safe restart path for tracker/dashboard processes.
-- `open_dashboard.command`: Local dashboard runner for manual UI checks.
-- `build_app.py` + `build_app.command`: macOS app bundle packaging.
+| File | Lines | Role |
+|------|-------|------|
+| `tracker.py` | ~1100 | Core daemon: Ableton detection, idle/audio logic, session writes, rollups, DB setup |
+| `menubar.py` | ~340 | Menu bar entrypoint: rumps app, tracker thread, pause/resume, dashboard launcher |
+| `dashboard.py` | ~4500 | HTTP server (:7421): API routes, DB migrations, stats, category/target endpoints |
+| `templates/dashboard.html` | ~4700 | Single-file frontend: CSS + HTML + Vanilla JS (Dashboard + Settings views) |
+| `templates/settings.html` | ~215 | Settings UI fragments served as partials |
+| `static/js/settings.js` | ~650 | Settings-side client logic |
+| `test_tracker.py` | ~565 | Tracker state transitions, idle/audio, project switching, session condense |
+| `test_dashboard.py` | ~565 | Category APIs, migrations, targets, rollovers |
+| `test_menubar.py` | ~580 | Menu bar formatting, tracker thread, pause/resume/quit, dashboard process |
+| `debug.py` | — | Pre-flight diagnostic (AppleScript, rumps, PyObjC, LaunchAgent checks) |
+| `*.command` | — | Shell wrappers (install, restart, debug, build, uninstall, open_dashboard) |
+| `build_app.py` | — | App bundle packaging with rounded-corner icon |
+| `engineering_handoff.md` | — | Design rationale and historical context |
+
+## Database
+- Path: `~/.ableton_tracker/sessions.db`
+- Tables: `sessions` (source of truth), `project_categories`, `category_definitions`, `daily_metrics`, `app_settings`
+- Schema migrations: `dashboard.run_schema_migrations()` — run on dashboard startup and after any schema change
+- Category key normalization: `normalize_category_key()` lowercases, strips non-alphanumeric, collapses whitespace to hyphens
+- Color normalization: uppercase hex
 
 ## Feature entry points
-- For tracker state bugs, check `tracker.py` first (`Tracker.poll_once`, state constants, session open/close paths).
-- For menu bar status/pause issues, check `menubar.py` before touching tracker internals.
-- For dashboard API changes, inspect `dashboard.py` handlers and payload shape before editing UI JS.
-- For dashboard visuals or interactions, check `templates/dashboard.html` first; keep API contracts unchanged unless required.
-- For category management, check `dashboard.py` (`ensure_category_definitions_table`, `create_category`, `update_category`, `delete_category`) and matching UI code in `templates/dashboard.html`.
-- For streak or rollup regressions, check `tracker.py` (`allocate_session_activity`, `build_activity_rollups`, condensation helpers) before patching dashboard rendering.
-- For install/startup problems, check `debug.py`, then `install.command`, then `restart.command`.
+- **Tracker state bugs**: `tracker.py` → `Tracker.poll_once`, state constants (`STATE_*`), session open/close paths
+- **Menu bar status/pause**: `menubar.py` before touching tracker internals
+- **Dashboard API**: `dashboard.py` handlers → check payload shape → then edit `templates/dashboard.html` JS
+- **Category management**: `dashboard.py` (`ensure_category_definitions_table`, `create_category`, `update_category`, `delete_category`) + `templates/dashboard.html` UI
+- **Streak/rollup**: `tracker.py` (`allocate_session_activity`, `build_activity_rollups`, condensation helpers)
+- **Install/startup**: `debug.py` → `install.command` → `restart.command`
+
+## Testing quirks
+- All tests use tempfile SQLite DBs; no real DB needed
+- `test_menubar.py` mocks the entire `rumps` module via `sys.modules['rumps']` — don't expect real GUI imports
+- `test_tracker.py` mocks `AppKit`, `AVFoundation`, `CoreMedia`, `ScreenCaptureKit` — tests run without macOS GUI
+- Test discovery is via `unittest`; no pytest configuration present
 
 ## Conventions
-- Use `python3` for all commands and scripts.
-- Keep DB contract stable: `sessions` is the source of truth; category tables are `project_categories` and `category_definitions`.
-- Reuse existing endpoint patterns in `dashboard.py` (`/api/...` JSON responses, existing helper functions).
-- Keep frontend logic inside existing dashboard template patterns; avoid introducing new framework/tooling layers.
-- Preserve existing naming and normalization flows (for example category key normalization and uppercase hex color normalization).
-- Place/extend tests in `test_tracker.py` or `test_dashboard.py` matching the edited behavior.
-- Avoid full-file reads on large files; search first, then read targeted ranges.
+- Use `python3` for all commands and scripts
+- `templates/dashboard.html` is a monolith — never read it whole; search first, read 50-200 line slices
+- `dashboard.py` is also large — same rule
+- Reuse existing `/api/...` endpoint patterns; keep JSON payload shapes stable
+- Preserve category key and color normalization logic
+- Place/extend tests in the matching test file (`test_tracker.py`, `test_dashboard.py`, `test_menubar.py`)
+- Never rename or move files
+- Never edit `.app` bundles or build artifacts unless packaging
 
-## Token efficiency
-- Search before reading: use `rg -n "pattern" <mapped files>` and open only relevant ranges.
-- Never read whole large files (`dashboard.py`, `templates/dashboard.html`); read focused slices (about 50-200 lines).
-- Reuse context from this file and recent command output; do not rescan the repo for known paths.
-- Prefer narrow validation (`py_compile` + one relevant test file) before full test runs.
-- Avoid repeating unchanged file dumps in outputs; summarize unless exact lines are required.
-- Do not run duplicate discovery commands (`ls`, `rg --files`) multiple times per task unless scope changes.
+## Validation flow
+1. `python3 -m py_compile <changed_files>`
+2. Run the relevant test suite(s)
+3. If behavior touches runtime environment: `python3 debug.py`
+4. Before manual verification: `./restart.command`
 
-## Validation
-- Run minimal syntax gate on touched Python files:
-  - `python3 -m py_compile <changed_python_files>`
-- Run feature-specific tests next:
-  - Tracker logic edits: `python3 -m unittest -v test_tracker.py`
-  - Dashboard/API/category/targets edits: `python3 -m unittest -v test_dashboard.py`
-- Run both suites when changing shared logic or contracts:
-  - `python3 -m unittest -v test_tracker.py test_dashboard.py`
-- Run runtime/preflight checks when behavior depends on local environment:
-  - `python3 debug.py`
-- Use restart path before manual verification:
-  - `./restart.command`
-- Run build only for packaging/distribution changes:
-  - `python3 build_app.py`
-
-## Change strategy
-- Prefer small diffs.
-- Reuse existing helpers/utilities before adding new modules.
-- Do not rename or move files unless required.
-- Preserve API payload shapes consumed by `templates/dashboard.html` unless the change explicitly includes both backend and frontend updates.
-- Inspect shared rollup/session/category helpers before changing feature-specific logic.
-- Search locally in mapped files first; avoid broad repo-wide wandering.
-- Avoid editing generated/build artifacts and binary app assets unless the task is packaging or icon/build work.
-
-## Notes for nested agents
-- Treat this as the root operating guide; add nested `AGENTS.md` later for `templates/`, `static/`, or packaging-specific subflows if complexity grows.
-- Keep nested guides scoped to local commands/contracts; do not duplicate root-level rules.
-- In nested guides, document only delta behavior (extra validations, local conventions, file ownership boundaries).
-- When nested rules conflict, prefer the most local `AGENTS.md` for that subtree.
+## Additional references
+- `CLAUDE.md` — complementary notes with line-count context and API/data reference summaries
+- `.claude/settings.local.json` — Claude-specific permissions (ignore for OpenCode)

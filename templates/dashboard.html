@@ -315,6 +315,7 @@ header{
   user-select:none;
 }
 .month-nav-reset[hidden]{display:none}
+.month-nav[hidden]{display:none}
 .session-status{
   display:inline-flex;align-items:center;gap:10px;
   color:var(--ink-2);
@@ -355,7 +356,7 @@ header{
   50%{opacity:.18;transform:scale(.82)}
 }
 
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:28px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:28px}
 @media (max-width: 1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .card,
 .chart-card,
@@ -464,6 +465,73 @@ header{
 .card-chip--record{
   color:var(--accent);background:var(--accent-soft);
 }
+.streak-hero{
+  border-radius:var(--radius);
+  background:var(--surface);
+  border:1px solid var(--border);
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  box-shadow:var(--shadow-1);
+  padding:28px 30px 22px;
+  margin-bottom:28px;
+  position:relative;
+  cursor:pointer;
+  overflow:hidden;
+  transform:translateZ(0);
+  transition:transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.streak-hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  border-radius:inherit;
+  background:var(--glass-highlight);
+  opacity:.75;z-index:1;
+}
+.streak-hero::after{
+  content:"";position:absolute;top:0;left:0;right:0;height:120px;pointer-events:none;
+  background:radial-gradient(ellipse 600px 120px at 50% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent);
+  border-radius:inherit;z-index:0;
+}
+.streak-hero>*{position:relative;z-index:2}
+.streak-hero:hover{transform:scale(1.012)}
+.streak-hero:active{transform:scale(.99)}
+.streak-hero:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.streak-hero-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.streak-hero-label{
+  font-size:12px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
+}
+.streak-hero-badge{
+  display:inline-flex;align-items:center;
+  font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;
+  color:var(--accent);background:var(--accent-soft);
+  letter-spacing:.01em;
+}
+.streak-hero-badge.is-record{
+  color:#30d158;background:rgba(48,209,88,.14);
+  box-shadow:0 0 10px rgba(48,209,88,.12);
+}
+.streak-hero-body{
+  display:flex;flex-direction:column;gap:10px;
+}
+.streak-hero-count{
+  font-family:var(--font-display);font-weight:680;
+  font-size:clamp(42px,6vw,64px);line-height:1.05;letter-spacing:-.04em;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.streak-hero-count em{
+  font-family:var(--font-body);font-style:normal;
+  font-size:clamp(14px,2vw,18px);font-weight:550;
+  color:var(--ink-3);margin-left:8px;letter-spacing:-.01em;
+}
+.streak-hero-track{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+}
+.streak-hero-narrative{
+  font-size:14px;font-weight:500;color:var(--ink-3);line-height:1.45;
+}
+.streak-hero-narrative strong{color:var(--ink);font-weight:700}
+.streak-hero-empty .streak-hero-count{color:var(--ink-4)}
 
 .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
 .rings-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px;align-items:stretch}
@@ -516,8 +584,6 @@ header{
   transform:scale(0.98);
   z-index:2;
 }
-.target-card:hover::before{opacity:1}
-.target-card:hover::after{opacity:1}
 .target-card[data-detail]{cursor:pointer}
 .target-card[data-detail]:focus-visible{
   outline:2px solid var(--accent);
@@ -701,11 +767,11 @@ header{
 }
 .goal-ring-track{
   stroke:var(--target-track);
-  stroke-width:8;
+  stroke-width:10;
 }
 .goal-ring-progress{
   stroke:var(--target-accent);
-  stroke-width:9;
+  stroke-width:11;
   stroke-dasharray:100;
   stroke-dashoffset:calc(100 - var(--target-progress-pct));
   filter:
@@ -815,16 +881,16 @@ header{
   box-shadow:0 8px 20px color-mix(in srgb, var(--target-accent, var(--accent)) 28%, transparent);
 }
 .target-card .goal-ring{
-  width:min(152px,100%);
+  width:min(210px,100%);
 }
 .target-card .goal-ring-core{
-  padding:10px;
+  padding:14px;
 }
 .target-card .goal-kicker{
   font-size:10px;
 }
 .target-card .goal-value{
-  font-size:28px;
+  font-size:36px;
 }
 .target-card .goal-value small{
   display:block;
@@ -843,6 +909,10 @@ header{
 }
 .target-card .goal-input-wrap{
   padding:6px 9px;
+}
+.target-card .goal-shell{
+  grid-template-columns:minmax(190px,240px) minmax(0,1fr);
+  gap:18px;
 }
 .target-card .goal-input{
   width:44px;
@@ -1855,8 +1925,8 @@ tbody tr:hover .row-del{opacity:1}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
   .goal-input-row{grid-template-columns:1fr}
-  .target-card .goal-shell{grid-template-columns:minmax(150px,200px) minmax(0,1fr)}
-  .target-card .goal-ring{width:min(164px,100%)}
+  .target-card .goal-shell{grid-template-columns:minmax(170px,220px) minmax(0,1fr)}
+  .target-card .goal-ring{width:min(200px,100%)}
 }
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
@@ -1872,7 +1942,7 @@ tbody tr:hover .row-del{opacity:1}
   .daily-target-head-side{justify-items:start}
   .daily-target-nav{justify-content:flex-start;flex-wrap:wrap}
   .target-card .goal-shell{grid-template-columns:1fr;gap:14px}
-  .target-card .goal-ring{width:min(170px,100%)}
+  .target-card .goal-ring{width:min(200px,100%)}
   .target-card .goal-controls{padding:12px}
   .card{min-height:190px;padding:24px 18px 20px}
   .card-value{font-size:32px}
@@ -3528,14 +3598,6 @@ function render(data) {
 
   const best = longestStreak(year_daily);
   const cur = summary.streak_days || 0;
-  let streakChip;
-  if (best === 0) {
-    streakChip = `<div class="card-chip">Best: —</div>`;
-  } else if (cur >= best && cur > 0) {
-    streakChip = `<div class="card-chip card-chip--record">New record</div>`;
-  } else {
-    streakChip = `<div class="card-chip">Best: ${best} day${best !== 1 ? 's' : ''}</div>`;
-  }
 
   // Top project this month (uses month_seconds field added server-side)
   const topProject = monthlyProjects[0];
@@ -3563,7 +3625,51 @@ function render(data) {
       : `<div class="card-chip">Best day in ${monthName}</div>`;
   }
 
+  // ── Streak hero ──
+  const streakTotal = Math.max(best, cur, 1);
+  const streakMaxMarkers = Math.min(streakTotal, 14);
+  const streakMarkersHTML = Array.from({ length: streakMaxMarkers }, (_, i) => {
+    const dayNum = i + 1;
+    const isActive = dayNum <= cur;
+    const isRecord = isActive && cur > best && dayNum === cur;
+    const cls = isRecord ? 'is-record' : isActive ? 'is-active' : '';
+    return `<div class="streak-vinyl-marker ${cls}" title="Day ${dayNum}"></div>`;
+  }).join('');
+  if (streakTotal > 14) {
+    streakMarkersHTML += `<span class="streak-hero-narrative">+${streakTotal - 14} more</span>`;
+  }
+
+  let streakNarrative;
+  if (best === 0 && cur === 0) {
+    streakNarrative = `<strong>Start your first streak.</strong> Open Ableton and log a session to begin.`;
+  } else if (cur === 0 && best > 0) {
+    streakNarrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
+  } else if (cur > best) {
+    streakNarrative = `<strong>New record — ${cur} days!</strong> You've surpassed your previous best of ${best} day${best !== 1 ? 's' : ''}.`;
+  } else if (cur === best && best > 0) {
+    streakNarrative = `<strong>Matching your personal best</strong> of ${best} day${best !== 1 ? 's' : ''}. Keep going to set a new record.`;
+  } else {
+    const daysLeft = best - cur;
+    streakNarrative = `Day <strong>${cur}</strong> of your current streak. <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best of ${best}.`;
+  }
+
+  const streakBadgeHTML = cur > best
+    ? '<span class="streak-hero-badge is-record">RECORD</span>'
+    : (cur > 0 && cur === best ? '<span class="streak-hero-badge">PERSONAL BEST</span>' : '');
+  const streakHeroEmpty = cur === 0 ? ' streak-hero-empty' : '';
+
   document.getElementById('appDashboard').innerHTML = `
+    <div class="streak-hero${streakHeroEmpty}" role="button" tabindex="0" data-detail="streak">
+      <div class="streak-hero-meta">
+        <div class="streak-hero-label">Streak</div>
+        ${streakBadgeHTML}
+      </div>
+      <div class="streak-hero-body">
+        <div class="streak-hero-count">${cur}<em>day${cur !== 1 ? 's' : ''}</em></div>
+        <div class="streak-hero-track">${streakMarkersHTML}</div>
+        <div class="streak-hero-narrative">${streakNarrative}</div>
+      </div>
+    </div>
     <div class="cards">
       <div class="card" role="button" tabindex="0" data-detail="top-project">
         <div class="card-label">Top Project</div>
@@ -3586,12 +3692,6 @@ function render(data) {
         <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
         ${paceChip}
         <div class="card-sub">${monthlyProjectCount} project${monthlyProjectCount !== 1 ? 's' : ''} · ${monthSub}</div>
-      </div>
-      <div class="card" role="button" tabindex="0" data-detail="streak">
-        <div class="card-label">Streak</div>
-        <div class="card-value">${summary.streak_days}<span class="unit">day${summary.streak_days !== 1 ? 's' : ''}</span></div>
-        ${streakChip}
-        <div class="card-sub">consecutive</div>
       </div>
     </div>
 
