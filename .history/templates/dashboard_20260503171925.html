@@ -331,7 +331,7 @@ header{
 .card[data-detail]:hover .card-label,
 .card[data-detail]:focus-visible .card-label{color:var(--accent)}
 .card-label{
-  font-size:12px;font-weight:600;color:var(--ink-3);margin-top:auto;padding-top:18px;
+  font-size:12px;font-weight:600;color:var(--ink-3);margin-bottom:18px;
   letter-spacing:-.01em;
   text-wrap:balance;
 }
@@ -381,6 +381,57 @@ header{
 .card-chip--record{
   color:var(--accent);background:var(--accent-soft);
 }
+.streak-hero{
+  border-radius:var(--radius);
+  background:var(--surface);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow-1);
+  padding:28px 30px 22px;
+  margin-bottom:28px;
+  cursor:pointer;
+  transition:box-shadow .26s ease;
+}
+.streak-hero:hover{box-shadow:var(--shadow-card-hover)}
+.streak-hero:active{transform:scale(.99)}
+.streak-hero:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.streak-hero-meta{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.streak-hero-label{
+  font-size:12px;font-weight:600;letter-spacing:-.01em;color:var(--ink-3);
+}
+.streak-hero-badge{
+  display:inline-flex;align-items:center;
+  font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;
+  color:var(--accent);background:var(--accent-soft);
+  letter-spacing:.01em;
+}
+.streak-hero-badge.is-record{
+  color:#30d158;background:rgba(48,209,88,.14);
+  box-shadow:0 0 10px rgba(48,209,88,.12);
+}
+.streak-hero-body{
+  display:flex;flex-direction:column;gap:10px;
+}
+.streak-hero-count{
+  font-family:var(--font-display);font-weight:700;
+  font-size:clamp(42px,6vw,64px);line-height:1.05;letter-spacing:-.04em;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.streak-hero-count em{
+  font-family:var(--font-body);font-style:normal;
+  font-size:clamp(14px,2vw,18px);font-weight:500;
+  color:var(--ink-3);margin-left:8px;letter-spacing:-.01em;
+}
+.streak-hero-track{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+}
+.streak-hero-narrative{
+  font-size:14px;font-weight:500;color:var(--ink-3);line-height:1.45;
+}
+.streak-hero-narrative strong{color:var(--ink);font-weight:700}
+.streak-hero-empty .streak-hero-count{color:var(--ink-4)}
+
 .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
 .rings-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px;align-items:stretch}
 .chart-card{
@@ -1579,6 +1630,50 @@ header{
   border-radius:var(--radius);
   padding:24px 26px;margin-bottom:24px;
 }
+.recent-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:1px;
+  overflow:hidden;
+  margin:-4px 0 20px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:var(--border);
+}
+.recent-stat{
+  min-width:0;
+  padding:15px 17px 16px;
+  background:color-mix(in srgb, var(--control-bg) 70%, transparent);
+}
+.recent-stat-label{
+  display:block;
+  font-size:11px;
+  font-weight:700;
+  color:var(--ink-4);
+  letter-spacing:.055em;
+  text-transform:uppercase;
+}
+.recent-stat-value{
+  display:block;
+  margin-top:7px;
+  font-family:var(--font-display);
+  font-size:25px;
+  line-height:1.05;
+  font-weight:700;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.035em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.recent-stat-note{
+  display:block;
+  margin-top:6px;
+  font-size:12px;
+  line-height:1.35;
+  color:var(--ink-4);
+}
 .recent-stats-inline{
   font-size:12px;color:var(--ink-3);font-weight:500;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -1744,6 +1839,8 @@ tbody tr:hover .row-del{opacity:1}
   .heatmap-stage-values{gap:6px}
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
+  .recent-stats{grid-template-columns:1fr}
+  .recent-stat-value{font-size:23px}
   .field-grid{grid-template-columns:1fr}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
@@ -2161,6 +2258,12 @@ function getCategoryMeta(categoryKey) {
 
 function projectColor(project, index = 0) {
   return project?.category_color || getCategoryMeta(project?.category_key)?.color || PROJECT_COLORS[index % PROJECT_COLORS.length];
+}
+
+function projectChartColor(index, total) {
+  const safeTotal = Math.max(total, 1);
+  const t = safeTotal === 1 ? 0 : index / (safeTotal - 1);
+  return `hsl(210 ${Math.round(78 - (t * 22))}% ${Math.round(28 + (t * 42))}%)`;
 }
 
 function projectBadge(project, index = 0) {
@@ -4325,6 +4428,50 @@ function renderDailyGoal(summary) {
   });
 
   loadDailyTarget(summary);
+}
+
+function renderProjectChart(projects, summary = {}) {
+  const mount = document.getElementById('projectChart');
+  if (!mount) return;
+  const top = monthProjectRows(projects).slice(0, 10);
+  if (top.length === 0) {
+    mount.innerHTML = `<div class="chart-empty">No project data in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
+    return;
+  }
+  const totalSeconds = top.reduce((sum, project) => sum + (project.month_seconds || 0), 0) || 1;
+  const chartColors = top.map((_, index) => projectChartColor(index, top.length));
+  let start = 0;
+  const segments = top.map((project, index) => {
+    const share = (project.month_seconds || 0) / totalSeconds;
+    const end = start + (share * 100);
+    const segment = `${chartColors[index]} ${start}% ${end}%`;
+    start = end;
+    return segment;
+  });
+  const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
+
+  mount.innerHTML = `
+    <div class="donut-layout">
+      <div class="donut-chart" style="background:conic-gradient(${segments.join(', ')})">
+        <div class="donut-hole">
+          <div class="donut-total">${totalHours}h</div>
+          <div class="donut-caption">${escapeHtml(selectedMonthLabel(summary))}</div>
+        </div>
+      </div>
+      <div class="donut-legend">
+        ${top.map((project, index) => {
+          const hours = Math.round(((project.month_seconds || 0) / 3600) * 10) / 10;
+          return `
+            <div class="legend-item" title="${escapeHtml(project.project_name)}">
+              <span class="legend-swatch" style="background:${chartColors[index]}"></span>
+              <span class="legend-name">${escapeHtml(project.project_name)}</span>
+              <span class="legend-value">${hours}h</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function renderCategoryChart(projects, summary = {}) {
