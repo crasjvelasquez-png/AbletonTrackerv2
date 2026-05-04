@@ -111,7 +111,7 @@
     --modal-backdrop:rgba(0,0,0,.52);
     --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
     --shadow-card-hover:0 16px 30px rgba(0,0,0,.42), 0 30px 62px rgba(255,255,255,.08);
-/  }
+  }
 }
 
 :root[data-theme="light"]{color-scheme:light}
@@ -331,7 +331,7 @@ header{
 .card[data-detail]:hover .card-label,
 .card[data-detail]:focus-visible .card-label{color:var(--accent)}
 .card-label{
-  font-size:12px;font-weight:600;color:var(--ink-3);margin-top:auto;padding-top:18px;
+  font-size:14px;font-weight:700;color:var(--ink-3);margin-top:auto;padding-top:18px;
   letter-spacing:-.01em;
   text-wrap:balance;
 }
@@ -370,7 +370,7 @@ header{
   letter-spacing:.01em;
   user-select:none;
 }
-.card-sub:last-child{margin-top:auto;padding-top:12px}
+
 .card-chip--good{
   color:#2c8a4a;background:rgba(48,164,85,.14);
 }
@@ -1874,7 +1874,7 @@ const PROJECT_COLORS = [
 ];
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
-const THEME_STORAGE_KEY = 'ableton_tracker_theme';
+window.THEME_STORAGE_KEY = 'ableton_tracker_theme';
 const WEEK_START_DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const DEFAULT_WEEK_START_BACKEND = 4; // Friday in Python weekday()
 let WEEK_START_BACKEND_DAY = DEFAULT_WEEK_START_BACKEND; // 0=Mon ... 6=Sun (Python weekday)
@@ -1906,7 +1906,7 @@ const weeklyTargetState = {
 };
 
 function activeTheme() {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  const stored = localStorage.getItem(window.THEME_STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
   return systemTheme.matches ? 'dark' : 'light';
 }
@@ -1920,7 +1920,7 @@ function updateThemeToggle() {
 }
 
 function applyStoredTheme() {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  const stored = localStorage.getItem(window.THEME_STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') {
     document.documentElement.dataset.theme = stored;
   } else {
@@ -1932,7 +1932,7 @@ function applyStoredTheme() {
 function toggleTheme() {
   const root = document.documentElement;
   root.classList.add('theme-switching');
-  localStorage.setItem(THEME_STORAGE_KEY, activeTheme() === 'dark' ? 'light' : 'dark');
+  localStorage.setItem(window.THEME_STORAGE_KEY, activeTheme() === 'dark' ? 'light' : 'dark');
   applyStoredTheme();
   requestAnimationFrame(() => {
     requestAnimationFrame(() => root.classList.remove('theme-switching'));
@@ -2108,7 +2108,7 @@ function setActiveView(nextView, { pushHash = true } = {}) {
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 systemTheme.addEventListener('change', () => {
-  if (!localStorage.getItem(THEME_STORAGE_KEY)) updateThemeToggle();
+  if (!localStorage.getItem(window.THEME_STORAGE_KEY)) updateThemeToggle();
 });
 applyStoredTheme();
 document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
@@ -2651,11 +2651,12 @@ function renderStreakDetail({ summary, year_daily }) {
   } else if (cur === 0 && best > 0) {
     narrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
   } else if (cur > best) {
-    narrative = `<strong>New record — ${cur} days!</strong> You've surpassed your previous best of ${best} day${best !== 1 ? 's' : ''}.`;
+    narrative = `<strong>New record!</strong> You've surpassed your previous best.`;
   } else if (cur === best && best > 0) {
-    narrative = `<strong>Matching your personal best</strong> of ${best} day${best !== 1 ? 's' : ''}. Keep going to set a new record.`;
+    narrative = `<strong>Tied with your personal best.</strong>`;
   } else {
-    narrative = `Day <strong>${cur}</strong> of your current streak. Personal best is <strong>${best} day${best !== 1 ? 's' : ''}</strong>.`;
+    const daysLeft = best - cur;
+    narrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
   }
 
   const statusLabel = cur > best ? '🏆 Record' : cur === best && best > 0 ? 'On track' : cur === 0 ? 'Restart' : 'Building';
@@ -3378,12 +3379,12 @@ function render(data) {
   } else if (cur === 0 && best > 0) {
     streakNarrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
   } else if (cur > best) {
-    streakNarrative = `<strong>New record — ${cur} days!</strong> You've surpassed your previous best of ${best} day${best !== 1 ? 's' : ''}.`;
+    streakNarrative = `<strong>New record!</strong> Surpassed your previous best.`;
   } else if (cur === best && best > 0) {
-    streakNarrative = `<strong>Matching your personal best</strong> of ${best} day${best !== 1 ? 's' : ''}. Keep going to set a new record.`;
+    streakNarrative = `<strong>Tied for your personal best.</strong>`;
   } else {
     const daysLeft = best - cur;
-    streakNarrative = `Day <strong>${cur}</strong> of your current streak. <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best of ${best}.`;
+    streakNarrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
   }
 
   const streakBadgeHTML = cur > best
@@ -3393,12 +3394,11 @@ function render(data) {
   document.getElementById('appDashboard').innerHTML = `
     <div class="cards">
       <div class="card" role="button" tabindex="0" data-detail="streak">
-        <div class="card-label">Streak ${streakBadgeHTML}</div>
         <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
         <div class="card-sub">${streakNarrative}</div>
+        <div class="card-label">Streak ${streakBadgeHTML}</div>
       </div>
       <div class="card" role="button" tabindex="0" data-detail="top-project">
-        <div class="card-label">Top Project</div>
         ${topProject
           ? `<div class="card-value card-value--text" title="${escapeHtml(topProject.project_name)}">${escapeHtml(topProject.project_name)}</div>
              <div class="card-chip">${fmt.dur(topProject.month_seconds)} · ${topProjectShare}% of month</div>
@@ -3406,12 +3406,13 @@ function render(data) {
           : `<div class="card-value">—</div>
              <div class="card-chip">No projects yet</div>
              <div class="card-sub">${monthSub}</div>`}
+        <div class="card-label">Top Project</div>
       </div>
       <div class="card" role="button" tabindex="0" data-detail="this-month">
-        <div class="card-label">${summary.selected_month_is_current ? 'This Month' : 'Month'}</div>
         <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
         ${paceChip}
         <div class="card-sub">${monthlyProjectCount} project${monthlyProjectCount !== 1 ? 's' : ''} · ${monthSub}</div>
+        <div class="card-label">${summary.selected_month_is_current ? 'This Month' : 'Month'}</div>
       </div>
     </div>
 

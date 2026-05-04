@@ -66,7 +66,25 @@
       "Bash(curl -s --path-as-is -o /tmp/trav2.out -w \"%{http_code} %{size_download} bytes\\\\n\" \"http://127.0.0.1:7421/static/..%2Fdashboard.py\")",
       "mcp__Claude_Preview__preview_start",
       "Bash(ps -p 19175 -o pid,command)",
-      "Bash(kill 19175)"
+      "Bash(kill 19175)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" --max-time 3 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(curl -s -o /tmp/abl_api_data.json -w 'run __TRACKED_VAR__: %{time_total}s  size=%{size_download} bytes\\\\n' 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/abl_api_data.json'\\)\\); print\\(list\\(d.keys\\(\\)\\)\\); [print\\(f'  {k}: {len\\(v\\) if isinstance\\(v,\\(list,dict\\)\\) else type\\(v\\).__name__}'\\) for k,v in d.items\\(\\)]\")",
+      "Bash(curl -s 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(gzip -6)",
+      "Bash(sqlite3 ~/.ableton_tracker/sessions.db \"SELECT COUNT\\(*\\) AS sessions, MIN\\(start_time\\) AS earliest, MAX\\(start_time\\) AS latest FROM sessions;\")",
+      "Bash(lsof -iTCP:7421 -sTCP:LISTEN -t)",
+      "Bash(xargs -I {} kill {})",
+      "Bash(python3 -c \"import dashboard\")",
+      "Bash(curl -s -H 'Accept-Encoding: identity' -o /tmp/abl_post.json -w 'run __TRACKED_VAR__: %{time_total}s  size=%{size_download} bytes\\\\n' 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(curl -s --compressed 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(curl -s --compressed -o /tmp/abl_post_gz.json -w 'run __TRACKED_VAR__: %{time_total}s  on-wire=%{size_download} bytes  decoded=__CMDSUB_OUTPUT__')",
+      "Bash(sqlite3 ~/.ableton_tracker/sessions.db \".indexes sessions\")",
+      "Bash(sqlite3 ~/.ableton_tracker/sessions.db \"EXPLAIN QUERY PLAN SELECT project_name, start_time, last_seen_time, end_time, active_seconds FROM sessions WHERE active_seconds > 0 AND start_time >= 1730000000.0;\")",
+      "Bash(curl -s --compressed -o /dev/null -w 'run __TRACKED_VAR__: %{time_total}s  on-wire=%{size_download} bytes\\\\n' 'http://localhost:7421/api/data?month=2026-05')",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}  %{time_total}s\\\\n\" \"http://localhost:7421/api/daily-target?date=$\\(date +%Y-%m-%d\\)\")",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}  %{time_total}s\\\\n\" \"http://localhost:7421/api/weekly-target?date=$\\(date +%Y-%m-%d\\)\")",
+      "Bash(curl -s -o /dev/null -w 'run __TRACKED_VAR__: %{time_total}s  size=%{size_download}\\\\n' http://localhost:7421/)"
     ]
   }
 }
