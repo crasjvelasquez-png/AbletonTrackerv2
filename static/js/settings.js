@@ -272,10 +272,35 @@
         await handleGoalSubmit(target);
         return;
       }
+      if (target.matches('[data-report-form]')) {
+        event.preventDefault();
+        await handleReportGenerate(target);
+        return;
+      }
     });
 
     // Click delegation: edit / cancel / delete / cleanup actions / theme
     root.addEventListener('click', async event => {
+      const reportFormatBtn = event.target.closest('[data-report-format]');
+      if (reportFormatBtn) {
+        $all('[data-report-format]', root).forEach(b => {
+          const active = b === reportFormatBtn;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-checked', String(active));
+        });
+        return;
+      }
+      const reportDownloadBtn = event.target.closest('[data-report-download]');
+      if (reportDownloadBtn) {
+        const form = root.querySelector('[data-report-form]');
+        if (!form) return;
+        const project = form.querySelector('[data-report-project-select]').value;
+        const formatBtn = form.querySelector('[data-report-format].is-active');
+        if (!project || !formatBtn) return;
+        const format = formatBtn.dataset.reportFormat;
+        window.open(`/api/project-report/download?project=${encodeURIComponent(project)}&format=${format}`, '_blank');
+        return;
+      }
       const editBtn = event.target.closest('[data-category-edit]');
       if (editBtn) {
         const key = editBtn.dataset.categoryEdit;
@@ -586,6 +611,73 @@
     }
   }
 
+  // ── project report ──────────────────────────────────────────────────
+  async function loadProjectList() {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    const select = $('[data-report-project-select]', root);
+    if (!select) return;
+    try {
+      const res = await fetch('/api/project-list');
+      const projects = await res.json();
+      if (!projects || projects.length === 0) {
+        select.innerHTML = '<option value="" disabled selected>No projects found</option>';
+        return;
+      }
+      select.innerHTML = '<option value="" disabled selected>Select a project...</option>' + 
+        projects.map(p => `<option value="${window.escapeHtml(p)}">${window.escapeHtml(p)}</option>`).join('');
+    } catch (e) {
+      select.innerHTML = '<option value="" disabled selected>Failed to load projects</option>';
+    }
+  }
+
+  async function handleReportGenerate(form) {
+    const root = $('[data-settings-root]');
+    const select = form.querySelector('[data-report-project-select]');
+    const btn = form.querySelector('[data-report-generate]');
+    const downloadBtn = form.querySelector('[data-report-download]');
+    const previewContainer = root.querySelector('[data-report-preview-container]');
+    const preview = root.querySelector('[data-report-preview]');
+    
+    if (!select || !select.value) {
+      window.toast('Please select a project first');
+      return;
+    }
+    
+    btn.disabled = true;
+    previewContainer.hidden = true;
+    downloadBtn.hidden = true;
+    
+    try {
+      const res = await fetch(`/api/project-report?project=${encodeURIComponent(select.value)}`);
+      const report = await res.json();
+      if (report.error) throw new Error(report.error);
+      
+      let out = `Project: ${report.project_name}\\n`;
+      out += `Total Time: ${report.total_duration}\\n`;
+      out += `Total Sessions: ${report.session_count}\\n\\n`;
+      
+      if (report.sessions.length === 0) {
+        out += "No sessions found.";
+      } else {
+        for (const s of report.sessions) {
+          out += `${s.date}  ${s.start_time} - ${s.end_time}  (${s.duration})\\n`;
+          if (s.notes) {
+            out += `  Notes: ${s.notes}\\n`;
+          }
+        }
+      }
+      
+      preview.textContent = out;
+      previewContainer.hidden = false;
+      downloadBtn.hidden = false;
+    } catch (e) {
+      window.toast(e.message || 'Failed to generate report');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   // ── appearance ─────────────────────────────────────────────────────
   function currentThemeChoice() {
     const stored = localStorage.getItem(window.THEME_STORAGE_KEY);
@@ -627,6 +719,7 @@
     syncThemePicker();
     refreshGoals();
     loadWeekStartDay();
+    loadProjectList();
   }
 
   function render(data) {

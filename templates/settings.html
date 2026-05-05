@@ -212,4 +212,44 @@
       </button>
     </div>
   </section>
+
+  <!-- ───────────────────────────  PROJECT REPORT  ────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="project-report">
+    <div class="section-head">
+      <h3 class="section-title">Project <em>report</em></h3>
+      <span class="section-meta">export sessions</span>
+    </div>
+    <p class="settings-copy">
+      Generate a text or CSV report of all sessions for a specific project.
+    </p>
+
+    <form class="report-form" data-report-form novalidate>
+      <div class="field-grid" style="margin-bottom: 20px;">
+        <label class="field">
+          <span class="field-label">Project</span>
+          <select class="text-input" data-report-project-select required style="appearance: auto; padding-right: 32px;">
+            <option value="" disabled selected>Loading projects...</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Format</span>
+          <div class="theme-picker" style="margin-top: 0; grid-template-columns: 1fr 1fr;" role="radiogroup" aria-label="Format">
+            <button class="theme-option is-active" type="button" role="radio" data-report-format="text" aria-checked="true">
+              <span class="theme-option-label">Text</span>
+            </button>
+            <button class="theme-option" type="button" role="radio" data-report-format="csv" aria-checked="false">
+              <span class="theme-option-label">CSV</span>
+            </button>
+          </div>
+        </label>
+      </div>
+      <div class="settings-actions">
+        <button class="btn" type="submit" data-report-generate>Generate report</button>
+        <button class="btn" type="button" data-report-download hidden style="margin-left: 10px;">Download</button>
+      </div>
+    </form>
+    <div data-report-preview-container hidden style="margin-top: 20px;">
+      <pre class="report-preview" data-report-preview></pre>
+    </div>
+  </section>
 </div>

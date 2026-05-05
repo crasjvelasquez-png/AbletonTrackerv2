@@ -81,6 +81,11 @@ def setup_db():
             SET last_seen_time = COALESCE(last_seen_time, end_time, start_time)
             WHERE last_seen_time IS NULL
         """)
+        if "notes" not in columns:
+            conn.execute("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''")
+        conn.execute("""
+            UPDATE sessions SET notes = COALESCE(notes, '') WHERE notes IS NULL
+        """)
         conn.commit()
 
 

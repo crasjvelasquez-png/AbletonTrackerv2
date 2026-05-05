@@ -957,39 +957,59 @@ header{
   font-size:11px;line-height:1.2;color:var(--ink-4);
 }
 .donut-layout{
-  min-height:240px;display:grid;grid-template-columns:minmax(160px,220px) 1fr;
-  gap:20px;align-items:center;
+  min-height:240px;display:grid;grid-template-columns:1fr minmax(160px,220px);
+  gap:24px;align-items:center;
+}
+.bar-column{
+  display:flex;flex-direction:column;gap:10px;
 }
 .donut-chart{
-  width:min(200px,100%);aspect-ratio:1;border-radius:50%;margin:0 auto;
-  position:relative;box-shadow:var(--logo-shadow);
+  width:100%;height:28px;border-radius:6px;display:flex;overflow:hidden;
+  position:relative;box-shadow:var(--shadow-1);
+  transition:filter .22s cubic-bezier(.22,1,.36,1);
 }
-.donut-hole{
-  position:absolute;inset:22%;border-radius:50%;
-  background:var(--control-inner);border:1px solid var(--border);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:10px;
+.bar-segment{
+  height:100%;transition:opacity .22s ease, filter .22s ease;
+  cursor:pointer;
 }
+.bar-segment.is-muted{opacity:.35}
 .donut-total{
-  font-family:var(--font-display);font-size:24px;font-weight:700;
-  color:var(--ink);letter-spacing:-.03em;
+  font-family:var(--font-display);font-size:26px;font-weight:700;
+  color:var(--ink);letter-spacing:-.03em;line-height:1;
 }
 .donut-caption{
-  font-size:12px;color:var(--ink-4);margin-top:4px;
+  font-size:11px;font-weight:500;color:var(--ink-4);margin-top:2px;
 }
-.donut-legend{display:grid;gap:10px;align-content:center}
+.donut-chart.is-hovered{filter:brightness(.92)}
+.donut-legend{display:grid;gap:6px;align-content:center}
 .legend-item{
-  display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
-  font-size:12px;color:var(--ink-2);
+  display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;
+  font-size:12px;color:var(--ink-2);padding:6px 8px;border-radius:10px;
+  position:relative;overflow:hidden;
+  transition:background .18s ease, transform .18s ease, opacity .18s ease;
 }
+.legend-item:hover{background:var(--surface-hover)}
+.legend-item.is-active{background:var(--surface-hover);transform:translateY(-1px)}
+.legend-item.is-muted{opacity:.35}
+.legend-item > :not(.legend-bar){position:relative;z-index:1}
 .legend-swatch{
-  width:10px;height:10px;border-radius:4px;display:inline-block;
+  width:12px;height:12px;border-radius:50%;display:inline-block;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);
 }
 .legend-name{
   min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .legend-value{
   font-family:var(--font-mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+}
+.legend-bar{
+  position:absolute;inset:0 auto 0 0;width:var(--legend-width,0%);
+  border-radius:inherit;pointer-events:none;
+  background:color-mix(in srgb, var(--legend-color, #8E8E93) 10%, transparent);
+  transition:width .32s cubic-bezier(.22,1,.36,1), opacity .18s ease;
+}
+.legend-percent{
+  font-family:var(--font-mono);font-size:11px;color:var(--ink-4);font-variant-numeric:tabular-nums;
 }
 
 .section-head{
@@ -1501,6 +1521,13 @@ header{
   background-size:10px 10px;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
 }
+.report-form .theme-option.is-active{
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent), 0 0 18px 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.report-form .theme-option.is-active::after,
+.report-form .theme-option.is-active::before{
+  display:none;
+}
 .theme-option-swatch{
   width:46px;height:30px;border-radius:10px;border:1px solid var(--border);
   display:block;
@@ -1617,17 +1644,71 @@ tbody tr{transition:background .15s ease}
 tbody tr:hover td{background:var(--surface-hover)}
 td.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:13px}
 td.dur{text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
-td.row-action{width:36px;padding:8px 10px 8px 4px;text-align:right}
+td.row-action{width:56px;padding:8px 8px 8px 2px;text-align:right;white-space:nowrap}
 .row-del{
   display:inline-flex;align-items:center;justify-content:center;
   width:22px;height:22px;border-radius:6px;
   border:1px solid transparent;background:transparent;
   color:var(--danger);font-size:15px;line-height:1;cursor:pointer;
   opacity:.55;transition:opacity .15s ease, background .15s ease, border-color .15s ease;
+  flex-shrink:0;
 }
-tbody tr:hover .row-del{opacity:1}
+.row-note{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:6px;
+  border:1px solid transparent;background:transparent;
+  color:var(--accent);font-size:13px;line-height:1;cursor:pointer;
+  opacity:.55;transition:opacity .15s ease, background .15s ease, border-color .15s ease;
+  flex-shrink:0;margin-right:2px;
+}
+.row-note.has-notes{opacity:.8}
+tbody tr:hover .row-del,
+tbody tr:hover .row-note{opacity:1}
 .row-del:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28)}
+.row-note:hover{background:var(--accent-soft);border-color:var(--accent-line)}
 .row-del:disabled{opacity:.2;cursor:not-allowed}
+
+/* Notes modal */
+.notes-modal{max-width:520px}
+.notes-modal-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  margin-bottom:16px;
+}
+.notes-modal-subtitle{
+  margin-top:4px;font-size:13px;color:var(--ink-4);
+}
+.notes-modal-close{
+  width:30px;height:30px;border-radius:999px;border:1px solid var(--border);
+  background:var(--control-bg);color:var(--ink-2);display:grid;place-items:center;
+  cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;
+}
+.notes-modal-close:hover{background:var(--control-bg-strong);color:var(--ink)}
+.notes-modal-body{
+  margin-bottom:12px;
+}
+.notes-textarea{
+  width:100%;min-height:80px;max-height:200px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:10px;
+  background:var(--surface);color:var(--ink);
+  font-family:var(--font-sans);font-size:13.5px;line-height:1.5;
+  resize:vertical;outline:none;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.notes-textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.notes-session-label{
+  font-size:12px;font-weight:600;color:var(--ink-3);
+  margin-bottom:6px;margin-top:14px;
+}
+.notes-session-label:first-child{margin-top:0}
+.notes-modal-foot{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.notes-char-count{
+  font-size:12px;color:var(--ink-4);font-variant-numeric:tabular-nums;
+}
+.notes-char-count.over{color:var(--danger)}
 
 .proj-badge{
   display:inline-flex;align-items:center;gap:8px;
@@ -1758,6 +1839,12 @@ tbody tr:hover .row-del{opacity:1}
   .card,
   .target-card{transition:none}
 }
+.report-preview{
+  font-family:var(--font-mono);font-size:12px;color:var(--ink);
+  background:var(--surface-hover);padding:14px;border-radius:10px;
+  border:1px solid var(--border);max-height:400px;overflow:auto;
+  white-space:pre-wrap;word-break:break-word;
+}
 </style>
 </head>
 <body>
@@ -1861,6 +1948,27 @@ tbody tr:hover .row-del{opacity:1}
     <div class="category-list" id="categoryModalList"></div>
     <div class="category-modal-foot">
       <button class="btn" id="categoryModalClear" type="button">Clear category</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notes modal -->
+<div class="modal-backdrop" id="notesModal">
+  <div class="modal notes-modal" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
+    <div class="notes-modal-head">
+      <div>
+        <h3 id="notesModalTitle">Session notes</h3>
+        <div class="notes-modal-subtitle" id="notesModalSubtitle"></div>
+      </div>
+      <button class="notes-modal-close" id="notesModalClose" type="button" aria-label="Close notes">×</button>
+    </div>
+    <div class="notes-modal-body" id="notesModalBody"></div>
+    <div class="notes-modal-foot">
+      <span class="notes-char-count" id="notesCharCount">0 / 500</span>
+      <div class="modal-actions">
+        <button class="btn" id="notesModalCancel">Cancel</button>
+        <button class="btn primary" id="notesModalSave">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2146,6 +2254,12 @@ const fmt = {
     if (!ts) return '—';
     return new Date(ts * 1000).toLocaleString('en-US', {
       month:'short', day:'numeric', hour:'numeric', minute:'2-digit'
+    });
+  },
+  time(ts) {
+    if (!ts) return '—';
+    return new Date(ts * 1000).toLocaleString('en-US', {
+      hour:'numeric', minute:'2-digit'
     });
   },
   hrs(s) { return Math.round((s || 0) / 360) / 10; }
@@ -3206,6 +3320,154 @@ async function deleteRecentEntry(sessionIds, projectName){
   } catch(e){ toast('Failed to delete entry'); }
 }
 
+// ── Notes ──
+const MAX_NOTES_LEN = 500;
+
+function bindNotesTriggers(){
+  document.querySelectorAll('.row-note').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ids = (btn.dataset.sessionIds || '')
+        .split(',')
+        .map(s => parseInt(s, 10))
+        .filter(n => Number.isFinite(n));
+      const projectName = decodeURIComponent(btn.dataset.projectName || '');
+      let notes = {};
+      let startTimes = {};
+      let endTimes = {};
+      let lastSeenTimes = {};
+      try {
+        notes = JSON.parse(decodeURIComponent(btn.dataset.sessionNotes || '{}'));
+        startTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionStartTimes || '{}'));
+        endTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionEndTimes || '{}'));
+        lastSeenTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionLastSeenTimes || '{}'));
+      } catch(e) {}
+      openNotesPopup({ sessionIds: ids, projectName, notes, startTimes, endTimes, lastSeenTimes });
+    });
+  });
+}
+
+let notesModalState = null;
+
+function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, lastSeenTimes }){
+  // Close any existing notes modal first
+  if (notesModalState) closeNotesModal();
+
+  const modal = document.getElementById('notesModal');
+  const title = document.getElementById('notesModalTitle');
+  const subtitle = document.getElementById('notesModalSubtitle');
+  const body = document.getElementById('notesModalBody');
+  const saveBtn = document.getElementById('notesModalSave');
+  const cancelBtn = document.getElementById('notesModalCancel');
+  const closeBtn = document.getElementById('notesModalClose');
+  const charCount = document.getElementById('notesCharCount');
+
+  const abletonIsRunning = latestDashboardData?.summary?.ableton_running === true;
+
+  title.textContent = 'Session notes';
+
+  // Helper to get a display end-time string for a session
+  function endTimeDisplay(sidStr) {
+    const et = endTimes[sidStr];        // number (timestamp) | null (live) | undefined (missing)
+    const lst = lastSeenTimes[sidStr];  // number | undefined
+    if (et != null) return fmt.time(et);
+    // end_time is null — still open. Only show "Active" if Ableton is running.
+    if (abletonIsRunning) return '<span class="active-tag"><span class="dot"></span>Active</span>';
+    // Stale session: show last_seen_time as effective end
+    if (lst) return fmt.time(lst);
+    return '—';
+  }
+
+  // Build subtitle: "Project Name — May 4 — 3:45 PM" or "...— Active"
+  if (sessionIds.length === 1) {
+    const sidStr = String(sessionIds[0]);
+    const ts = startTimes[sidStr] || 0;
+    const dateStr = fmt.date(ts);
+    subtitle.innerHTML = `${escapeHtml(projectName)} &mdash; ${dateStr} &mdash; ${endTimeDisplay(sidStr)}`;
+  } else {
+    subtitle.textContent = `${sessionIds.length} sessions · ${escapeHtml(projectName)}`;
+  }
+
+  // Build textareas
+  let html = '';
+  sessionIds.forEach((sid, i) => {
+    const sidStr = String(sid);
+    const note = notes[sidStr] || '';
+    const ts = startTimes[sidStr] || 0;
+    const dateStr = fmt.date(ts);
+    const startStr = fmt.datetime(ts);
+    const timePart = `${startStr} &ndash; ${endTimeDisplay(sidStr)}`;
+    const label = sessionIds.length > 1
+      ? `<div class="notes-session-label">Session ${i + 1} &middot; ${dateStr} &middot; ${timePart}</div>`
+      : '';
+    html += `${label}<textarea class="notes-textarea" data-sid="${sidStr}" maxlength="${MAX_NOTES_LEN}" placeholder="What did you work on? Any to-dos?">${escapeHtml(note)}</textarea>`;
+  });
+  body.innerHTML = html;
+
+  // Character counter
+  const textareas = body.querySelectorAll('.notes-textarea');
+  const updateCounter = () => {
+    let total = 0;
+    textareas.forEach(ta => { total += ta.value.length; });
+    charCount.textContent = `${total} / ${MAX_NOTES_LEN}`;
+    charCount.classList.toggle('over', total > MAX_NOTES_LEN);
+  };
+  textareas.forEach(ta => {
+    ta.addEventListener('input', updateCounter);
+  });
+  updateCounter();
+
+  // Handlers
+  const onSave = async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    try {
+      for (const ta of textareas) {
+        const sid = parseInt(ta.dataset.sid, 10);
+        const notesVal = ta.value.trim();
+        await postJson('/api/session-notes', { session_id: sid, notes: notesVal });
+      }
+      toast('Notes saved');
+      closeNotesModal();
+      load();
+    } catch(e) {
+      toast('Failed to save notes');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  };
+
+  const onCancel = () => closeNotesModal();
+  const onBackdrop = e => { if (e.target === modal) closeNotesModal(); };
+  const onKey = e => {
+    if (e.key === 'Escape') closeNotesModal();
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSave();
+  };
+
+  saveBtn.addEventListener('click', onSave);
+  cancelBtn.addEventListener('click', onCancel);
+  closeBtn.addEventListener('click', onCancel);
+  modal.addEventListener('click', onBackdrop);
+  document.addEventListener('keydown', onKey);
+
+  modal.classList.add('show');
+  if (textareas.length > 0) textareas[0].focus();
+
+  // Store cleanup refs
+  notesModalState = { onSave, onCancel, onBackdrop, onKey, saveBtn, cancelBtn, closeBtn, modal };
+}
+
+function closeNotesModal(){
+  if (!notesModalState) return;
+  const { onSave, onCancel, onBackdrop, onKey, saveBtn, cancelBtn, closeBtn, modal } = notesModalState;
+  modal.classList.remove('show');
+  saveBtn.removeEventListener('click', onSave);
+  cancelBtn.removeEventListener('click', onCancel);
+  closeBtn.removeEventListener('click', onCancel);
+  modal.removeEventListener('click', onBackdrop);
+  document.removeEventListener('keydown', onKey);
+  notesModalState = null;
+}
+
 async function clearPhantoms(){
   const ok = await confirmDialog({
     title: 'Remove phantom <em>sessions</em>?',
@@ -3548,6 +3810,21 @@ function render(data) {
                     : '<span class="active-tag"><span class="dot"></span>active now</span>'}</td>
                   <td class="dur">${fmt.dur(s.active_seconds)}</td>
                   <td class="row-action">
+                    ${(() => {
+                      const notesData = JSON.stringify(s.session_notes || {});
+                      const timesData = JSON.stringify(s.session_start_times || {});
+                      const endTimesData = JSON.stringify(s.session_end_times || {});
+                      const lastSeenData = JSON.stringify(s.session_last_seen_times || {});
+                      const hasNotes = Object.keys(s.session_notes || {}).length > 0;
+                      return `<button class="row-note${hasNotes ? ' has-notes' : ''}" type="button"
+                        data-session-ids="${ids}"
+                        data-session-notes="${encodeURIComponent(notesData)}"
+                        data-session-start-times="${encodeURIComponent(timesData)}"
+                        data-session-end-times="${encodeURIComponent(endTimesData)}"
+                        data-session-last-seen-times="${encodeURIComponent(lastSeenData)}"
+                        data-project-name="${encodeURIComponent(s.project_name || '')}"
+                        title="${hasNotes ? 'Edit notes' : 'Add notes'}">✎</button>`;
+                    })()}
                     <button class="row-del" type="button"
                       data-session-ids="${ids}"
                       data-project-name="${encodeURIComponent(s.project_name || '')}"
@@ -3588,6 +3865,7 @@ function render(data) {
   if (bu) bu.addEventListener('click', clearUnsaved);
   bindCategoryTriggers();
   bindRowDeleteTriggers();
+  bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
 
   renderActivityHeatmap(year_daily, year_hourly);
@@ -4346,7 +4624,7 @@ function renderCategoryChart(projects, summary = {}) {
     buckets.get(key).total_seconds += seconds;
   });
 
-  const entries = [...buckets.values()]
+  let entries = [...buckets.values()]
     .filter(entry => entry.total_seconds > 0)
     .sort((a, b) => b.total_seconds - a.total_seconds);
 
@@ -4355,39 +4633,116 @@ function renderCategoryChart(projects, summary = {}) {
     return;
   }
 
+  if (entries.length > 6) {
+    const topEntries = entries.slice(0, 5);
+    const otherSeconds = entries.slice(5).reduce((sum, entry) => sum + entry.total_seconds, 0);
+    if (otherSeconds > 0) {
+      topEntries.push({
+        key: '__other',
+        label: 'Other',
+        color: '#8E8E93',
+        total_seconds: otherSeconds,
+      });
+    }
+    entries = topEntries;
+  }
+
   const totalSeconds = entries.reduce((sum, entry) => sum + entry.total_seconds, 0) || 1;
-  let start = 0;
-  const segments = entries.map(entry => {
-    const share = entry.total_seconds / totalSeconds;
-    const end = start + (share * 100);
-    const segment = `${entry.color} ${start}% ${end}%`;
-    start = end;
-    return segment;
+  const formatPercent = value => {
+    const rounded = value < 10 ? value.toFixed(1) : value.toFixed(0);
+    return rounded.replace(/\.0$/, '');
+  };
+  let startPercent = 0;
+  const chartEntries = entries.map((entry, index) => {
+    const percent = (entry.total_seconds / totalSeconds) * 100;
+    const endPercent = index === entries.length - 1 ? 100 : startPercent + percent;
+    const chartEntry = {
+      ...entry,
+      percent,
+      start_percent: startPercent,
+      end_percent: endPercent,
+    };
+    startPercent = endPercent;
+    return chartEntry;
   });
   const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
   mount.innerHTML = `
     <div class="donut-layout">
-      <div class="donut-chart" style="background:conic-gradient(${segments.join(', ')})">
-        <div class="donut-hole">
+      <div class="bar-column">
+        <div class="bar-header">
           <div class="donut-total">${totalHours}h</div>
           <div class="donut-caption">${escapeHtml(selectedMonthLabel(summary))}</div>
         </div>
+        <div id="donutChart" class="donut-chart">
+          ${chartEntries.map((entry, index) => `
+            <div class="bar-segment" data-segment-index="${index}" style="width:${entry.percent.toFixed(3)}%;background:${entry.color}"></div>
+          `).join('')}
+        </div>
       </div>
       <div class="donut-legend">
-        ${entries.map(entry => {
+        ${chartEntries.map((entry, index) => {
           const hours = Math.round((entry.total_seconds / 3600) * 10) / 10;
+          const barWidth = Math.max(1, Math.min(100, entry.percent));
           return `
-            <div class="legend-item" title="${escapeHtml(entry.label)}">
+            <div class="legend-item" data-legend-index="${index}" style="--legend-color:${entry.color};--legend-width:${barWidth.toFixed(3)}%">
+              <span class="legend-bar"></span>
               <span class="legend-swatch" style="background:${entry.color}"></span>
               <span class="legend-name">${escapeHtml(entry.label)}</span>
               <span class="legend-value">${hours}h</span>
+              <span class="legend-percent">${formatPercent(entry.percent)}%</span>
             </div>
           `;
         }).join('')}
       </div>
     </div>
   `;
+
+  const chart = mount.querySelector('#donutChart');
+  const segments = [...mount.querySelectorAll('.bar-segment')];
+  const legendItems = [...mount.querySelectorAll('.legend-item')];
+  if (!chart || legendItems.length === 0) return;
+
+  const setHighlight = activeIndex => {
+    const hasActive = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < legendItems.length;
+    legendItems.forEach((item, index) => {
+      item.classList.toggle('is-active', hasActive && index === activeIndex);
+      item.classList.toggle('is-muted', hasActive && index !== activeIndex);
+    });
+    segments.forEach((seg, index) => {
+      seg.classList.toggle('is-muted', hasActive && index !== activeIndex);
+    });
+    chart.classList.toggle('is-hovered', hasActive);
+  };
+
+  const findSegmentIndex = event => {
+    const rect = chart.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    if (x < 0 || x > rect.width) return -1;
+    const percent = (x / rect.width) * 100;
+    return chartEntries.findIndex(entry =>
+      percent >= entry.start_percent &&
+      (percent < entry.end_percent || entry.end_percent === 100)
+    );
+  };
+
+  legendItems.forEach(item => {
+    const index = Number(item.dataset.legendIndex);
+    item.addEventListener('mouseenter', () => setHighlight(index));
+    item.addEventListener('mouseleave', () => setHighlight(-1));
+  });
+
+  segments.forEach(seg => {
+    const index = Number(seg.dataset.segmentIndex);
+    seg.addEventListener('mouseenter', () => setHighlight(index));
+    seg.addEventListener('mouseleave', () => setHighlight(-1));
+  });
+
+  chart.addEventListener('mousemove', event => {
+    const index = findSegmentIndex(event);
+    setHighlight(index);
+  });
+  chart.addEventListener('mouseleave', () => setHighlight(-1));
 }
 
 load();

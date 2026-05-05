@@ -123,6 +123,32 @@ def delete_sessions(session_ids) -> dict:
         return {"ok": True, "deleted": deleted, "skipped_live": len(live_ids)}
 
 
+MAX_NOTES_LENGTH = 500
+
+
+def set_session_notes(session_id, notes: str) -> dict:
+    """Save notes for a single session. Notes are truncated to MAX_NOTES_LENGTH."""
+    try:
+        sid = int(session_id)
+    except (TypeError, ValueError):
+        return {"error": "invalid session_id"}
+
+    if not DB_PATH.exists():
+        return {"error": "no data yet"}
+
+    trimmed = (notes or "").strip()[:MAX_NOTES_LENGTH]
+
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        cur = conn.execute(
+            "UPDATE sessions SET notes = ? WHERE id = ?",
+            (trimmed, sid),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return {"error": "session not found"}
+        return {"ok": True, "session_id": sid, "notes": trimmed}
+
+
 def ensure_project_category_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -247,7 +273,18 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_project_category_table(conn)
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
+    ensure_sessions_notes_column(conn)
     purge_legacy_categories(conn)
+
+
+def ensure_sessions_notes_column(conn: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+    }
+    if "notes" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''")
+    conn.execute("UPDATE sessions SET notes = COALESCE(notes, '') WHERE notes IS NULL")
+    conn.commit()
 
 
 def purge_legacy_categories(conn: sqlite3.Connection) -> None:
@@ -761,6 +798,96 @@ def _compute_data_etag(month_value: str = "") -> str:
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+def get_project_list() -> list[str]:
+    if not DB_PATH.exists():
+        return []
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT DISTINCT project_name FROM sessions WHERE project_name IS NOT NULL ORDER BY LOWER(project_name) ASC").fetchall()
+        return [row["project_name"] for row in rows if row["project_name"]]
+
+
+def get_project_report(project_name: str) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data"}
+    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes
+            FROM sessions
+            WHERE project_name = ? AND active_seconds > 0
+            ORDER BY start_time DESC
+        """, (project_name,)).fetchall()
+        
+        if not rows:
+            return {
+                "project_name": project_name,
+                "sessions": [],
+                "total_duration": "00:00:00",
+                "total_duration_seconds": 0,
+                "session_count": 0
+            }
+        
+        # Build notes map for condensation
+        raw_notes = {}
+        for r in rows:
+            sid = int(r["id"])
+            raw_notes[sid] = (r["notes"] or "").strip()
+            
+        recent = condense_recent_sessions([dict(r) for r in rows])
+        # Reverses order to chronological (oldest → newest)
+        recent.reverse()
+        
+        sessions = []
+        total_seconds = 0
+        
+        for row in recent:
+            session_ids = row.get("session_ids", [])
+            # Concatenate notes
+            notes_list = []
+            # session_ids is in newest->oldest order if derived from DESC start_time query?
+            # Wait, condensation groups them. Let's make sure we sort IDs chronologically or just append.
+            # condense_recent_sessions groups them. 
+            for sid in session_ids:
+                note = raw_notes.get(sid, "")
+                if note:
+                    notes_list.append(note)
+            
+            merged_notes = " | ".join(notes_list)
+            
+            start_dt = datetime.fromtimestamp(row["start_time"])
+            end_ts = row["end_time"] if row["end_time"] is not None else row["last_seen_time"]
+            end_dt = datetime.fromtimestamp(end_ts) if end_ts else start_dt
+            
+            dur_sec = int(row["active_seconds"])
+            total_seconds += dur_sec
+            
+            h, rem = divmod(dur_sec, 3600)
+            m, s = divmod(rem, 60)
+            duration_str = f"{h:02d}:{m:02d}:{s:02d}"
+            
+            sessions.append({
+                "date": start_dt.strftime("%Y-%m-%d"),
+                "start_time": start_dt.strftime("%H:%M"),
+                "end_time": end_dt.strftime("%H:%M"),
+                "duration": duration_str,
+                "duration_seconds": dur_sec,
+                "notes": merged_notes,
+                "session_ids": session_ids
+            })
+            
+        th, trem = divmod(total_seconds, 3600)
+        tm, ts = divmod(trem, 60)
+        
+        return {
+            "project_name": project_name,
+            "sessions": sessions,
+            "total_duration": f"{th:02d}:{tm:02d}:{ts:02d}",
+            "total_duration_seconds": total_seconds,
+            "session_count": len(sessions)
+        }
+
+
 def get_stats(month_value: str = "") -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
@@ -814,12 +941,23 @@ def get_stats(month_value: str = "") -> dict:
             ]
 
             recent = conn.execute("""
-                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds
+                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes
                 FROM   sessions
                 WHERE  active_seconds >= 5 OR end_time IS NULL
                 ORDER  BY start_time DESC
                 LIMIT  240
             """).fetchall()
+            # Build notes, start-time, end-time, and last-seen maps from raw rows before condensation
+            raw_notes = {}
+            raw_start_times = {}
+            raw_end_times = {}
+            raw_last_seen_times = {}
+            for r in recent:
+                sid = int(r["id"])
+                raw_notes[sid] = (r["notes"] or "").strip()
+                raw_start_times[sid] = float(r["start_time"] or 0)
+                raw_end_times[sid] = float(r["end_time"]) if r["end_time"] is not None else None
+                raw_last_seen_times[sid] = float(r["last_seen_time"] or 0)
             recent = condense_recent_sessions(recent)[:60]
 
             today_str   = today.isoformat()
@@ -929,13 +1067,30 @@ def get_stats(month_value: str = "") -> dict:
             recent_rows = []
             for row in recent:
                 category = project_categories.get(row["project_name"])
+                session_ids = row.get("session_ids", [])
+                # Build per-session notes, start-times, end-times, and last-seen maps
+                session_notes = {}
+                session_start_times = {}
+                session_end_times = {}
+                session_last_seen_times = {}
+                for sid in session_ids:
+                    note = raw_notes.get(sid, "")
+                    if note:
+                        session_notes[str(sid)] = note
+                    session_start_times[str(sid)] = raw_start_times.get(sid, 0)
+                    session_end_times[str(sid)] = raw_end_times.get(sid)
+                    session_last_seen_times[str(sid)] = raw_last_seen_times.get(sid, 0)
                 recent_rows.append(
                     {
                         "project_name": row["project_name"],
                         "start_time": row["start_time"],
                         "end_time": row["end_time"],
                         "active_seconds": row["active_seconds"],
-                        "session_ids": row.get("session_ids", []),
+                        "session_ids": session_ids,
+                        "session_notes": session_notes,
+                        "session_start_times": session_start_times,
+                        "session_end_times": session_end_times,
+                        "session_last_seen_times": session_last_seen_times,
                         "category_key": category["key"] if category else None,
                         "category_label": category["label"] if category else None,
                         "category_color": category["color"] if category else None,
@@ -1807,31 +1962,38 @@ header{
   font-size:11px;line-height:1.2;color:var(--ink-4);
 }
 .donut-layout{
-  min-height:240px;display:grid;grid-template-columns:minmax(160px,220px) 1fr;
+  min-height:240px;display:grid;grid-template-columns:1fr minmax(160px,220px);
   gap:20px;align-items:center;
 }
+.bar-column{
+  display:flex;flex-direction:column;gap:10px;
+}
 .donut-chart{
-  width:min(200px,100%);aspect-ratio:1;border-radius:50%;margin:0 auto;
+  width:100%;height:28px;border-radius:6px;display:flex;overflow:hidden;
   position:relative;box-shadow:var(--logo-shadow);
 }
-.donut-hole{
-  position:absolute;inset:22%;border-radius:50%;
-  background:var(--control-inner);border:1px solid var(--border);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:10px;
+.bar-segment{
+  height:100%;transition:opacity .22s ease, filter .22s ease;
+  cursor:pointer;
 }
+.bar-segment.is-muted{opacity:.35}
 .donut-total{
   font-family:var(--font-display);font-size:24px;font-weight:680;
   color:var(--ink);letter-spacing:-.03em;
 }
 .donut-caption{
-  font-size:12px;color:var(--ink-4);margin-top:4px;
+  font-size:12px;color:var(--ink-4);margin-top:2px;
 }
 .donut-legend{display:grid;gap:10px;align-content:center}
 .legend-item{
   display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
   font-size:12px;color:var(--ink-2);
+  padding:6px 8px;border-radius:10px;position:relative;overflow:hidden;
+  transition:background .18s ease, transform .18s ease, opacity .18s ease;
 }
+.legend-item:hover{background:var(--surface-hover)}
+.legend-item.is-active{background:var(--surface-hover);transform:translateY(-1px)}
+.legend-item.is-muted{opacity:.35}
 .legend-swatch{
   width:10px;height:10px;border-radius:4px;display:inline-block;
 }
@@ -4157,7 +4319,7 @@ function renderCategoryChart(projects) {
     buckets.get(key).total_seconds += seconds;
   });
 
-  const entries = [...buckets.values()]
+  let entries = [...buckets.values()]
     .filter(entry => entry.total_seconds > 0)
     .sort((a, b) => b.total_seconds - a.total_seconds);
 
@@ -4166,30 +4328,54 @@ function renderCategoryChart(projects) {
     return;
   }
 
+  if (entries.length > 6) {
+    const topEntries = entries.slice(0, 5);
+    const otherSeconds = entries.slice(5).reduce((sum, entry) => sum + entry.total_seconds, 0);
+    if (otherSeconds > 0) {
+      topEntries.push({
+        key: '__other',
+        label: 'Other',
+        color: '#8E8E93',
+        total_seconds: otherSeconds,
+      });
+    }
+    entries = topEntries;
+  }
+
   const totalSeconds = entries.reduce((sum, entry) => sum + entry.total_seconds, 0) || 1;
-  let start = 0;
-  const segments = entries.map(entry => {
-    const share = entry.total_seconds / totalSeconds;
-    const end = start + (share * 100);
-    const segment = `${entry.color} ${start}% ${end}%`;
-    start = end;
-    return segment;
+  let startPercent = 0;
+  const chartEntries = entries.map((entry, index) => {
+    const percent = (entry.total_seconds / totalSeconds) * 100;
+    const endPercent = index === entries.length - 1 ? 100 : startPercent + percent;
+    const chartEntry = {
+      ...entry,
+      percent,
+      start_percent: startPercent,
+      end_percent: endPercent,
+    };
+    startPercent = endPercent;
+    return chartEntry;
   });
   const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
 
   mount.innerHTML = `
     <div class="donut-layout">
-      <div class="donut-chart" style="background:conic-gradient(${segments.join(', ')})">
-        <div class="donut-hole">
+      <div class="bar-column">
+        <div class="bar-header">
           <div class="donut-total">${totalHours}h</div>
           <div class="donut-caption">All categories</div>
         </div>
+        <div id="donutChart" class="donut-chart">
+          ${chartEntries.map((entry, index) => `
+            <div class="bar-segment" data-segment-index="${index}" style="width:${entry.percent.toFixed(3)}%;background:${entry.color}"></div>
+          `).join('')}
+        </div>
       </div>
       <div class="donut-legend">
-        ${entries.map(entry => {
+        ${chartEntries.map((entry, index) => {
           const hours = Math.round((entry.total_seconds / 3600) * 10) / 10;
           return `
-            <div class="legend-item" title="${escapeHtml(entry.label)}">
+            <div class="legend-item" data-legend-index="${index}" title="${escapeHtml(entry.label)}">
               <span class="legend-swatch" style="background:${entry.color}"></span>
               <span class="legend-name">${escapeHtml(entry.label)}</span>
               <span class="legend-value">${hours}h</span>
@@ -4199,6 +4385,52 @@ function renderCategoryChart(projects) {
       </div>
     </div>
   `;
+
+  const chart = mount.querySelector('#donutChart');
+  const segments = [...mount.querySelectorAll('.bar-segment')];
+  const legendItems = [...mount.querySelectorAll('.legend-item')];
+  if (!chart || legendItems.length === 0) return;
+
+  const setHighlight = activeIndex => {
+    const hasActive = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < legendItems.length;
+    legendItems.forEach((item, index) => {
+      item.classList.toggle('is-active', hasActive && index === activeIndex);
+      item.classList.toggle('is-muted', hasActive && index !== activeIndex);
+    });
+    segments.forEach((seg, index) => {
+      seg.classList.toggle('is-muted', hasActive && index !== activeIndex);
+    });
+    chart.classList.toggle('is-hovered', hasActive);
+  };
+
+  const findSegmentIndex = event => {
+    const rect = chart.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    if (x < 0 || x > rect.width) return -1;
+    const percent = (x / rect.width) * 100;
+    return chartEntries.findIndex(entry =>
+      percent >= entry.start_percent &&
+      (percent < entry.end_percent || entry.end_percent === 100)
+    );
+  };
+
+  legendItems.forEach(item => {
+    const index = Number(item.dataset.legendIndex);
+    item.addEventListener('mouseenter', () => setHighlight(index));
+    item.addEventListener('mouseleave', () => setHighlight(-1));
+  });
+
+  segments.forEach(seg => {
+    const index = Number(seg.dataset.segmentIndex);
+    seg.addEventListener('mouseenter', () => setHighlight(index));
+    seg.addEventListener('mouseleave', () => setHighlight(-1));
+  });
+
+  chart.addEventListener('mousemove', event => {
+    const index = findSegmentIndex(event);
+    setHighlight(index);
+  });
+  chart.addEventListener('mouseleave', () => setHighlight(-1));
 }
 
 load();
@@ -4302,6 +4534,61 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
+        elif parsed.path == "/api/project-list":
+            self._json(get_project_list())
+        elif parsed.path == "/api/project-report":
+            project = parse_qs(parsed.query).get("project", [""])[0]
+            if not project:
+                self._json({"error": "project required"}, status=400)
+                return
+            self._json(get_project_report(project))
+        elif parsed.path == "/api/project-report/download":
+            project = parse_qs(parsed.query).get("project", [""])[0]
+            fmt = parse_qs(parsed.query).get("format", ["text"])[0].lower()
+            if not project:
+                self._json({"error": "project required"}, status=400)
+                return
+            report = get_project_report(project)
+            if "error" in report:
+                self._json(report, status=400)
+                return
+                
+            content = []
+            if fmt == "csv":
+                import csv
+                import io
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(["Date", "Start", "End", "Duration", "Notes"])
+                for s in report["sessions"]:
+                    writer.writerow([s["date"], s["start_time"], s["end_time"], s["duration"], s["notes"]])
+                writer.writerow([])
+                writer.writerow(["Total Duration", "", "", report["total_duration"], ""])
+                writer.writerow(["Sessions", "", "", str(report["session_count"]), ""])
+                content_str = output.getvalue()
+                content_type = "text/csv"
+                ext = "csv"
+            else:
+                content.append(f"Project: {report['project_name']}")
+                content.append(f"Total Time: {report['total_duration']}")
+                content.append(f"Total Sessions: {report['session_count']}")
+                content.append("")
+                for s in report["sessions"]:
+                    content.append(f"{s['date']}  {s['start_time']} - {s['end_time']}  ({s['duration']})")
+                    if s["notes"]:
+                        content.append(f"  Notes: {s['notes']}")
+                content_str = "\\n".join(content)
+                content_type = "text/plain"
+                ext = "txt"
+                
+            body = content_str.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            filename = f"{report['project_name'].replace(' ', '_')}_report.{ext}"
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.end_headers()
+            self.wfile.write(body)
         else:
             body = _load_html().encode()
             self.send_response(200)
@@ -4330,6 +4617,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "request body is required"}, status=400)
                 return
             result = delete_sessions(payload.get("session_ids") or [])
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/session-notes":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = set_session_notes(
+                payload.get("session_id"),
+                payload.get("notes", ""),
+            )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-category":
             try:
