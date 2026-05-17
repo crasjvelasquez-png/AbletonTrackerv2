@@ -2,12 +2,11 @@
   <!-- ─────────────────────────────  GOALS  ───────────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="goals">
     <div class="section-head">
-      <h3 class="section-title">Time <em>goals</em></h3>
+      <h3 class="section-title">Goals</h3>
       <span class="section-meta" data-goals-meta>—</span>
     </div>
     <p class="settings-copy">
-      Set your default daily and weekly targets. These apply to every day and week until you change them here.
-      Progress is tracked automatically as sessions are logged. Weekly progress resets every Friday morning.
+      Set daily and weekly targets. Weekly progress resets Friday.
     </p>
 
     <div class="goals-grid">
@@ -18,7 +17,7 @@
         </div>
         <div class="goal-form-row">
           <label class="field" style="flex:1;">
-            <span class="field-label">Hours per day</span>
+            <span class="field-label">Hours/day</span>
             <input
               class="text-input"
               data-daily-input
@@ -42,7 +41,7 @@
         </div>
         <div class="goal-form-row">
           <label class="field" style="flex:1;">
-            <span class="field-label">Hours per week</span>
+            <span class="field-label">Hours/week</span>
             <input
               class="text-input"
               data-weekly-input
@@ -64,12 +63,11 @@
   <!-- ───────────────────────  WEEKLY REFRESH  ──────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="week-refresh">
     <div class="section-head">
-      <h3 class="section-title">Weekly <em>refresh</em></h3>
+      <h3 class="section-title">Week Start</h3>
       <span class="section-meta" data-week-refresh-meta>—</span>
     </div>
     <p class="settings-copy">
-      Choose which day marks the start of your tracking week. Weekly progress and the activity
-      heatmap align to this day.
+      Weekly progress and the heatmap align to this day.
     </p>
     <div class="weekday-picker" role="radiogroup" aria-label="Week start day" data-weekday-picker>
     </div>
@@ -78,24 +76,24 @@
   <!-- ───────────────────────────  CATEGORIES  ─────────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="categories-intro">
     <div class="section-head">
-      <h3 class="section-title">Custom <em>categories</em></h3>
+      <h3 class="section-title">Categories</h3>
       <span class="section-meta" data-categories-meta>—</span>
     </div>
     <p class="settings-copy" data-categories-copy>
-      Create personal categories with your own color palette. They become available in the project category picker right away.
+      Create categories with your own colors.
     </p>
   </section>
 
   <div class="settings-grid">
     <div class="chart-card settings-card" data-settings-section="categories-create">
       <div class="section-head">
-        <h3 class="section-title">Create a <em>category</em></h3>
+        <h3 class="section-title">New Category</h3>
         <span class="section-meta" data-create-meta>—</span>
       </div>
       <form class="category-form" data-category-create-form>
         <div class="field-grid">
           <label class="field">
-            <span class="field-label">Category name</span>
+            <span class="field-label">Category Name</span>
             <input
               class="text-input"
               data-category-name-input
@@ -111,7 +109,7 @@
             <span data-category-color-mount></span>
           </label>
         </div>
-        <div class="field-note">Pick a color from the palette or open the browser picker for something custom.</div>
+        <div class="field-note">Pick a palette color or choose your own.</div>
         <div class="settings-actions">
           <button class="btn" type="submit" data-category-submit>Save category</button>
         </div>
@@ -121,7 +119,7 @@
     <div class="settings-stack">
       <div class="chart-card settings-card" data-settings-section="categories-glance">
         <div class="section-head">
-          <h3 class="section-title">At a <em>glance</em></h3>
+          <h3 class="section-title">Summary</h3>
         </div>
         <div class="settings-kpis">
           <div class="settings-kpi">
@@ -143,7 +141,7 @@
 
   <div class="table-card" data-settings-section="categories-library">
     <div class="section-head">
-      <h3 class="section-title">Category <em>library</em></h3>
+      <h3 class="section-title">Library</h3>
       <span class="section-meta" data-library-meta>0 total</span>
     </div>
     <div class="category-library">
@@ -154,35 +152,41 @@
   <!-- ─────────────────────────  DATA MANAGEMENT  ──────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="data">
     <div class="section-head">
-      <h3 class="section-title">Data <em>management</em></h3>
+      <h3 class="section-title">Data</h3>
       <span class="section-meta">cleanup &amp; maintenance</span>
     </div>
     <p class="settings-copy">
-      Tidy up your tracking history. These actions only touch closed sessions — anything Ableton is recording right
-      now is preserved.
+      Tidy your tracking history. Active sessions are preserved.
     </p>
 
     <div class="action-list">
       <div class="action-row" data-action-row="clear-recent">
         <div class="action-row-text">
-          <h4 class="action-row-title">Clear all session logs</h4>
+          <h4 class="action-row-title">Clear All Logs</h4>
           <p class="action-row-desc">Permanently deletes every closed session from your history.</p>
         </div>
         <button class="btn danger" type="button" data-action="clear-recent">Clear logs</button>
       </div>
       <div class="action-row" data-action-row="clear-unsaved">
         <div class="action-row-text">
-          <h4 class="action-row-title">Remove unsaved-project sessions</h4>
+          <h4 class="action-row-title">Remove Drafts</h4>
           <p class="action-row-desc">Drops closed sessions logged against <code>Untitled</code> or <code>Untitled Project</code>.</p>
         </div>
         <button class="btn danger" type="button" data-action="clear-unsaved">Remove drafts</button>
       </div>
       <div class="action-row" data-action-row="clear-phantoms">
         <div class="action-row-text">
-          <h4 class="action-row-title">Clear phantom sessions</h4>
+          <h4 class="action-row-title">Clear Phantoms</h4>
           <p class="action-row-desc">Removes rows that came from export dialogs or plugin windows instead of real Live sets.</p>
         </div>
         <button class="btn danger" type="button" data-action="clear-phantoms">Clean phantoms</button>
+      </div>
+      <div class="action-row" data-action-row="clear-notes">
+        <div class="action-row-text">
+          <h4 class="action-row-title">Clear Notes &amp; To-dos</h4>
+          <p class="action-row-desc">Permanently deletes all written notes and to-dos from your history without deleting the tracking sessions themselves.</p>
+        </div>
+        <button class="btn danger" type="button" data-action="clear-notes">Clear notes</button>
       </div>
     </div>
   </section>
@@ -194,8 +198,7 @@
       <span class="section-meta" data-theme-meta>system</span>
     </div>
     <p class="settings-copy">
-      Choose how the dashboard looks. <strong>System</strong> follows your operating system's appearance setting and
-      switches automatically.
+      <strong>System</strong> follows your macOS appearance.
     </p>
     <div class="theme-picker" role="radiogroup" aria-label="Theme">
       <button class="theme-option" type="button" role="radio" data-theme-option="light">
@@ -216,11 +219,11 @@
   <!-- ───────────────────────────  PROJECT REPORT  ────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="project-report">
     <div class="section-head">
-      <h3 class="section-title">Project <em>report</em></h3>
+      <h3 class="section-title">Reports</h3>
       <span class="section-meta">export sessions</span>
     </div>
     <p class="settings-copy">
-      Generate a text or CSV report of all sessions for a specific project.
+      Export sessions for one project.
     </p>
 
     <form class="report-form" data-report-form novalidate>

@@ -587,6 +587,15 @@
       empty: 'No phantom sessions found',
       failure: 'Failed to clean phantom sessions',
     },
+    'clear-notes': {
+      title: 'Clear <em>notes & to-dos?</em>',
+      body: 'Permanently deletes written notes and to-dos from your history without deleting tracking sessions. This cannot be undone.',
+      confirmLabel: 'Clear notes',
+      endpoint: '/api/clear-notes',
+      success: r => `Cleared notes from ${r.updated} session${r.updated === 1 ? '' : 's'}`,
+      empty: 'No notes or to-dos to clear',
+      failure: 'Failed to clear notes',
+    },
   };
 
   async function handleDataAction(button) {
@@ -663,7 +672,10 @@
         for (const s of report.sessions) {
           out += `${s.date}  ${s.start_time} - ${s.end_time}  (${s.duration})\\n`;
           if (s.notes) {
-            out += `  Notes: ${s.notes}\\n`;
+            out += `  What was worked on: ${s.notes}\\n`;
+          }
+          if (s.todo_notes) {
+            out += `  To-dos: ${s.todo_notes}\\n`;
           }
         }
       }

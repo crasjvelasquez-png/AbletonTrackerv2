@@ -350,6 +350,198 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
         self.assertEqual(settings.get("a"), "1")
         self.assertEqual(settings.get("b"), "2")
 
+    def test_session_notes_migration_adds_todo_notes_column(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+        self.assertIn("notes", columns)
+        self.assertIn("todo_notes", columns)
+
+    def test_set_session_notes_saves_worked_on_and_todos(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Notes Project", 100.0, 200.0, 200.0, 100.0),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        result = dashboard.set_session_notes(session_id, "Built drums", "Bounce stems")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["notes"], "Built drums")
+        self.assertEqual(result["todo_notes"], "Bounce stems")
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT notes, todo_notes FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        self.assertEqual(row[0], "Built drums")
+        self.assertEqual(row[1], "Bounce stems")
+
+    def test_clear_session_notes_preserves_sessions(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "Notes Project",
+                    100.0,
+                    200.0,
+                    200.0,
+                    100.0,
+                    "Built drums",
+                    "Bounce stems",
+                    '[{"text":"Bounce stems","done":false}]',
+                ),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        result = dashboard.clear_session_notes()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["updated"], 1)
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT project_name, active_seconds, notes, todo_notes, todos_json FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        self.assertEqual(row[0], "Notes Project")
+        self.assertEqual(row[1], 100.0)
+        self.assertEqual(row[2], "")
+        self.assertEqual(row[3], "")
+        self.assertEqual(row[4], "[]")
+
+    def test_recent_payload_includes_session_todo_notes(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("Notes Project", 100.0, 200.0, 200.0, 100.0, "Built drums", "Bounce stems"),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        stats = dashboard.get_stats()
+        recent = stats["recent"][0]
+
+        self.assertEqual(recent["session_notes"][str(session_id)], "Built drums")
+        self.assertEqual(recent["session_todo_notes"][str(session_id)], "Bounce stems")
+
+    def test_todos_json_migration_adds_todos_json_column(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+        self.assertIn("todos_json", columns)
+
+    def test_set_session_notes_saves_structured_todos(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Notes Project", 100.0, 200.0, 200.0, 100.0),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        result = dashboard.set_session_notes(
+            session_id, "Built drums", "",
+            [{"text": "Bounce stems", "done": False}, {"text": "Export mix", "done": True}]
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["todo_notes"], "Bounce stems | Export mix")
+        self.assertEqual(len(result["todos"]), 2)
+        self.assertEqual(result["todos"][0]["text"], "Bounce stems")
+        self.assertFalse(result["todos"][0]["done"])
+        self.assertTrue(result["todos"][1]["done"])
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT notes, todo_notes, todos_json FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        self.assertEqual(row[0], "Built drums")
+        self.assertEqual(row[1], "Bounce stems | Export mix")
+        self.assertIn("Bounce stems", row[2])
+
+    def test_get_last_session_todos_returns_todos_for_project(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("Alpha", 100.0, 200.0, 200.0, 100.0,
+                 '[{"text":"Fix bass","done":false}]'),
+            )
+            conn.commit()
+
+        result = dashboard.get_last_session_todos("Alpha")
+        self.assertEqual(len(result["todos"]), 1)
+        self.assertEqual(result["todos"][0]["text"], "Fix bass")
+        self.assertEqual(result["project_name"], "Alpha")
+
+    def test_get_last_session_todos_empty_when_none(self):
+        result = dashboard.get_last_session_todos("Nonexistent")
+        self.assertEqual(result["todos"], [])
+
+    def test_get_last_session_todos_filters_by_project(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("Alpha", 100.0, 200.0, 200.0, 100.0,
+                 '[{"text":"Alpha task","done":false}]'),
+            )
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("Beta", 150.0, 250.0, 250.0, 100.0,
+                 '[{"text":"Beta task","done":false}]'),
+            )
+            conn.commit()
+
+        alpha = dashboard.get_last_session_todos("Alpha")
+        beta = dashboard.get_last_session_todos("Beta")
+        self.assertEqual(alpha["todos"][0]["text"], "Alpha task")
+        self.assertEqual(beta["todos"][0]["text"], "Beta task")
+
+    def test_recent_payload_includes_session_todos(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("Notes Project", 100.0, 200.0, 200.0, 100.0,
+                 '[{"text":"Mix drums","done":true}]'),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        stats = dashboard.get_stats()
+        recent = stats["recent"][0]
+
+        self.assertIn(str(session_id), recent["session_todos"])
+        self.assertEqual(recent["session_todos"][str(session_id)][0]["text"], "Mix drums")
+        self.assertTrue(recent["session_todos"][str(session_id)][0]["done"])
+
     def test_weekly_target_includes_week_start_weekday(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             conn.execute(

@@ -84,7 +84,19 @@
       "Bash(curl -s --compressed -o /dev/null -w 'run __TRACKED_VAR__: %{time_total}s  on-wire=%{size_download} bytes\\\\n' 'http://localhost:7421/api/data?month=2026-05')",
       "Bash(curl -s -w \"\\\\nHTTP %{http_code}  %{time_total}s\\\\n\" \"http://localhost:7421/api/daily-target?date=$\\(date +%Y-%m-%d\\)\")",
       "Bash(curl -s -w \"\\\\nHTTP %{http_code}  %{time_total}s\\\\n\" \"http://localhost:7421/api/weekly-target?date=$\\(date +%Y-%m-%d\\)\")",
-      "Bash(curl -s -o /dev/null -w 'run __TRACKED_VAR__: %{time_total}s  size=%{size_download}\\\\n' http://localhost:7421/)"
+      "Bash(curl -s -o /dev/null -w 'run __TRACKED_VAR__: %{time_total}s  size=%{size_download}\\\\n' http://localhost:7421/)",
+      "Bash(node --check /Users/c4milo/Desktop/AbletonTracker/static/js/projects.js)",
+      "Bash(awk 'NR==1{start=$1; gsub\\(/:.*/, \"\", start\\)} /^[0-9]+:}/ && NR>1 && int\\($0\\) > start+200{print; exit}')",
+      "Bash(awk *)",
+      "Bash(python3 *)",
+      "Bash(kill 58187)",
+      "Bash(curl -s http://localhost:7421/api/goals)",
+      "Bash(curl -s -X POST http://localhost:7421/api/goals -H 'Content-Type: application/json' -d '{\"action\":\"update\",\"project_name\":\"Test Project\",\"priority\":2}')",
+      "Bash(curl -s -X POST http://localhost:7421/api/goals -H 'Content-Type: application/json' -d '{\"action\":\"delete\",\"project_name\":\"Test Project\"}')",
+      "Bash(sqlite3 ~/.ableton_tracker/sessions.db \"SELECT * FROM project_goals;\")",
+      "Bash(sqlite3 ~/.ableton_tracker/sessions.db \".schema project_goals\")",
+      "Bash(lsof -ti:7421)",
+      "Bash(kill 18932)"
     ]
   }
 }

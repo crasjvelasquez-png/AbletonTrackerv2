@@ -581,7 +581,8 @@ header{
   transform:rotate(-90deg);
 }
 .goal-ring-track,
-.goal-ring-progress{
+.goal-ring-progress,
+.goal-ring-overflow{
   fill:none;
   cx:50;cy:50;r:42;
   stroke-linecap:round;
@@ -593,13 +594,27 @@ header{
 .goal-ring-progress{
   stroke:var(--target-accent);
   stroke-width:11;
-  stroke-dasharray:100;
-  stroke-dashoffset:calc(100 - var(--target-progress-pct));
+  stroke-dasharray:var(--target-progress-pct) 100;
+  stroke-dashoffset:0;
   filter:
     drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
     drop-shadow(0 0 8px var(--target-glow))
     drop-shadow(0 0 18px color-mix(in srgb, var(--target-accent) calc(var(--target-glow-alpha) * 70%), transparent));
-  transition:stroke-dashoffset .3s ease, stroke .3s ease;
+  transition:stroke-dasharray .3s ease, stroke .3s ease;
+}
+.goal-ring.is-zero .goal-ring-progress{
+  opacity:0;
+}
+.goal-ring-overflow{
+  stroke:var(--target-accent);
+  stroke-width:5;
+  stroke-dasharray:var(--target-overflow-pct) 100;
+  stroke-dashoffset:0;
+  opacity:.82;
+  filter:
+    drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
+    drop-shadow(0 0 10px var(--target-glow));
+  transition:stroke-dasharray .3s ease, stroke .3s ease;
 }
 .goal-ring.is-complete .goal-ring-progress{
   filter:
@@ -773,11 +788,11 @@ header{
   justify-content:center;
   text-align:center;
   min-width:150px;
-  padding:6px 12px;
-  border:1px solid var(--border);
+  padding:7px 15px;
+  border:1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius:999px;
-  background:color-mix(in srgb, var(--control-bg) 76%, transparent);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  background:color-mix(in srgb, var(--surface-2) 40%, transparent);
+  box-shadow:0 8px 22px rgba(0,0,0,.10);
   font-size:12px;
   font-weight:700;
   color:var(--ink);
@@ -817,35 +832,52 @@ header{
   gap:8px;
 }
 .daily-target-nav-btn{
-  width:34px;
-  height:34px;
-  border:none;
+  width:36px;
+  height:36px;
   border-radius:999px;
-  background:var(--control-bg);
-  border:1px solid var(--border);
-  color:var(--ink-2);
+  background:color-mix(in srgb, var(--surface-2) 42%, transparent);
+  border:1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  color:var(--ink-3);
+  box-shadow:0 10px 24px rgba(0,0,0,.12);
   display:grid;
   place-items:center;
   cursor:pointer;
-  transition:transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+  transition:transform .18s ease, background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
 }
 .daily-target-nav-btn:hover{
   transform:translateY(-1px);
-  background:var(--control-bg-strong);
-  border-color:var(--border-strong);
+  background:color-mix(in srgb, var(--surface-2) 62%, transparent);
+  border-color:color-mix(in srgb, var(--border-strong) 86%, transparent);
+  box-shadow:0 14px 30px rgba(0,0,0,.14);
   color:var(--ink);
 }
 .daily-target-nav-btn:active{
-  transform:translateY(0);
+  transform:translateY(0) scale(.98);
+  box-shadow:0 6px 16px rgba(0,0,0,.12);
 }
 .daily-target-nav-btn svg{
   width:14px;
   height:14px;
   stroke:currentColor;
   fill:none;
-  stroke-width:1.9;
+  stroke-width:2.15;
   stroke-linecap:round;
   stroke-linejoin:round;
+}
+.target-card .daily-target-today-btn,
+.target-card .weekly-target-current-btn{
+  padding:8px 15px;
+  background:color-mix(in srgb, var(--surface-2) 42%, transparent);
+  border-color:color-mix(in srgb, var(--border) 76%, transparent);
+  box-shadow:0 10px 24px rgba(0,0,0,.12);
+  color:var(--ink-2);
+  letter-spacing:.01em;
+}
+.target-card .daily-target-today-btn:hover,
+.target-card .weekly-target-current-btn:hover{
+  background:color-mix(in srgb, var(--surface-2) 62%, transparent);
+  border-color:color-mix(in srgb, var(--border-strong) 86%, transparent);
+  box-shadow:0 14px 30px rgba(0,0,0,.14);
 }
 .daily-target-today-btn[hidden]{
   display:none;
@@ -2932,7 +2964,7 @@ function goalRemainingText(goalSeconds, completedSeconds) {
       ? `Goal met · ${fmt.dur(overSeconds)} extra`
       : 'Goal met right on target';
   }
-  return `${fmt.dur(deltaSeconds)} left`;
+  return `${fmt.dur(deltaSeconds)}`;
 }
 
 function formatResetCountdown(secondsUntilReset) {
@@ -2957,17 +2989,30 @@ function progressPercent(progressRatio, hasGoal = true) {
 let _goalRingId = 0;
 function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMarkup = '' }) {
   const id = ++_goalRingId;
-  const clamped = hasGoal ? clamp(progressRatio, 0, 1) : 0;
+  const progressPct = hasGoal ? Math.max(0, progressRatio * 100) : 0;
+  const displayProgressPct = clamp(progressPct, 0, 100);
+  const overflowPct = clamp(progressPct - 100, 0, 100);
+  const isZero = displayProgressPct === 0;
+  const isComplete = hasGoal && displayProgressPct >= 100;
+  const hasOverflow = hasGoal && overflowPct > 0;
   const tone = targetTone(progressRatio, hasGoal);
   const percent = progressPercent(progressRatio, hasGoal);
   const gradientId = `goalRingGradient-${id}`;
   const strokeRef = hasGoal ? tone.accent : 'var(--target-track)';
+  const ringClasses = [
+    'goal-ring',
+    isZero ? 'is-zero' : '',
+    isComplete ? 'is-complete' : '',
+    hasOverflow ? 'has-overflow' : '',
+    hasGoal ? '' : 'is-empty',
+  ].filter(Boolean).join(' ');
   return `
     <div
-      class="goal-ring ${hasGoal && progressRatio >= 1 ? 'is-complete' : ''} ${hasGoal ? '' : 'is-empty'}"
+      class="${ringClasses}"
       data-progress-ring
-      data-progress="${clamped}"
-      style="--target-progress-pct:0;--target-accent:${tone.accent};--target-glow:${tone.glow};--target-glow-alpha:${tone.glowAlpha}"
+      data-progress="${displayProgressPct}"
+      data-overflow="${overflowPct}"
+      style="--target-progress-pct:0;--target-overflow-pct:0;--target-accent:${tone.accent};--target-glow:${tone.glow};--target-glow-alpha:${tone.glowAlpha}"
       aria-label="${escapeHtml(label || `${percent}% complete`)}"
     >
       <svg class="goal-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
@@ -2980,6 +3025,7 @@ function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMa
         </defs>
         <circle class="goal-ring-track" cx="50" cy="50" r="42" pathLength="100"></circle>
         <circle class="goal-ring-progress" cx="50" cy="50" r="42" pathLength="100" stroke="${strokeRef}"></circle>
+        ${hasOverflow ? `<circle class="goal-ring-overflow" cx="50" cy="50" r="42" pathLength="100" stroke="${strokeRef}"></circle>` : ''}
       </svg>
       <div class="goal-ring-core">
         <div class="goal-value">${valueMarkup || `${percent}%`}</div>
@@ -2991,8 +3037,10 @@ function renderGoalRing({ progressRatio = 0, hasGoal = true, label = '', valueMa
 function animateGoalRings(root) {
   requestAnimationFrame(() => {
     root.querySelectorAll('[data-progress-ring]').forEach(ring => {
-      const value = clamp(Number(ring.dataset.progress || '0'), 0, 1);
-      ring.style.setProperty('--target-progress-pct', String(value * 100));
+      const value = clamp(Number(ring.dataset.progress || '0'), 0, 100);
+      const overflow = clamp(Number(ring.dataset.overflow || '0'), 0, 100);
+      ring.style.setProperty('--target-progress-pct', String(value));
+      ring.style.setProperty('--target-overflow-pct', String(overflow));
     });
   });
 }
@@ -4301,7 +4349,7 @@ function renderWeeklyTargetCard(target) {
       <div class="goal-controls" style="--target-accent:${tone.accent}">
         <div class="goal-progress-copy">
           <span>Time spent: <strong>${fmt.dur(model.progressSeconds)}</strong></span>
-          <span class="goal-left">Time left to meet goal: ${remainingLabel}</span>
+          <span class="goal-left">Time left: ${remainingLabel}</span>
         </div>
         <div class="goal-input-row">
           <label class="goal-label" for="weeklyGoalCardInput">
@@ -4455,7 +4503,7 @@ function renderDailyTargetCard(target) {
         <div class="goal-controls" style="--target-accent:${tone.accent}">
           <div class="goal-progress-copy">
             <span>Time: <strong>${fmt.dur(progressSeconds)}</strong></span>
-            <span class="goal-left">Time left to meet goal: ${remainingLabel}</span>
+            <span class="goal-left">Time left: ${remainingLabel}</span>
           </div>
           <div class="goal-input-row">
             <label class="goal-label" for="dailyGoalCardInput">
@@ -4489,7 +4537,7 @@ function renderDailyTargetCard(target) {
         <div class="goal-controls" style="--target-accent:var(--ink-4)">
           <div class="goal-progress-copy">
             <span>Time: <strong>${fmt.dur(progressSeconds)}</strong></span>
-            <span class="goal-left">Time left to meet goal: set a goal first</span>
+            <span class="goal-left">Time left: set a goal first</span>
           </div>
           <div class="goal-input-row">
             <label class="goal-label" for="dailyGoalCardInput">

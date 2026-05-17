@@ -83,8 +83,18 @@ def setup_db():
         """)
         if "notes" not in columns:
             conn.execute("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''")
+        if "todo_notes" not in columns:
+            conn.execute("ALTER TABLE sessions ADD COLUMN todo_notes TEXT DEFAULT ''")
+        if "todos_json" not in columns:
+            conn.execute("ALTER TABLE sessions ADD COLUMN todos_json TEXT DEFAULT '[]'")
         conn.execute("""
             UPDATE sessions SET notes = COALESCE(notes, '') WHERE notes IS NULL
+        """)
+        conn.execute("""
+            UPDATE sessions SET todo_notes = COALESCE(todo_notes, '') WHERE todo_notes IS NULL
+        """)
+        conn.execute("""
+            UPDATE sessions SET todos_json = COALESCE(todos_json, '[]') WHERE todos_json IS NULL
         """)
         conn.commit()
 

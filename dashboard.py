@@ -1777,8 +1777,20 @@ header{
   box-shadow:0 18px 44px rgba(22,119,255,.12), 0 8px 24px rgba(255,59,48,.09);
   isolation:isolate;
 }
+.goal-ring.is-zero{
+  --goal-dial:conic-gradient(from -90deg, var(--goal-track) 0deg 360deg);
+}
 .goal-ring::before{
   display:none;
+}
+.goal-ring.has-overflow::before{
+  content:"";display:block;position:absolute;inset:0;border-radius:inherit;
+  background:conic-gradient(from -90deg, var(--goal-hot) 0deg, var(--goal-hot) var(--goal-overflow), transparent var(--goal-overflow) 360deg);
+  opacity:.82;
+  pointer-events:none;
+  mask-image:radial-gradient(circle, transparent calc(100% - 19px), #000 calc(100% - 18px));
+  -webkit-mask-image:radial-gradient(circle, transparent calc(100% - 19px), #000 calc(100% - 18px));
+  filter:drop-shadow(0 0 8px color-mix(in srgb, var(--goal-hot) 45%, transparent));
 }
 .goal-ring::after{
   content:"";position:absolute;inset:8px;border-radius:inherit;
@@ -4160,6 +4172,13 @@ function renderGoalCard({
     const progress = completedHours / safeGoalHours;
     const progressClamped = clamp(progress, 0, 1);
     const progressDegrees = Math.round(progressClamped * 360);
+    const overflowDegrees = Math.round(clamp(progress - 1, 0, 1) * 360);
+    const ringClasses = [
+      'goal-ring',
+      progressDegrees === 0 ? 'is-zero' : '',
+      progressDegrees >= 360 ? 'is-complete' : '',
+      overflowDegrees > 0 ? 'has-overflow' : '',
+    ].filter(Boolean).join(' ');
     const progressMidDegrees = Math.min(progressDegrees, 120);
     const progressHotDegrees = Math.min(progressDegrees, 240);
     const ringStops = ringColorStops(progressClamped);
@@ -4173,7 +4192,7 @@ function renderGoalCard({
     mount.innerHTML = `
       <div class="goal-shell">
         <div class="goal-ring-wrap">
-          <div class="goal-ring ${progress >= 1 ? 'is-complete' : ''}" style="--goal-progress:${progressDegrees}deg;--goal-progress-mid:${progressMidDegrees}deg;--goal-progress-hot:${progressHotDegrees}deg;--goal-cool:${ringStops.cool};--goal-warm:${ringStops.warm};--goal-hot:${ringStops.hot}" aria-label="${percentLabel} complete">
+          <div class="${ringClasses}" style="--goal-progress:${progressDegrees}deg;--goal-overflow:${overflowDegrees}deg;--goal-progress-mid:${progressMidDegrees}deg;--goal-progress-hot:${progressHotDegrees}deg;--goal-cool:${ringStops.cool};--goal-warm:${ringStops.warm};--goal-hot:${ringStops.hot}" aria-label="${percentLabel} complete">
             <div class="goal-ring-core">
               <div class="goal-value">${percentLabel}</div>
             </div>
