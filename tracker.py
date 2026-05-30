@@ -31,6 +31,8 @@ AUDIO_LEVEL_POLL_SECONDS = 1.0
 AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60
+TRACKER_MAX_RETRIES = 5
+TRACKER_MAX_BACKOFF = 60
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 UNTITLED_NAMES = {"untitled", "untitled project"}
@@ -283,6 +285,9 @@ def day_seconds(target_day: date) -> float:
     if not DB_PATH.exists():
         return 0.0
 
+    day_start = datetime.combine(target_day, datetime.min.time()).timestamp()
+    day_end = datetime.combine(target_day + timedelta(days=1), datetime.min.time()).timestamp()
+
     with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
@@ -290,7 +295,10 @@ def day_seconds(target_day: date) -> float:
             SELECT start_time, last_seen_time, end_time, active_seconds
             FROM sessions
             WHERE active_seconds > 0
-            """
+              AND start_time < ?
+              AND COALESCE(end_time, last_seen_time, start_time) >= ?
+            """,
+            (day_end, day_start),
         ).fetchall()
 
     daily, _ = build_activity_rollups(rows)
@@ -345,19 +353,35 @@ def yesterday_seconds() -> float:
 
 def week_seconds(target_date: date | None = None) -> float:
     """Tracked seconds for the current tracking week (respects week_start_weekday setting)."""
+    if not DB_PATH.exists():
+        return 0.0
     target_date = target_date or date.today()
-    weekly_totals = _all_daily_totals()
     raw = get_app_setting("week_start_weekday")
     week_start_weekday = int(raw) if raw is not None else 4
     week_start = target_date - timedelta(
         days=(target_date.weekday() - week_start_weekday) % 7
     )
-    week_end = week_start + timedelta(days=6)
-    total = 0.0
-    for day_key, seconds in weekly_totals.items():
-        if week_start.isoformat() <= day_key <= week_end.isoformat():
-            total += seconds
-    return total
+    week_end = week_start + timedelta(days=7)  # exclusive upper bound
+
+    week_start_ts = datetime.combine(week_start, datetime.min.time()).timestamp()
+    week_end_ts = datetime.combine(week_end, datetime.min.time()).timestamp()
+
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT start_time, last_seen_time, end_time, active_seconds
+            FROM sessions
+            WHERE active_seconds > 0
+              AND start_time < ?
+              AND COALESCE(end_time, last_seen_time, start_time) >= ?
+            """,
+            (week_end_ts, week_start_ts),
+        ).fetchall()
+
+    daily, _ = build_activity_rollups(rows)
+    week_days = {(week_start + timedelta(days=i)).isoformat() for i in range(7)}
+    return sum(daily.get(day, 0.0) for day in week_days)
 
 
 def get_app_setting(key: str, default: str | None = None) -> str | None:
@@ -382,6 +406,7 @@ def is_ableton_running() -> bool:
 
 
 _error_state: dict[str, str | None] = {}
+_ERROR_STATE_LOCK = threading.Lock()
 
 
 def _log_transient_error(
@@ -396,9 +421,10 @@ def _log_transient_error(
     Only prints when the message changes from the previous one for `channel`,
     so a persistent failure logs once and a recovery logs once.
     """
-    if message == _error_state.get(channel):
-        return
-    _error_state[channel] = message
+    with _ERROR_STATE_LOCK:
+        if message == _error_state.get(channel):
+            return
+        _error_state[channel] = message
     if message:
         print(f"[{_ts()}] {fail_label}: {message}{suffix}")
     else:
@@ -605,7 +631,7 @@ def _system_audio_level_active() -> bool | None:
             text=True,
             timeout=max(AUDIO_POLL_TIMEOUT, AUDIO_LEVEL_POLL_SECONDS + 4),
         )
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         _set_audio_probe_error(str(e))
         return None
 
@@ -679,7 +705,7 @@ end tell
         r = subprocess.run(
             ["osascript", "-e", script], capture_output=True, text=True, timeout=5
         )
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         _log_transient_error(
             "title", str(e), "window-title lookup failed", "window-title lookup recovered"
         )
@@ -1049,8 +1075,6 @@ class Tracker:
             print(f"[{_ts()}] cleaned {deleted} phantom session{'s' if deleted != 1 else ''}")
         self.next_cleanup_at = now + CLEANUP_INTERVAL
 
-    MAX_RETRIES = 5
-    MAX_BACKOFF = 60
 
     def run(self, stop_event: threading.Event | None = None, wake_interval: float = POLL_INTERVAL, _lock: threading.Lock | None = None):
         """Sole public loop entry point.
@@ -1092,13 +1116,13 @@ class Tracker:
                 self._last_error = str(e)
                 if _lock is not None:
                     print(f"tracker error ({self._consecutive_failures}): {e}", file=sys.stderr)
-                    if self._consecutive_failures >= self.MAX_RETRIES:
+                    if self._consecutive_failures >= TRACKER_MAX_RETRIES:
                         print("tracker: max retries reached, polling suspended", file=sys.stderr)
                 else:
                     print(f"[{_ts()}] error: {e}")
             wait = wake_interval
             if _lock is not None and self._consecutive_failures > 0:
-                wait = min(2 ** self._consecutive_failures, self.MAX_BACKOFF)
+                wait = min(2 ** self._consecutive_failures, TRACKER_MAX_BACKOFF)
             if stop_event:
                 stop_event.wait(wait)
             else:

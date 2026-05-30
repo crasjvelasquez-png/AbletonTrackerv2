@@ -59,8 +59,8 @@ from menubar import (
     AbletonTrackerApp,
     PAUSE_FILE,
     TRACKER_WAKE_INTERVAL,
-    DASHBOARD_URL,
     APP_DIR,
+    DASHBOARD_WINDOW_SCRIPT,
 )
 import tracker
 
@@ -274,32 +274,26 @@ class DashboardProcessTests(unittest.TestCase):
         self.dp = DashboardProcess()
 
     def test_open_spawns_when_none_exists(self):
-        with patch.object(menubar.subprocess, "Popen") as mock_popen, \
-             patch.object(menubar.webbrowser, "open") as mock_browser:
+        with patch.object(menubar.subprocess, "Popen") as mock_popen:
             mock_popen.return_value.poll.return_value = None
             self.dp.open()
         mock_popen.assert_called_once()
-        mock_browser.assert_called_once_with(DASHBOARD_URL)
 
     def test_open_reuses_running_process(self):
         proc = MagicMock()
         proc.poll.return_value = None
         self.dp.proc = proc
-        with patch.object(menubar.subprocess, "Popen") as mock_popen, \
-             patch.object(menubar.webbrowser, "open") as mock_browser:
+        with patch.object(menubar.subprocess, "Popen") as mock_popen:
             self.dp.open()
         mock_popen.assert_not_called()
-        mock_browser.assert_called_once_with(DASHBOARD_URL)
 
     def test_open_restarts_dead_process(self):
         proc = MagicMock()
         proc.poll.return_value = 0
         self.dp.proc = proc
-        with patch.object(menubar.subprocess, "Popen") as mock_popen, \
-             patch.object(menubar.webbrowser, "open") as mock_browser:
+        with patch.object(menubar.subprocess, "Popen") as mock_popen:
             self.dp.open()
         mock_popen.assert_called_once()
-        mock_browser.assert_called_once_with(DASHBOARD_URL)
 
     def test_stop_terminates_running(self):
         proc = MagicMock()
@@ -320,12 +314,11 @@ class DashboardProcessTests(unittest.TestCase):
         proc.terminate.assert_not_called()
 
     def test_open_passes_correct_args(self):
-        with patch.object(menubar.subprocess, "Popen") as mock_popen, \
-             patch.object(menubar.webbrowser, "open"):
+        with patch.object(menubar.subprocess, "Popen") as mock_popen:
             self.dp.open()
         args = mock_popen.call_args[0][0]
         self.assertEqual(args[0], sys.executable)
-        self.assertEqual(args[1], str(APP_DIR / "dashboard.py"))
+        self.assertEqual(args[1], str(DASHBOARD_WINDOW_SCRIPT))
         self.assertEqual(mock_popen.call_args[1]["cwd"], APP_DIR)
 
 

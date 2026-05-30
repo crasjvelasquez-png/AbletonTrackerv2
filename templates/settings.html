@@ -214,6 +214,26 @@
         <span class="theme-option-label">System</span>
       </button>
     </div>
+    <div class="scale-control" data-scale-control>
+      <div>
+        <label class="field-label" for="ui-scale-input">Zoom / Scale</label>
+        <p class="settings-copy scale-copy">Adjusts dashboard type size, card spacing, and layout density.</p>
+      </div>
+      <div class="scale-control-panel">
+        <span class="scale-endpoint">Compact</span>
+        <input
+          id="ui-scale-input"
+          class="scale-slider"
+          type="range"
+          min="85"
+          max="120"
+          step="5"
+          value="100"
+          data-ui-scale-input>
+        <span class="scale-endpoint">Large</span>
+        <output class="scale-output" for="ui-scale-input" data-ui-scale-output>100%</output>
+      </div>
+    </div>
   </section>
 
   <!-- ───────────────────────────  PROJECT REPORT  ────────────────────── -->

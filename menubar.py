@@ -6,7 +6,6 @@ import time
 import signal
 import threading
 import subprocess
-import webbrowser
 from datetime import date
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from tracker import (
 DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
 APP_DIR = Path(__file__).resolve().parent
+DASHBOARD_WINDOW_SCRIPT = APP_DIR / "dashboard_window.py"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 REFRESH_INTERVAL = 5
 TRACKER_WAKE_INTERVAL = 5
@@ -145,7 +145,7 @@ class TrackerThread(threading.Thread):
 
 
 class DashboardProcess:
-    """Lazily spawns the dashboard HTTP server as a subprocess."""
+    """Lazily spawns the embedded dashboard window as a subprocess."""
 
     def __init__(self):
         self.proc: subprocess.Popen | None = None
@@ -153,13 +153,11 @@ class DashboardProcess:
     def open(self):
         if self.proc is None or self.proc.poll() is not None:
             self.proc = subprocess.Popen(
-                [sys.executable, str(APP_DIR / "dashboard.py")],
+                [sys.executable, str(DASHBOARD_WINDOW_SCRIPT)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
             )
-            time.sleep(0.8)
-        webbrowser.open(DASHBOARD_URL)
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
@@ -223,8 +221,8 @@ class AbletonTrackerApp(rumps.App):
         try:
             streak = streak_days()
             week = week_seconds()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[refresh] streak/week error: {e}", file=sys.stderr)
 
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error

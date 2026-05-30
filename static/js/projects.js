@@ -47,6 +47,14 @@
     return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  function entryLabel(entry) {
+    if (!entry) return '';
+    const date = entry.start_timestamp
+      ? new Date(entry.start_timestamp * 1000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      : `${entry.day || ''} ${entry.date || ''}`.trim();
+    return `${date} · ${entry.start_time || '—'} – ${entry.end_time || '—'}`;
+  }
+
   /* ── sort / filter ────────────────────────────────────────────── */
 
   function getWeekStart() {
@@ -376,13 +384,22 @@
       const notes = s.notes ? `<div class="prm-notes"><span class="prm-notes-label">Notes</span>${esc(s.notes)}</div>` : '';
       const todos = s.todo_notes ? `<div class="prm-notes"><span class="prm-notes-label">To-do</span>${esc(s.todo_notes)}</div>` : '';
       const sessionIds = (s.session_ids || []).join(',');
+      const entries = s.session_entries || [];
+      const firstEntry = entries[0] || null;
+      const entryNav = entries.length > 1 ? `
+        <div class="prm-entry-nav" aria-label="Navigate session entries">
+          <button class="prm-session-action" type="button" title="Previous entry" data-action="prev-entry" data-session-index="${idx}">‹</button>
+          <span class="prm-entry-count" data-entry-count>${1} / ${entries.length}</span>
+          <button class="prm-session-action" type="button" title="Next entry" data-action="next-entry" data-session-index="${idx}">›</button>
+        </div>` : '';
       return `
-        <div class="prm-session" data-session-index="${idx}">
+        <div class="prm-session" data-session-index="${idx}" data-entry-index="0">
           <div class="prm-session-head">
-            <span class="prm-session-date">${esc(s.date)}</span>
-            <span class="prm-session-time">${esc(s.start_time)} – ${esc(s.end_time)}</span>
+            <span class="prm-session-date" data-entry-label>${esc(firstEntry ? entryLabel(firstEntry) : s.date)}</span>
+            ${firstEntry ? '' : `<span class="prm-session-time">${esc(s.start_time)} – ${esc(s.end_time)}</span>`}
             <span class="prm-session-dur">${esc(s.duration)}</span>
             <div class="prm-session-actions">
+              ${entryNav}
               <button class="prm-session-action" type="button"
                 title="Edit notes"
                 data-action="edit-notes"
@@ -442,6 +459,23 @@
     if (!body) return;
 
     const entries = buildNotesEntries(report, projectName);
+
+    body.querySelectorAll('[data-action="prev-entry"], [data-action="next-entry"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.sessionIndex, 10);
+        const row = body.querySelector(`.prm-session[data-session-index="${idx}"]`);
+        const sessionEntries = report.sessions?.[idx]?.session_entries || [];
+        if (!row || sessionEntries.length < 2) return;
+        const delta = btn.dataset.action === 'next-entry' ? 1 : -1;
+        const current = parseInt(row.dataset.entryIndex || '0', 10) || 0;
+        const next = (current + delta + sessionEntries.length) % sessionEntries.length;
+        row.dataset.entryIndex = String(next);
+        const label = row.querySelector('[data-entry-label]');
+        const count = row.querySelector('[data-entry-count]');
+        if (label) label.textContent = entryLabel(sessionEntries[next]);
+        if (count) count.textContent = `${next + 1} / ${sessionEntries.length}`;
+      });
+    });
 
     body.querySelectorAll('[data-action="edit-notes"]').forEach(btn => {
       btn.addEventListener('click', () => {

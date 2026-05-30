@@ -130,11 +130,10 @@ def build_bundle(icns: Path):
 
     launcher = macos_dir / "launcher"
     launcher.write_text(f"""#!/bin/bash
-# Launch the dashboard (reuses running server if already up; opens browser).
+# Launch the embedded Ableton Tracker dashboard window.
 set -u
 APP_DIR="{APP_DIR}"
 PYTHON="{python_path}"
-PORT=7421
 LOG_DIR="$HOME/.ableton_tracker"
 LOG="$LOG_DIR/dashboard.log"
 mkdir -p "$LOG_DIR"
@@ -149,28 +148,14 @@ if [ ! -x "$PYTHON" ]; then
     exit 1
 fi
 
-# Start server if port isn't listening
-if ! /usr/sbin/lsof -iTCP:$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    log "Port $PORT free — starting dashboard.py"
-    nohup "$PYTHON" "$APP_DIR/dashboard.py" >> "$LOG" 2>&1 &
-    # Wait up to 5 seconds for the port to bind
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-        sleep 0.5
-        if /usr/sbin/lsof -iTCP:$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-            log "Server listening after ${{i}} checks"
-            break
-        fi
-    done
-fi
-
-if ! /usr/sbin/lsof -iTCP:$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    log "ERROR: Server failed to start — see log above"
-    osascript -e "display dialog \\"Ableton Tracker: dashboard server failed to start. See ~/.ableton_tracker/dashboard.log\\" buttons {{\\"OK\\"}} default button 1 with icon stop"
+if ! "$PYTHON" -c "import webview" >/dev/null 2>&1; then
+    log "ERROR: pywebview is not installed for $PYTHON"
+    osascript -e "display dialog \\"Ableton Tracker: pywebview is not installed. Run build_app.command again or install it with: $PYTHON -m pip install --user pywebview\\" buttons {{\\"OK\\"}} default button 1 with icon stop"
     exit 1
 fi
 
-log "Opening browser"
-open "http://localhost:$PORT"
+log "Opening embedded dashboard window"
+exec "$PYTHON" "$APP_DIR/dashboard_window.py" >> "$LOG" 2>&1
 """)
     launcher.chmod(0o755)
 
@@ -184,7 +169,7 @@ def main():
     print(f"Built app:    {APP_BUNDLE.name}")
     print()
     print("Drag AbletonTrackerDashboard.app to your Dock.")
-    print("Clicking it opens the dashboard in your browser.")
+    print("Clicking it opens the dashboard in a standalone app window.")
 
 
 if __name__ == "__main__":

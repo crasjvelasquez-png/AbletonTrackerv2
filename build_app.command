@@ -7,6 +7,11 @@ if ! python3 -c "import PIL" 2>/dev/null; then
     python3 -m pip install --user Pillow
 fi
 
+if ! python3 -c "import webview" 2>/dev/null; then
+    echo "Installing pywebview..."
+    python3 -m pip install --user pywebview
+fi
+
 python3 "$DIR/build_app.py"
 echo ""
 read -rp "Press Enter to close..."

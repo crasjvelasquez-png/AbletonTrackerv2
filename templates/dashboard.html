@@ -4,12 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ableton Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>
 (() => {
   try {
     const theme = localStorage.getItem('ableton_tracker_theme');
     if (theme === 'dark' || theme === 'light') {
       document.documentElement.dataset.theme = theme;
+    }
+    const scale = Number(localStorage.getItem('ableton_tracker_ui_scale'));
+    if (Number.isFinite(scale) && scale >= 85 && scale <= 120) {
+      const factor = scale / 100;
+      const root = document.documentElement;
+      root.style.fontSize = `${15 * factor}px`;
+      root.style.setProperty('--ui-gap', `${14 * factor}px`);
+      root.style.setProperty('--ui-section-gap', `${28 * factor}px`);
+      root.style.setProperty('--ui-card-pad-y', `${28 * factor}px`);
+      root.style.setProperty('--ui-card-pad-x', `${22 * factor}px`);
+      root.style.setProperty('--ui-card-min-h', `${203 * factor}px`);
+      root.style.setProperty('--ui-page-max', `${1200 + ((factor - 1) * 280)}px`);
     }
   } catch (e) {}
 })();
@@ -19,8 +34,8 @@
 :root{
   color-scheme:light;
   --bg:#f5f5f7;
-  --bg-elev:rgba(255,255,255,.88);
-  --surface:rgba(255,255,255,.72);
+  --bg-elev:rgba(255,255,255,.78);
+  --surface:rgba(255,255,255,.62);
   --surface-2:rgba(255,255,255,.94);
   --surface-hover:rgba(60,60,67,.06);
   --bg-card:rgba(255,255,255,.72);
@@ -35,21 +50,21 @@
   --ink:#1d1d1f;
   --ink-2:#3a3a3c;
   --ink-3:#6e6e73;
-    --ink-4:#75757a;
-  --accent:#007aff;
-  --accent-soft:rgba(0,122,255,.10);
-  --accent-line:rgba(0,122,255,.18);
+  --ink-4:#75757a;
+  --accent:#4f46e5;
+  --accent-soft:rgba(79,70,229,.10);
+  --accent-line:rgba(79,70,229,.18);
   --live:#34c759;
   --danger:#ff3b30;
   --danger-soft:rgba(255,59,48,.08);
   --page-wash:linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,0) 220px);
-  --page-glow-a:radial-gradient(900px 500px at 0% 0%, rgba(0,122,255,.05), transparent 60%);
-  --page-glow-b:radial-gradient(700px 420px at 100% 0%, rgba(90,200,250,.07), transparent 52%);
-  --header-bg:rgba(245,245,247,.78);
+  --page-glow-a:radial-gradient(900px 500px at 0% 0%, rgba(79,70,229,.05), transparent 60%);
+  --page-glow-b:radial-gradient(700px 420px at 100% 0%, rgba(14,165,233,.07), transparent 52%);
+  --header-bg:rgba(245,245,247,.58);
   --logo-bg:linear-gradient(180deg, #ffffff, #f2f7ff);
-  --logo-border:rgba(0,122,255,.12);
-  --logo-shadow:0 10px 24px rgba(0,122,255,.08);
-  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.182), rgba(255,255,255,0));
+  --logo-border:rgba(79,70,229,.12);
+  --logo-shadow:0 10px 24px rgba(79,70,229,.08);
+  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0));
   --control-bg:rgba(255,255,255,.8);
   --control-bg-strong:#fff;
   --control-inner:rgba(255,255,255,.96);
@@ -58,21 +73,34 @@
   --toast-shadow:0 18px 40px rgba(15,23,42,.12);
   --modal-backdrop:rgba(15,23,42,.22);
 
-  --font-display:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-  --font-body:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-body:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono:"SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace;
 
   --radius:16px;
   --radius-sm:14px;
   --shadow-1:0 1px 2px rgba(15,23,42,.04), 0 18px 40px rgba(15,23,42,.06);
-  --shadow-card-hover:0 12px 24px rgba(15,23,42,.10), 0 28px 58px rgba(255,255,255,.0845);
+  --shadow-card-hover:0 16px 32px rgba(15,23,42,.12), 0 32px 64px rgba(15,23,42,.08);
+  --ease-smooth:cubic-bezier(.22,1,.36,1);
+  --ease-press:cubic-bezier(.34,1.56,.64,1);
+  --ease-spring:linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.112 22.6%, 1.134 24.9%, 1.144 27.6%, 1.146 30.4%, 1.013 48.3%, 1.001 55.4%, .995 62.1%, 1 100%);
+
+  --orb-1:rgba(79,70,229,.16);
+  --orb-2:rgba(14,165,233,.12);
+  --orb-3:rgba(168,85,247,.10);
+  --ui-gap:14px;
+  --ui-section-gap:28px;
+  --ui-card-pad-y:28px;
+  --ui-card-pad-x:22px;
+  --ui-card-min-h:203px;
+  --ui-page-max:1200px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     color-scheme:dark;
     --bg:#080808;
     --bg-elev:rgba(16,16,18,.92);
-    --surface:rgba(18,18,20,.72);
+    --surface:rgba(18,18,20,.62);
     --surface-2:rgba(24,24,28,.94);
     --surface-hover:rgba(255,255,255,.06);
     --bg-card:rgba(18,18,20,.72);
@@ -88,20 +116,20 @@
     --ink-2:#d7d7dc;
     --ink-3:#aaaab3;
     --ink-4:#90909a;
-    --accent:#0a84ff;
-    --accent-soft:rgba(10,132,255,.16);
-    --accent-line:rgba(10,132,255,.28);
+    --accent:#818cf8;
+    --accent-soft:rgba(129,140,248,.16);
+    --accent-line:rgba(129,140,248,.28);
     --live:#30d158;
     --danger:#ff453a;
     --danger-soft:rgba(255,69,58,.14);
-    --page-wash:linear-gradient(180deg, rgba(14,14,16,.92), rgba(8,8,8,0) 240px);
-    --page-glow-a:radial-gradient(900px 500px at 0% 0%, rgba(255,255,255,.03), transparent 60%);
-    --page-glow-b:radial-gradient(700px 420px at 100% 0%, rgba(255,255,255,.02), transparent 52%);
-    --header-bg:rgba(8,8,8,.88);
+    --page-wash:linear-gradient(180deg, #080808, #080808);
+    --page-glow-a:none;
+    --page-glow-b:none;
+    --header-bg:rgba(8,8,8,.72);
     --logo-bg:linear-gradient(180deg, rgba(32,32,36,.94), rgba(18,18,20,.94));
-    --logo-border:rgba(255,255,255,.08);
-    --logo-shadow:0 10px 24px rgba(0,0,0,.32);
-    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+    --logo-border:rgba(129,140,248,.12);
+    --logo-shadow:0 10px 24px rgba(129,140,248,.08);
+    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
     --control-bg:rgba(30,30,34,.82);
     --control-bg-strong:rgba(38,38,44,.96);
     --control-inner:rgba(12,12,14,.96);
@@ -110,7 +138,11 @@
     --toast-shadow:0 18px 40px rgba(0,0,0,.48);
     --modal-backdrop:rgba(0,0,0,.52);
     --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
-    --shadow-card-hover:0 16px 30px rgba(0,0,0,.42), 0 30px 62px rgba(255,255,255,.08);
+    --shadow-card-hover:0 18px 36px rgba(0,0,0,.48), 0 36px 72px rgba(255,255,255,.06);
+
+    --orb-1:transparent;
+    --orb-2:transparent;
+    --orb-3:transparent;
   }
 }
 
@@ -151,13 +183,83 @@ body{
     var(--page-glow-a),
     var(--page-glow-b);
 }
+.mesh-bg{
+  position:fixed;inset:0;
+  z-index:-2;pointer-events:none;overflow:hidden;
+}
+.mesh-orb{
+  position:absolute;border-radius:50%;
+  filter:blur(90px);opacity:.55;
+  animation:orbFloat 20s ease-in-out infinite alternate;
+}
+.mesh-orb-1{
+  width:620px;height:620px;background:var(--orb-1);
+  top:-12%;left:-12%;animation-duration:26s;
+}
+.mesh-orb-2{
+  width:520px;height:520px;background:var(--orb-2);
+  top:18%;right:-14%;animation-duration:32s;animation-delay:-6s;
+}
+.mesh-orb-3{
+  width:480px;height:480px;background:var(--orb-3);
+  bottom:-12%;left:28%;animation-duration:22s;animation-delay:-11s;
+}
+@keyframes orbFloat{
+  0%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(28px,-36px) scale(1.08)}
+  66%{transform:translate(-18px,22px) scale(.96)}
+  100%{transform:translate(12px,-10px) scale(1.04)}
+}
+
+@keyframes fadeSlideUp{
+  from{opacity:0;transform:translateY(14px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes modalReveal{
+  from{opacity:0;transform:translateY(12px) scale(.96);filter:blur(8px)}
+  to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
+}
+@keyframes backdropReveal{
+  from{opacity:0;backdrop-filter:blur(0);-webkit-backdrop-filter:blur(0)}
+  to{opacity:1;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+}
+@keyframes softPulse{
+  0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+  50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 8%,transparent), 0 0 18px color-mix(in srgb,var(--accent) 22%,transparent)}
+}
+.cards .card,
+.chart-card,
+.table-card,
+.intro{
+  animation:fadeSlideUp .65s var(--ease-spring) both;
+}
+.cards .card:nth-child(1){animation-delay:.04s}
+.cards .card:nth-child(2){animation-delay:.08s}
+.cards .card:nth-child(3){animation-delay:.12s}
+.cards .card:nth-child(4){animation-delay:.16s}
+.cards .card:nth-child(5){animation-delay:.20s}
+.cards .card:nth-child(6){animation-delay:.24s}
+::view-transition-old(root),
+::view-transition-new(root){
+  animation-duration:.34s;
+  animation-timing-function:var(--ease-smooth);
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    scroll-behavior:auto !important;
+    transition-duration:.001ms !important;
+  }
+}
 
 header{
   position:sticky;top:0;z-index:20;
   background:var(--header-bg);
-  backdrop-filter:saturate(180%) blur(18px);
-  -webkit-backdrop-filter:saturate(180%) blur(18px);
+  backdrop-filter:saturate(180%) blur(24px);
+  -webkit-backdrop-filter:saturate(180%) blur(24px);
   border-bottom:1px solid var(--border);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   padding:0 36px;height:68px;
   display:flex;align-items:center;justify-content:space-between;
 }
@@ -185,10 +287,11 @@ header{
 .nav-tab{
   border:none;background:transparent;color:var(--ink-3);
   font-size:13px;font-weight:600;padding:9px 14px;border-radius:999px;cursor:pointer;
-  transition:background .18s ease, color .18s ease, transform .18s ease;
+  transition:background .18s ease, color .18s ease, transform .15s cubic-bezier(.22,1,.36,1);
   user-select:none;
 }
 .nav-tab:hover{color:var(--ink);background:var(--surface-hover)}
+.nav-tab:active{transform:scale(.96)}
 .nav-tab.is-active{
   color:var(--ink);background:var(--control-bg-strong);
   box-shadow:0 1px 2px rgba(15,23,42,.06);
@@ -204,7 +307,7 @@ header{
   transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
 }
 .theme-toggle:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink)}
-.theme-toggle:active{transform:translateY(1px)}
+.theme-toggle:active{transform:scale(.92)}
 .theme-toggle svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .theme-toggle .sun{display:none}
 :root[data-theme="dark"] .theme-toggle .moon{display:none}
@@ -228,7 +331,7 @@ header{
   animation:pulse 1.6s ease-in-out infinite;
 }
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.88)}}
-.page{max-width:1200px;margin:0 auto;padding:40px 36px 80px;position:relative;z-index:1}
+.page{max-width:var(--ui-page-max);margin:0 auto;padding:40px 36px 80px;position:relative;z-index:1}
 
 .intro{margin-bottom:32px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
 .intro h2{
@@ -303,7 +406,7 @@ header{
   50%{opacity:.18;transform:scale(.82)}
 }
 
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:28px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--ui-gap);margin-bottom:var(--ui-section-gap)}
 @media (max-width: 1100px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .card,
 .chart-card,
@@ -311,18 +414,30 @@ header{
   background:var(--surface);
   border:1px solid var(--border);
   box-shadow:var(--shadow-1);
+  position:relative;overflow:hidden;
+  transition:box-shadow .34s var(--ease-smooth), transform .34s var(--ease-spring), border-color .28s ease, background .28s ease;
+}
+.card::before,
+.chart-card::before,
+.table-card::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10);
+  pointer-events:none;
 }
 .card{
   border-radius:var(--radius);
-  min-height:203px;
-  padding:28px 22px 24px;
+  min-height:var(--ui-card-min-h);
+  padding:var(--ui-card-pad-y) var(--ui-card-pad-x) calc(var(--ui-card-pad-y) - 4px);
   display:flex;flex-direction:column;align-items:flex-start;
-  transition:box-shadow .26s ease;
 }
 .card:hover{
   box-shadow:var(--shadow-card-hover);
+  transform:translateY(-3px) scale(1.006);
   z-index:2;
 }
+.card:active,
+.target-card:active,
+.chart-card:active{transform:translateY(-1px) scale(.995)}
 .card[data-detail]{cursor:pointer}
 .card[data-detail]:focus-visible{
   outline:2px solid var(--accent);
@@ -381,8 +496,8 @@ header{
 .card-chip--record{
   color:var(--accent);background:var(--accent-soft);
 }
-.chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:28px;align-items:start}
-.rings-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:28px;align-items:stretch}
+.chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:var(--ui-gap);margin-bottom:var(--ui-section-gap);align-items:start}
+.rings-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ui-gap);margin-bottom:var(--ui-section-gap);align-items:stretch}
 .chart-card{
   border-radius:var(--radius);
   padding:24px 26px 20px;
@@ -399,10 +514,11 @@ header{
   padding:20px 22px 18px;
   background:var(--bg-card);
   box-shadow:var(--target-shadow);
-  transition:box-shadow .26s ease;
+  transition:box-shadow .34s var(--ease-smooth), transform .34s var(--ease-spring), border-color .28s ease;
 }
 .target-card:hover{
   box-shadow:var(--shadow-card-hover);
+  transform:translateY(-3px) scale(1.004);
   z-index:2;
 }
 .target-card[data-detail]{cursor:pointer}
@@ -540,11 +656,34 @@ header{
 }
 .heatmap-foot strong{color:var(--ink-2);font-weight:600}
 .heatmap-week-dots{display:flex;gap:6px;align-items:center}
-.heatmap-week-dot{width:7px;height:7px;border-radius:50%;background:rgba(120,120,128,.22);border:1.5px solid rgba(120,120,128,.22);transition:transform .15s ease}
-.heatmap-week-dot.is-active{background:var(--accent);border-color:var(--accent)}
-.heatmap-week-dot.is-today{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 22%,transparent)}
+.heatmap-week-dot{width:7px;height:7px;border-radius:50%;background:rgba(120,120,128,.22);border:1.5px solid rgba(120,120,128,.22);transition:transform .24s var(--ease-spring), box-shadow .24s ease, background .24s ease, border-color .24s ease}
+.heatmap-week-dot:hover{transform:scale(1.65)}
+.heatmap-week-dot.is-active{background:var(--accent);border-color:var(--accent);transform:scale(1.18)}
+.heatmap-week-dot.is-today{animation:softPulse 2.8s ease-in-out infinite}
 .heatmap-message{font-size:12px;color:var(--ink-3);font-weight:500}
 .today-indicator{display:block;width:4px;height:4px;border-radius:50%;background:rgba(255,230,150,.9);margin:3px auto 0}
+.rhythm-shell{display:grid;gap:16px}
+.rhythm-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rhythm-kpi{padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--control-bg)}
+.rhythm-kpi span{display:block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-4);margin-bottom:5px}
+.rhythm-kpi strong{display:block;font-family:var(--font-display);font-size:22px;line-height:1.05;letter-spacing:-.035em;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rhythm-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.rhythm-day{display:grid;grid-template-rows:auto auto 92px auto;gap:7px;min-width:0;padding:10px;border:1px solid var(--border);border-radius:16px;background:color-mix(in srgb,var(--control-bg) 74%,transparent);transition:transform .28s var(--ease-spring), border-color .24s ease, box-shadow .24s ease, background .24s ease}
+.rhythm-day:hover{transform:translateY(-2px);border-color:var(--border-strong);box-shadow:0 10px 24px rgba(15,23,42,.08)}
+.rhythm-day.is-today{border-color:color-mix(in srgb,var(--accent) 48%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent);animation:softPulse 3.2s ease-in-out infinite}
+.rhythm-day.is-empty{opacity:.72}
+.rhythm-day-head{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.rhythm-day-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.rhythm-day-date{font-size:10px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.rhythm-day-total{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.rhythm-rail{align-self:stretch;border-radius:10px;background:var(--rhythm-gradient, var(--bar-bg));border:1px solid color-mix(in srgb,var(--border) 70%,transparent);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);position:relative;overflow:hidden}
+.rhythm-rail::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.08),transparent 32%,rgba(0,0,0,.08));pointer-events:none}
+.rhythm-block-label{font-size:10px;font-weight:700;color:var(--ink-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rhythm-insight{font-size:13px;font-weight:650;color:var(--ink-2);line-height:1.4}
+.rhythm-detail-toggle{justify-self:start;border:1px solid var(--border);border-radius:999px;background:var(--control-bg);color:var(--ink-2);padding:8px 13px;font-size:12px;font-weight:800;cursor:pointer;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}
+.rhythm-detail-toggle:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink);transform:translateY(-1px)}
+.rhythm-detail{display:none;margin-top:2px}
+.rhythm-detail.is-open{display:block}
 .goal-shell{
   height:100%;
   display:grid;
@@ -600,7 +739,7 @@ header{
     drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
     drop-shadow(0 0 8px var(--target-glow))
     drop-shadow(0 0 18px color-mix(in srgb, var(--target-accent) calc(var(--target-glow-alpha) * 70%), transparent));
-  transition:stroke-dasharray .3s ease, stroke .3s ease;
+  transition:stroke-dasharray 1s var(--ease-spring), stroke .3s ease, filter .35s ease;
 }
 .goal-ring.is-zero .goal-ring-progress{
   opacity:0;
@@ -614,7 +753,7 @@ header{
   filter:
     drop-shadow(0 0 3px color-mix(in srgb, var(--target-accent) 70%, transparent))
     drop-shadow(0 0 10px var(--target-glow));
-  transition:stroke-dasharray .3s ease, stroke .3s ease;
+  transition:stroke-dasharray 1s var(--ease-spring), stroke .3s ease, filter .35s ease;
 }
 .goal-ring.is-complete .goal-ring-progress{
   filter:
@@ -979,10 +1118,10 @@ header{
 }
 .daily-bar{
   width:100%;min-height:0;border-radius:4px 4px 0 0;
-  background:rgba(0,122,255,.18);
+  background:color-mix(in srgb, var(--accent) 18%, transparent);
   transition:background .18s ease, opacity .18s ease;
 }
-.daily-col:hover .daily-bar{background:rgba(0,122,255,.3)}
+.daily-col:hover .daily-bar{background:color-mix(in srgb, var(--accent) 32%, transparent)}
 .daily-bar.today{background:var(--accent)}
 .daily-label{
   min-height:24px;text-align:center;
@@ -1012,7 +1151,7 @@ header{
 .donut-caption{
   font-size:11px;font-weight:500;color:var(--ink-4);margin-top:2px;
 }
-.donut-chart.is-hovered{filter:brightness(.92)}
+.donut-chart.is-hovered{filter:drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 22%, transparent))}
 .donut-legend{display:grid;gap:6px;align-content:center}
 .legend-item{
   display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;
@@ -1064,11 +1203,15 @@ header{
   border:1px solid var(--border);
   padding:9px 14px;border-radius:999px;cursor:pointer;
   display:inline-flex;align-items:center;gap:8px;
-  transition:all .18s ease;
+  background:
+    linear-gradient(135deg, color-mix(in srgb,var(--accent) 0%,transparent), color-mix(in srgb,var(--accent) 0%,transparent)),
+    var(--control-bg);
+  background-size:220% 220%;
+  transition:background .24s ease, background-position .42s var(--ease-smooth), border-color .18s ease, color .18s ease, transform .18s var(--ease-press), box-shadow .22s ease;
   user-select:none;
 }
-.btn:hover{color:var(--ink);border-color:var(--border-strong);background:var(--control-bg-strong)}
-.btn:active{transform:translateY(1px)}
+.btn:hover{color:var(--ink);border-color:var(--border-strong);background:linear-gradient(135deg, color-mix(in srgb,var(--accent) 10%,transparent), transparent 56%),var(--control-bg-strong);background-position:100% 0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
+.btn:active{transform:scale(.96)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.danger{color:var(--danger);border-color:rgba(255,59,48,.18)}
 .btn.danger:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28);color:var(--danger)}
@@ -1088,12 +1231,13 @@ header{
   position:fixed;inset:0;background:var(--modal-backdrop);backdrop-filter:blur(10px);
   display:none;align-items:center;justify-content:center;z-index:90;
 }
-.modal-backdrop.show{display:flex}
+.modal-backdrop.show{display:flex;animation:backdropReveal .24s ease both}
 .modal{
   background:var(--bg-elev);border:1px solid var(--border-strong);
   border-radius:var(--radius);padding:28px 30px 24px;max-width:440px;width:calc(100% - 40px);
   box-shadow:var(--toast-shadow);
 }
+.modal-backdrop.show .modal{animation:modalReveal .38s var(--ease-spring) both}
 .modal h3{
   font-family:var(--font-display);font-size:24px;font-weight:600;
   letter-spacing:-.02em;color:var(--ink);margin-bottom:10px;
@@ -1114,7 +1258,7 @@ header{
   padding:24px;background:var(--modal-backdrop);
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
 }
-.detail-modal-backdrop.is-open{display:flex}
+.detail-modal-backdrop.is-open{display:flex;animation:backdropReveal .24s ease both}
 .detail-modal{
   width:min(760px,100%);
   max-width:760px;
@@ -1122,6 +1266,7 @@ header{
   display:grid;grid-template-rows:auto minmax(0,1fr);
   padding:0;overflow:hidden;
 }
+.detail-modal-backdrop.is-open .detail-modal{animation:modalReveal .38s var(--ease-spring) both}
 .detail-modal-head{
   display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
   padding:24px 26px 18px;border-bottom:1px solid var(--border);
@@ -1564,6 +1709,43 @@ header{
   width:46px;height:30px;border-radius:10px;border:1px solid var(--border);
   display:block;
 }
+.scale-control{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(280px,.85fr);
+  gap:18px;
+  align-items:center;
+  margin-top:22px;
+  padding-top:20px;
+  border-top:1px solid var(--border);
+}
+.scale-copy{margin-top:6px;margin-bottom:0}
+.scale-control-panel{
+  display:grid;
+  grid-template-columns:auto minmax(120px,1fr) auto auto;
+  align-items:center;
+  gap:12px;
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:var(--control-bg);
+}
+.scale-endpoint{
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink-3);
+}
+.scale-output{
+  min-width:48px;
+  text-align:right;
+  font-family:var(--font-mono);
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink);
+}
+.scale-slider{
+  width:100%;
+  accent-color:var(--accent);
+}
 .theme-option-swatch--light{
   background:linear-gradient(135deg,#ffffff 0%,#f1f1f4 100%);
 }
@@ -1707,8 +1889,23 @@ tbody tr:hover .row-note{opacity:1}
   margin-bottom:16px;
 }
 .notes-modal-subtitle{
-  margin-top:4px;font-size:13px;color:var(--ink-4);
+  margin-top:6px;font-size:13px;color:var(--ink-4);line-height:1.45;
 }
+.notes-modal h3{
+  margin:0;font-size:20px;line-height:1.2;letter-spacing:0;
+  color:var(--ink);overflow-wrap:anywhere;
+}
+.notes-session-range{color:var(--ink-3)}
+.notes-session-duration{color:var(--ink-2);font-weight:650}
+.notes-modal-title-row{display:flex;align-items:center;gap:10px}
+.notes-nav{display:flex;align-items:center;gap:4px}
+.notes-nav-btn{
+  width:26px;height:26px;border-radius:999px;border:1px solid var(--border);
+  background:var(--control-bg);color:var(--ink-2);display:grid;place-items:center;
+  cursor:pointer;font-size:15px;line-height:1;transition:background .15s ease,color .15s ease,opacity .15s ease;
+}
+.notes-nav-btn:hover:not(:disabled){background:var(--control-bg-strong);color:var(--ink)}
+.notes-nav-btn:disabled{opacity:.32;cursor:not-allowed}
 .notes-modal-close{
   width:30px;height:30px;border-radius:999px;border:1px solid var(--border);
   background:var(--control-bg);color:var(--ink-2);display:grid;place-items:center;
@@ -1734,6 +1931,27 @@ tbody tr:hover .row-note{opacity:1}
   margin-bottom:6px;margin-top:14px;
 }
 .notes-session-label:first-child{margin-top:0}
+.notes-todo-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;margin-bottom:8px}
+.notes-todo-list{display:grid;gap:6px;margin-bottom:8px}
+.notes-todo-item{
+  display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);
+  max-height:28px;overflow:hidden;
+  transition:opacity .16s ease, transform .18s ease, max-height .2s ease, margin .2s ease;
+}
+.notes-todo-item.removing{opacity:0;transform:translateX(-8px);max-height:0;margin-top:-6px;pointer-events:none}
+.notes-todo-check{display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer}
+.notes-todo-item input[type="checkbox"]{
+  appearance:none;-webkit-appearance:none;width:16px;height:16px;border-radius:999px;
+  border:1.5px solid var(--border);background:var(--surface);display:grid;place-items:center;
+  flex-shrink:0;cursor:pointer;transition:background .15s ease,border-color .15s ease;
+}
+.notes-todo-item input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+.notes-todo-item input[type="checkbox"]:checked::after{content:"";width:6px;height:6px;border-radius:999px;background:#fff}
+.notes-todo-item.done span{text-decoration:line-through;color:var(--ink-4)}
+.notes-todo-delete{width:22px;height:22px;border-radius:999px;border:1px solid transparent;background:transparent;color:var(--ink-4);cursor:pointer;line-height:1;font-size:15px;flex-shrink:0}
+.notes-todo-delete:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28);color:var(--danger)}
+.notes-todo-add{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--ink);font-size:13px;outline:none}
+.notes-todo-add:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .notes-modal-foot{
   display:flex;align-items:center;justify-content:space-between;
 }
@@ -1749,7 +1967,7 @@ tbody tr:hover .row-note{opacity:1}
 }
 .proj-badge .tick{
   width:7px;height:7px;border-radius:50%;
-  background:var(--proj-color, rgba(0,122,255,.55));flex-shrink:0;
+  background:var(--proj-color, color-mix(in srgb, var(--accent) 55%, transparent));flex-shrink:0;
 }
 .proj-badge.untitled .tick{background:var(--danger);opacity:.7}
 .proj-badge.untitled .name{color:var(--ink-3);font-style:italic}
@@ -1790,7 +2008,7 @@ tbody tr:hover .row-note{opacity:1}
   overflow:hidden;display:inline-block;vertical-align:middle;
 }
 .bar-fill{
-  height:100%;background:linear-gradient(90deg, rgba(0,122,255,.45), rgba(0,122,255,.95));
+  height:100%;background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 45%, transparent), color-mix(in srgb, var(--accent) 95%, transparent));
   border-radius:999px;transition:width .6s cubic-bezier(.2,.8,.3,1);
 }
 
@@ -1820,6 +2038,7 @@ tbody tr:hover .row-note{opacity:1}
   .rings-row{grid-template-columns:1fr}
   .settings-grid{grid-template-columns:1fr}
   .settings-kpis{grid-template-columns:1fr}
+  .scale-control{grid-template-columns:1fr}
   .weekday-picker{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
   .bar-bg{display:none}
   .donut-layout{grid-template-columns:1fr}
@@ -1851,6 +2070,11 @@ tbody tr:hover .row-note{opacity:1}
   .heatmap-meta{grid-template-columns:1fr}
   .heatmap-controls{width:100%;justify-content:space-between;justify-self:stretch}
   .heatmap-nav-btn{width:44px;height:44px}
+  .rhythm-kpis{grid-template-columns:1fr}
+  .rhythm-week{grid-template-columns:1fr}
+  .rhythm-day{grid-template-columns:64px 58px minmax(0,1fr) 54px;grid-template-rows:auto;align-items:center}
+  .rhythm-day-head{display:grid;gap:2px;justify-content:start}
+  .rhythm-rail{height:42px}
   .daily-target-nav-btn{width:44px;height:44px}
   .heatmap-stage{min-height:316px;padding:16px 12px 16px}
   .heatmap-stage-head,
@@ -1860,6 +2084,9 @@ tbody tr:hover .row-note{opacity:1}
   .field-grid{grid-template-columns:1fr}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
+  .scale-control-panel{grid-template-columns:1fr auto}
+  .scale-slider{grid-column:1 / -1}
+  .scale-endpoint{display:none}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
   .detail-modal-backdrop{padding:14px}
   .detail-modal-head{padding:20px 20px 16px}
@@ -1869,7 +2096,10 @@ tbody tr:hover .row-note{opacity:1}
 }
 @media (prefers-reduced-motion: reduce){
   .card,
-  .target-card{transition:none}
+  .chart-card,
+  .table-card,
+  .target-card{transition:none;animation:none}
+  .mesh-orb{animation:none}
 }
 .report-preview{
   font-family:var(--font-mono);font-size:12px;color:var(--ink);
@@ -1881,6 +2111,11 @@ tbody tr:hover .row-note{opacity:1}
 </head>
 <body>
 <div class="page-bg" aria-hidden="true"></div>
+<div class="mesh-bg" aria-hidden="true">
+  <div class="mesh-orb mesh-orb-1"></div>
+  <div class="mesh-orb mesh-orb-2"></div>
+  <div class="mesh-orb mesh-orb-3"></div>
+</div>
 <header>
   <div class="logo">
     <div class="logo-icon">
@@ -1989,7 +2224,13 @@ tbody tr:hover .row-note{opacity:1}
   <div class="modal notes-modal" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
     <div class="notes-modal-head">
       <div>
-        <h3 id="notesModalTitle">Session notes</h3>
+        <div class="notes-modal-title-row">
+          <h3 id="notesModalTitle">Session notes</h3>
+          <div class="notes-nav" aria-label="Navigate session notes">
+            <button class="notes-nav-btn" id="notesPrevBtn" type="button" aria-label="Previous session notes">‹</button>
+            <button class="notes-nav-btn" id="notesNextBtn" type="button" aria-label="Next session notes">›</button>
+          </div>
+        </div>
         <div class="notes-modal-subtitle" id="notesModalSubtitle"></div>
       </div>
       <button class="notes-modal-close" id="notesModalClose" type="button" aria-label="Close notes">×</button>
@@ -2009,12 +2250,13 @@ tbody tr:hover .row-note{opacity:1}
 
 <script>
 const PROJECT_COLORS = [
-  '#007aff','#5ac8fa','#64d2ff','#5e5ce6','#34c759',
-  '#ff9f0a','#ff375f','#8e8e93','#aeaeb2','#c7c7cc'
+  '#4f46e5','#0ea5e9','#6366f1','#8b5cf6','#34c759',
+  '#f59e0b','#f43f5e','#8e8e93','#aeaeb2','#c7c7cc'
 ];
 const UNTITLED = new Set(['untitled','untitled project','']);
 const isUntitled = n => UNTITLED.has((n || '').trim().toLowerCase());
 window.THEME_STORAGE_KEY = 'ableton_tracker_theme';
+window.UI_SCALE_STORAGE_KEY = 'ableton_tracker_ui_scale';
 const WEEK_START_DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const DEFAULT_WEEK_START_BACKEND = 4; // Friday in Python weekday()
 let WEEK_START_BACKEND_DAY = DEFAULT_WEEK_START_BACKEND; // 0=Mon ... 6=Sun (Python weekday)
@@ -2077,6 +2319,37 @@ function toggleTheme() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => root.classList.remove('theme-switching'));
   });
+}
+
+function normalizeUiScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 100;
+  return Math.min(120, Math.max(85, Math.round(numeric / 5) * 5));
+}
+
+function applyUiScale(value) {
+  const scale = normalizeUiScale(value);
+  const factor = scale / 100;
+  const root = document.documentElement;
+  root.style.fontSize = `${15 * factor}px`;
+  root.style.setProperty('--ui-gap', `${14 * factor}px`);
+  root.style.setProperty('--ui-section-gap', `${28 * factor}px`);
+  root.style.setProperty('--ui-card-pad-y', `${28 * factor}px`);
+  root.style.setProperty('--ui-card-pad-x', `${22 * factor}px`);
+  root.style.setProperty('--ui-card-min-h', `${203 * factor}px`);
+  root.style.setProperty('--ui-page-max', `${1200 + ((factor - 1) * 280)}px`);
+  try {
+    localStorage.setItem(window.UI_SCALE_STORAGE_KEY, String(scale));
+  } catch (_) {}
+  return scale;
+}
+
+async function hydrateUiScaleSetting() {
+  try {
+    const res = await fetch('/api/app-settings');
+    const settings = await res.json();
+    if (settings && settings.ui_scale != null) applyUiScale(settings.ui_scale);
+  } catch (_) {}
 }
 
 function syncCategoryOptions(options) {
@@ -2216,6 +2489,7 @@ function setActiveView(nextView, { pushHash = true } = {}) {
     const nextHash = activeView === 'settings' ? '#settings' : '#dashboard';
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
   }
+  const applyView = () => {
   updateHeaderForView();
 
   const dashEl = document.getElementById('appDashboard');
@@ -2244,6 +2518,12 @@ function setActiveView(nextView, { pushHash = true } = {}) {
       });
     }
   }
+  };
+  if (prevView !== activeView && document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(applyView);
+  } else {
+    applyView();
+  }
 }
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
@@ -2251,6 +2531,7 @@ systemTheme.addEventListener('change', () => {
   if (!localStorage.getItem(window.THEME_STORAGE_KEY)) updateThemeToggle();
 });
 applyStoredTheme();
+hydrateUiScaleSetting();
 document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
 document.getElementById('navSettings').addEventListener('click', () => setActiveView('settings'));
 document.getElementById('monthNavPrev').addEventListener('click', () => {
@@ -2293,6 +2574,13 @@ const fmt = {
     return new Date(ts * 1000).toLocaleString('en-US', {
       hour:'numeric', minute:'2-digit'
     });
+  },
+  dateOrdinal(ts) {
+    if (!ts) return '—';
+    const date = new Date(ts * 1000);
+    const day = date.getDate();
+    const suffix = (day % 100 >= 11 && day % 100 <= 13) ? 'th' : ({1:'st',2:'nd',3:'rd'}[day % 10] || 'th');
+    return `${date.toLocaleDateString('en-US', { month:'long' })} ${day}${suffix}`;
   },
   hrs(s) { return Math.round((s || 0) / 360) / 10; }
 };
@@ -3128,6 +3416,124 @@ function heatmapGlowColor(value, maxValue) {
   return rgbaString(heatmapColorParts(value, maxValue), 0.58);
 }
 
+const RHYTHM_BLOCKS = [
+  { key: 'morning', label: 'AM', full: 'Morning', hours: [6, 7, 8, 9, 10, 11] },
+  { key: 'afternoon', label: 'PM', full: 'Afternoon', hours: [12, 13, 14, 15, 16] },
+  { key: 'evening', label: 'Eve', full: 'Evening', hours: [17, 18, 19, 20, 21] },
+  { key: 'night', label: 'Night', full: 'Night', hours: [22, 23, 0, 1, 2, 3, 4, 5] },
+];
+
+function buildActivityMaps(yearDaily, yearHourly) {
+  const activityByDay = {};
+  (yearDaily || []).forEach(d => {
+    if (d?.day) activityByDay[d.day] = (d.total_seconds || 0) / 3600;
+  });
+  const activityByDayHour = {};
+  (yearHourly || []).forEach(r => {
+    if (r?.day) activityByDayHour[`${r.day}_${r.hour}`] = r.active_seconds || 0;
+  });
+  return { activityByDay, activityByDayHour };
+}
+
+function currentRhythmWeek(activityByDay, activityByDayHour) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const todayKey = localDateKey(today);
+  const start = startOfWeek(today);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(start, index);
+    const key = localDateKey(date);
+    const isFuture = date > today;
+    const totalHours = isFuture ? 0 : Math.round((activityByDay[key] || 0) * 10) / 10;
+    const blocks = RHYTHM_BLOCKS.map(block => {
+      const seconds = block.hours.reduce((sum, hour) => sum + (activityByDayHour[`${key}_${hour}`] || 0), 0);
+      return { ...block, seconds };
+    });
+    const peakBlock = blocks.reduce((best, block) => block.seconds > (best?.seconds || 0) ? block : best, null);
+    return { key, date, isFuture, isToday: key === todayKey, totalHours, blocks, peakBlock };
+  });
+  return { startKey: localDateKey(start), endKey: localDateKey(addDays(start, 6)), days };
+}
+
+function rhythmGradient(blocks, maxBlockSeconds) {
+  if (!blocks.some(block => block.seconds > 0)) return 'var(--bar-bg)';
+  const stops = blocks.map((block, index) => {
+    const start = index * 25;
+    const end = start + 25;
+    const alpha = block.seconds > 0
+      ? clamp(0.18 + ((block.seconds / Math.max(maxBlockSeconds, 1)) * 0.74), 0.18, 0.92)
+      : 0.06;
+    return `rgba(48,209,88,${alpha.toFixed(2)}) ${start}%, rgba(48,209,88,${alpha.toFixed(2)}) ${end}%`;
+  });
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+function renderWeeklyRhythm(yearDaily, yearHourly) {
+  const mount = document.getElementById('activityHeatmap');
+  if (!mount) return;
+  const { activityByDay, activityByDayHour } = buildActivityMaps(yearDaily, yearHourly);
+  const week = currentRhythmWeek(activityByDay, activityByDayHour);
+  const visibleDays = week.days.filter(day => !day.isFuture);
+  const totalHours = Math.round(visibleDays.reduce((sum, day) => sum + day.totalHours, 0) * 10) / 10;
+  const focusedDays = visibleDays.filter(day => day.totalHours * 3600 >= 15 * 60).length;
+  const peakDay = visibleDays.reduce((best, day) => day.totalHours > (best?.totalHours || 0) ? day : best, null);
+  const peakLabel = peakDay && peakDay.totalHours > 0
+    ? `${peakDay.date.toLocaleDateString('en-US', { weekday: 'short' })} ${peakDay.peakBlock?.label || ''}`.trim()
+    : '—';
+  const peakBlock = RHYTHM_BLOCKS.map(block => ({
+    ...block,
+    seconds: visibleDays.reduce((sum, day) => sum + (day.blocks.find(b => b.key === block.key)?.seconds || 0), 0),
+  })).reduce((best, block) => block.seconds > (best?.seconds || 0) ? block : best, null);
+  const insight = totalHours > 0
+    ? `${peakBlock?.full || 'Peak'} · ${shortRange(week.startKey, week.endKey)}`
+    : `No activity · ${shortRange(week.startKey, week.endKey)}`;
+  const maxBlockSeconds = Math.max(...week.days.flatMap(day => day.blocks.map(block => block.seconds)), 1);
+  const weekSummary = `${formatHoursNumber(totalHours)} hours this week. ${focusedDays} focused days. Peak ${peakLabel}.`;
+
+  mount.innerHTML = `
+    <div class="rhythm-shell" aria-label="${escapeHtml(weekSummary)}">
+      <div class="rhythm-kpis">
+        <div class="rhythm-kpi"><span>Week</span><strong>${formatHoursNumber(totalHours)}h</strong></div>
+        <div class="rhythm-kpi"><span>Days</span><strong>${focusedDays}</strong></div>
+        <div class="rhythm-kpi"><span>Peak</span><strong title="${escapeHtml(peakLabel)}">${escapeHtml(peakLabel)}</strong></div>
+      </div>
+      <div class="rhythm-week">
+        ${week.days.map(day => {
+          const totalLabel = day.isFuture ? '—' : `${formatHoursNumber(day.totalHours)}h`;
+          const classes = ['rhythm-day', day.isToday ? 'is-today' : '', day.totalHours <= 0 ? 'is-empty' : ''].filter(Boolean).join(' ');
+          return `
+            <div class="${classes}" title="${escapeHtml(`${day.date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}: ${day.isFuture ? 'upcoming' : totalLabel}`)}">
+              <div class="rhythm-day-head">
+                <span class="rhythm-day-name">${day.date.toLocaleDateString('en-US', { weekday:'short' })}</span>
+                <span class="rhythm-day-date">${day.date.toLocaleDateString('en-US', { month:'numeric', day:'numeric' })}</span>
+              </div>
+              <div class="rhythm-day-total">${totalLabel}</div>
+              <div class="rhythm-rail" style="--rhythm-gradient:${rhythmGradient(day.blocks, maxBlockSeconds)}" aria-hidden="true"></div>
+              <div class="rhythm-block-label">${day.peakBlock?.seconds > 0 ? day.peakBlock.label : '—'}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="rhythm-insight">${escapeHtml(insight)}</div>
+      <button class="rhythm-detail-toggle" id="activityDetailToggle" type="button" aria-expanded="false" aria-controls="activityHourlyDetail">Hourly detail</button>
+      <div class="rhythm-detail" id="activityHourlyDetail"></div>
+    </div>
+  `;
+
+  const detail = mount.querySelector('#activityHourlyDetail');
+  const toggle = mount.querySelector('#activityDetailToggle');
+  if (!detail || !toggle) return;
+  toggle.addEventListener('click', () => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    detail.classList.toggle('is-open', open);
+    if (open && !detail.dataset.rendered) {
+      renderActivityHeatmap(yearDaily, yearHourly, detail);
+      detail.dataset.rendered = 'true';
+    }
+  });
+}
+
 function getStoredGoalHours(storageKey, fallbackHours) {
   const raw = Number(localStorage.getItem(storageKey));
   return Number.isFinite(raw) && raw > 0 ? raw : fallbackHours;
@@ -3189,6 +3595,13 @@ async function postJson(path, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'request failed');
+  return data;
+}
+
+async function getJson(path) {
+  const res = await fetch(path);
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'request failed');
   return data;
@@ -3380,23 +3793,27 @@ function bindNotesTriggers(){
         .filter(n => Number.isFinite(n));
       const projectName = decodeURIComponent(btn.dataset.projectName || '');
       let notes = {};
+      let todos = {};
       let startTimes = {};
       let endTimes = {};
       let lastSeenTimes = {};
+      let activeSeconds = {};
       try {
         notes = JSON.parse(decodeURIComponent(btn.dataset.sessionNotes || '{}'));
+        todos = JSON.parse(decodeURIComponent(btn.dataset.sessionTodos || '{}'));
         startTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionStartTimes || '{}'));
         endTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionEndTimes || '{}'));
         lastSeenTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionLastSeenTimes || '{}'));
+        activeSeconds = JSON.parse(decodeURIComponent(btn.dataset.sessionActiveSeconds || '{}'));
       } catch(e) {}
-      openNotesPopup({ sessionIds: ids, projectName, notes, startTimes, endTimes, lastSeenTimes });
+      openNotesPopup({ sessionIds: ids, projectName, notes, todos, startTimes, endTimes, lastSeenTimes, activeSeconds });
     });
   });
 }
 
 let notesModalState = null;
 
-function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, lastSeenTimes }){
+function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, endTimes, lastSeenTimes, activeSeconds }){
   // Close any existing notes modal first
   if (notesModalState) closeNotesModal();
 
@@ -3407,11 +3824,21 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   const saveBtn = document.getElementById('notesModalSave');
   const cancelBtn = document.getElementById('notesModalCancel');
   const closeBtn = document.getElementById('notesModalClose');
+  const prevBtn = document.getElementById('notesPrevBtn');
+  const nextBtn = document.getElementById('notesNextBtn');
   const charCount = document.getElementById('notesCharCount');
 
   const abletonIsRunning = latestDashboardData?.summary?.ableton_running === true;
+  let currentSessionIds = [...sessionIds];
+  let currentProjectName = projectName;
+  let previousSessionId = null;
+  let nextSessionId = null;
+  let isDirty = false;
 
-  title.textContent = 'Session notes';
+  title.textContent = currentProjectName || 'Untitled session';
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save';
+  cancelBtn.textContent = 'Cancel';
 
   // Helper to get a display end-time string for a session
   function endTimeDisplay(sidStr) {
@@ -3425,14 +3852,34 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
     return '—';
   }
 
-  // Build subtitle: "Project Name — May 4 — 3:45 PM" or "...— Active"
+  function endTimePlain(sidStr) {
+    const et = endTimes[sidStr];
+    const lst = lastSeenTimes[sidStr];
+    if (et != null) return fmt.time(et);
+    if (abletonIsRunning) return 'Active';
+    if (lst) return fmt.time(lst);
+    return '—';
+  }
+
+  function sessionSummary(sidStr) {
+    const startTs = startTimes[sidStr] || 0;
+    const seconds = activeSeconds?.[sidStr] || 0;
+    const dateStr = fmt.dateOrdinal(startTs);
+    const range = `${fmt.time(startTs)} to ${endTimePlain(sidStr)}`;
+    const duration = seconds > 0 ? fmt.dur(seconds) : '';
+    return { dateStr, range, duration };
+  }
+
   if (sessionIds.length === 1) {
     const sidStr = String(sessionIds[0]);
-    const ts = startTimes[sidStr] || 0;
-    const dateStr = fmt.date(ts);
-    subtitle.innerHTML = `${escapeHtml(projectName)} &mdash; ${dateStr} &mdash; ${endTimeDisplay(sidStr)}`;
+    const summary = sessionSummary(sidStr);
+    const durationHtml = summary.duration
+      ? ` <span class="notes-session-duration">${escapeHtml(summary.duration)}</span>`
+      : '';
+    subtitle.innerHTML = `${escapeHtml(summary.dateStr)} from <span class="notes-session-range">${escapeHtml(summary.range)}</span>${durationHtml}`;
   } else {
-    subtitle.textContent = `${sessionIds.length} sessions · ${escapeHtml(projectName)}`;
+    const totalSeconds = sessionIds.reduce((sum, sid) => sum + (activeSeconds?.[String(sid)] || 0), 0);
+    subtitle.textContent = `${sessionIds.length} sessions · ${fmt.dur(totalSeconds)}`;
   }
 
   // Build textareas
@@ -3440,6 +3887,7 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   sessionIds.forEach((sid, i) => {
     const sidStr = String(sid);
     const note = notes[sidStr] || '';
+    const sessionTodos = Array.isArray(todos?.[sidStr]) ? todos[sidStr] : [];
     const ts = startTimes[sidStr] || 0;
     const dateStr = fmt.date(ts);
     const startStr = fmt.datetime(ts);
@@ -3447,9 +3895,21 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
     const label = sessionIds.length > 1
       ? `<div class="notes-session-label">Session ${i + 1} &middot; ${dateStr} &middot; ${timePart}</div>`
       : '';
-    html += `${label}<textarea class="notes-textarea" data-sid="${sidStr}" maxlength="${MAX_NOTES_LEN}" placeholder="What did you work on? Any to-dos?">${escapeHtml(note)}</textarea>`;
+    html += `${label}<div class="notes-session" data-sid="${sidStr}">
+      <textarea class="notes-textarea" data-sid="${sidStr}" maxlength="${MAX_NOTES_LEN}" placeholder="What did you work on?">${escapeHtml(note)}</textarea>
+      <div class="notes-todo-head">
+        <div class="notes-session-label">To-dos</div>
+        <button class="btn small notes-recall" type="button" data-sid="${sidStr}">Recall last session to-dos</button>
+      </div>
+      <div class="notes-todo-list" data-sid="${sidStr}">${sessionTodos.map(todo => `<div class="notes-todo-item${todo.done ? ' done' : ''}"><label class="notes-todo-check"><input type="checkbox" ${todo.done ? 'checked' : ''}><span>${escapeHtml(todo.text || '')}</span></label><button class="notes-todo-delete" type="button" aria-label="Delete to-do">×</button></div>`).join('')}</div>
+      <input class="notes-todo-add" data-sid="${sidStr}" type="text" placeholder="Add to-do and press Enter">
+    </div>`;
   });
   body.innerHTML = html;
+  const markDirty = () => {
+    isDirty = true;
+    cancelBtn.textContent = 'Cancel';
+  };
 
   // Character counter
   const textareas = body.querySelectorAll('.notes-textarea');
@@ -3460,9 +3920,112 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
     charCount.classList.toggle('over', total > MAX_NOTES_LEN);
   };
   textareas.forEach(ta => {
-    ta.addEventListener('input', updateCounter);
+    ta.addEventListener('input', () => { updateCounter(); markDirty(); });
   });
   updateCounter();
+
+  const removeTodoItem = item => {
+    if (!item || item.classList.contains('removing')) return;
+    item.classList.add('removing');
+    markDirty();
+    setTimeout(() => item.remove(), 220);
+  };
+  const todoValuesFor = sid => Array.from(body.querySelectorAll(`.notes-todo-list[data-sid="${sid}"] .notes-todo-item:not(.removing)`)).map(item => ({
+    text: item.querySelector('span')?.textContent || '',
+    done: item.querySelector('input')?.checked === true,
+  })).filter(todo => todo.text.trim());
+  const addTodo = (sid, text, done=false) => {
+    const clean = (text || '').trim();
+    if (!clean) return;
+    const list = body.querySelector(`.notes-todo-list[data-sid="${sid}"]`);
+    if (!list) return;
+    const label = document.createElement('label');
+    label.className = `notes-todo-item${done ? ' done' : ''}`;
+    label.innerHTML = `<label class="notes-todo-check"><input type="checkbox" ${done ? 'checked' : ''}><span>${escapeHtml(clean)}</span></label><button class="notes-todo-delete" type="button" aria-label="Delete to-do">×</button>`;
+    label.querySelector('input').addEventListener('change', e => {
+      label.classList.toggle('done', e.target.checked);
+      markDirty();
+    });
+    label.querySelector('.notes-todo-delete').addEventListener('click', () => {
+      removeTodoItem(label);
+    });
+    list.appendChild(label);
+    markDirty();
+  };
+  body.querySelectorAll('.notes-todo-item input').forEach(input => {
+    input.addEventListener('change', e => {
+      e.currentTarget.closest('.notes-todo-item')?.classList.toggle('done', e.currentTarget.checked);
+      markDirty();
+    });
+  });
+  body.querySelectorAll('.notes-todo-delete').forEach(button => {
+    button.addEventListener('click', () => {
+      removeTodoItem(button.closest('.notes-todo-item'));
+    });
+  });
+  body.querySelectorAll('.notes-todo-add').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      addTodo(input.dataset.sid, input.value);
+      input.value = '';
+    });
+  });
+  body.querySelectorAll('.notes-recall').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        const data = await getJson(`/api/last-session-todos?project=${encodeURIComponent(currentProjectName || '')}`);
+        const existing = new Set(todoValuesFor(btn.dataset.sid).map(todo => todo.text));
+        (data.todos || []).filter(todo => !todo.done && !existing.has(todo.text)).forEach(todo => addTodo(btn.dataset.sid, todo.text, false));
+      } catch(e) {
+        toast('Failed to recall to-dos');
+      }
+    });
+  });
+
+  const updateNavButtons = () => {
+    prevBtn.disabled = !previousSessionId;
+    nextBtn.disabled = !nextSessionId;
+  };
+  updateNavButtons();
+
+  const loadNavState = async () => {
+    if (sessionIds.length !== 1) return;
+    try {
+      const data = await getJson(`/api/session-notes-entry?session_id=${encodeURIComponent(sessionIds[0])}&project=${encodeURIComponent(currentProjectName || '')}`);
+      previousSessionId = data.previous_session_id || null;
+      nextSessionId = data.next_session_id || null;
+      updateNavButtons();
+    } catch(e) {
+      updateNavButtons();
+    }
+  };
+  loadNavState();
+
+  const openEntry = async sessionId => {
+    if (!sessionId) return;
+    if (isDirty && !window.confirm('Discard unsaved notes and switch sessions?')) return;
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    try {
+      const data = await getJson(`/api/session-notes-entry?session_id=${encodeURIComponent(sessionId)}&project=${encodeURIComponent(currentProjectName || '')}`);
+      const entry = data.session;
+      closeNotesModal();
+      openNotesPopup({
+        sessionIds: [entry.id],
+        projectName: entry.project_name || currentProjectName,
+        notes: { [String(entry.id)]: entry.notes || '' },
+        todos: { [String(entry.id)]: Array.isArray(entry.todos) ? entry.todos : [] },
+        startTimes: { [String(entry.id)]: entry.start_time || 0 },
+        endTimes: { [String(entry.id)]: entry.end_time ?? null },
+        lastSeenTimes: { [String(entry.id)]: entry.last_seen_time || 0 },
+        activeSeconds: { [String(entry.id)]: entry.active_seconds || 0 },
+      });
+    } catch(e) {
+      toast('Failed to load session notes');
+      updateNavButtons();
+    }
+  };
 
   // Handlers
   const onSave = async () => {
@@ -3472,10 +4035,11 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
       for (const ta of textareas) {
         const sid = parseInt(ta.dataset.sid, 10);
         const notesVal = ta.value.trim();
-        await postJson('/api/session-notes', { session_id: sid, notes: notesVal });
+        await postJson('/api/session-notes', { session_id: sid, notes: notesVal, todos: todoValuesFor(String(sid)) });
       }
       toast('Notes saved');
-      closeNotesModal();
+      isDirty = false;
+      cancelBtn.textContent = 'Exit';
       load();
     } catch(e) {
       toast('Failed to save notes');
@@ -3484,16 +4048,26 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
     }
   };
 
-  const onCancel = () => closeNotesModal();
-  const onBackdrop = e => { if (e.target === modal) closeNotesModal(); };
+  const onCancel = async () => {
+    if (isDirty && window.confirm('Do you want to save changes? Yes or no.')) {
+      await onSave();
+      return;
+    }
+    closeNotesModal();
+  };
+  const onBackdrop = e => { if (e.target === modal) onCancel(); };
   const onKey = e => {
-    if (e.key === 'Escape') closeNotesModal();
+    if (e.key === 'Escape') onCancel();
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSave();
   };
+  const onPrev = () => openEntry(previousSessionId);
+  const onNext = () => openEntry(nextSessionId);
 
   saveBtn.addEventListener('click', onSave);
   cancelBtn.addEventListener('click', onCancel);
   closeBtn.addEventListener('click', onCancel);
+  prevBtn.addEventListener('click', onPrev);
+  nextBtn.addEventListener('click', onNext);
   modal.addEventListener('click', onBackdrop);
   document.addEventListener('keydown', onKey);
 
@@ -3501,16 +4075,18 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   if (textareas.length > 0) textareas[0].focus();
 
   // Store cleanup refs
-  notesModalState = { onSave, onCancel, onBackdrop, onKey, saveBtn, cancelBtn, closeBtn, modal };
+  notesModalState = { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal };
 }
 
 function closeNotesModal(){
   if (!notesModalState) return;
-  const { onSave, onCancel, onBackdrop, onKey, saveBtn, cancelBtn, closeBtn, modal } = notesModalState;
+  const { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal } = notesModalState;
   modal.classList.remove('show');
   saveBtn.removeEventListener('click', onSave);
   cancelBtn.removeEventListener('click', onCancel);
   closeBtn.removeEventListener('click', onCancel);
+  prevBtn.removeEventListener('click', onPrev);
+  nextBtn.removeEventListener('click', onNext);
   modal.removeEventListener('click', onBackdrop);
   document.removeEventListener('keydown', onKey);
   notesModalState = null;
@@ -3780,7 +4356,7 @@ function render(data) {
     <div class="chart-card chart-card-wide">
       <div class="section-head">
         <h3 class="section-title">Activity</h3>
-        <span class="section-meta" id="activityHeatmapWeekLabel2">Your weekly rhythm · ${weekStartDayName()} to ${weekEndDayName()}</span>
+        <span class="section-meta" id="activityHeatmapWeekLabel2">Weekly rhythm</span>
       </div>
       <div class="chart-wrap"><div id="activityHeatmap"></div></div>
     </div>
@@ -3860,16 +4436,20 @@ function render(data) {
                   <td class="row-action">
                     ${(() => {
                       const notesData = JSON.stringify(s.session_notes || {});
+                      const todosData = JSON.stringify(s.session_todos || {});
                       const timesData = JSON.stringify(s.session_start_times || {});
                       const endTimesData = JSON.stringify(s.session_end_times || {});
                       const lastSeenData = JSON.stringify(s.session_last_seen_times || {});
+                      const activeSecondsData = JSON.stringify(s.session_active_seconds || {});
                       const hasNotes = Object.keys(s.session_notes || {}).length > 0;
                       return `<button class="row-note${hasNotes ? ' has-notes' : ''}" type="button"
                         data-session-ids="${ids}"
                         data-session-notes="${encodeURIComponent(notesData)}"
+                        data-session-todos="${encodeURIComponent(todosData)}"
                         data-session-start-times="${encodeURIComponent(timesData)}"
                         data-session-end-times="${encodeURIComponent(endTimesData)}"
                         data-session-last-seen-times="${encodeURIComponent(lastSeenData)}"
+                        data-session-active-seconds="${encodeURIComponent(activeSecondsData)}"
                         data-project-name="${encodeURIComponent(s.project_name || '')}"
                         title="${hasNotes ? 'Edit notes' : 'Add notes'}">✎</button>`;
                     })()}
@@ -3916,7 +4496,7 @@ function render(data) {
   bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
 
-  renderActivityHeatmap(year_daily, year_hourly);
+  renderWeeklyRhythm(year_daily, year_hourly);
   renderDailyGoal(summary);
   renderWeeklyGoal(summary);
   renderCategoryChart(projects, summary);
@@ -3958,19 +4538,11 @@ function updateSessionStatus(summary) {
   indicator.innerHTML = indicatorHtml;
 }
 
-function renderActivityHeatmap(yearDaily, yearHourly) {
-  const mount = document.getElementById('activityHeatmap');
+function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null) {
+  const mount = targetMount || document.getElementById('activityHeatmap');
   if (!mount) return;
 
-  const activityByDay = {};
-  yearDaily.forEach(d => {
-    activityByDay[d.day] = (d.total_seconds || 0) / 3600;
-  });
-
-  const activityByDayHour = {};
-  (yearHourly || []).forEach(r => {
-    activityByDayHour[`${r.day}_${r.hour}`] = r.active_seconds;
-  });
+  const { activityByDay, activityByDayHour } = buildActivityMaps(yearDaily, yearHourly);
 
   const today = new Date();
   today.setHours(12, 0, 0, 0);

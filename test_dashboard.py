@@ -522,6 +522,46 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
         self.assertEqual(alpha["todos"][0]["text"], "Alpha task")
         self.assertEqual(beta["todos"][0]["text"], "Beta task")
 
+    def test_get_session_notes_entry_returns_project_neighbors(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            first = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("Alpha", 100.0, 160.0, 160.0, 60.0, "First", '[{"text":"First task","done":false}]'),
+            ).lastrowid
+            second = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("Alpha", 200.0, 260.0, 260.0, 60.0, "Second", "[]"),
+            ).lastrowid
+            third = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("Alpha", 300.0, 360.0, 360.0, 60.0, "Third", "[]"),
+            ).lastrowid
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("Beta", 400.0, 460.0, 460.0, 60.0, "Beta", "[]"),
+            )
+            conn.commit()
+
+        result = dashboard.get_session_notes_entry(second, "Alpha")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["session"]["id"], second)
+        self.assertEqual(result["session"]["notes"], "Second")
+        self.assertEqual(result["previous_session_id"], first)
+        self.assertEqual(result["next_session_id"], third)
+
     def test_recent_payload_includes_session_todos(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             cur = conn.execute(

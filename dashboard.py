@@ -9,6 +9,7 @@ import time
 import traceback
 import webbrowser
 import threading
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -25,6 +26,7 @@ from tracker import (
 )
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
+MAX_REQUEST_SIZE = 1_048_576  # 1 MB
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
 TEMPLATES_DIR = Path(__file__).with_name("templates").resolve()
 STATIC_DIR = Path(__file__).with_name("static").resolve()
@@ -53,6 +55,15 @@ WEEKDAY_NAMES = [
 DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
 
 
+@contextmanager
+def db_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
 # ─────────────────────────────────────────────────────────────
 #  Mutations
 # ─────────────────────────────────────────────────────────────
@@ -60,7 +71,7 @@ DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
 def clear_all_sessions() -> dict:
     if not DB_PATH.exists():
         return {"ok": True, "deleted": 0}
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         cur = conn.execute("DELETE FROM sessions WHERE end_time IS NOT NULL")
         conn.commit()
         return {"ok": True, "deleted": cur.rowcount}
@@ -70,7 +81,7 @@ def clear_unsaved_projects() -> dict:
     if not DB_PATH.exists():
         return {"ok": True, "deleted": 0}
     placeholders = ",".join("?" * len(UNTITLED_NAMES))
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         cur = conn.execute(
             f"""
             DELETE FROM sessions
@@ -102,7 +113,7 @@ def delete_sessions(session_ids) -> dict:
         return {"ok": True, "deleted": 0, "skipped_live": 0}
 
     placeholders = ",".join("?" * len(clean_ids))
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         live_rows = conn.execute(
             f"SELECT id FROM sessions WHERE id IN ({placeholders}) AND end_time IS NULL",
             clean_ids,
@@ -126,8 +137,31 @@ def delete_sessions(session_ids) -> dict:
 MAX_NOTES_LENGTH = 500
 
 
-def set_session_notes(session_id, notes: str) -> dict:
-    """Save notes for a single session. Notes are truncated to MAX_NOTES_LENGTH."""
+def _normalize_todos(todos) -> list[dict]:
+    if not isinstance(todos, list):
+        return []
+    normalized = []
+    for item in todos:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        normalized.append({"text": text, "done": bool(item.get("done"))})
+    return normalized
+
+
+def _parse_todos_json(value) -> list[dict]:
+    if not value:
+        return []
+    try:
+        return _normalize_todos(json.loads(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def set_session_notes(session_id, notes: str, todo_notes: str = "", todos_json=None) -> dict:
+    """Save notes and to-dos for a single session."""
     try:
         sid = int(session_id)
     except (TypeError, ValueError):
@@ -137,16 +171,118 @@ def set_session_notes(session_id, notes: str) -> dict:
         return {"error": "no data yet"}
 
     trimmed = (notes or "").strip()[:MAX_NOTES_LENGTH]
+    todos = _normalize_todos(todos_json) if todos_json is not None else []
+    trimmed_todo_notes = " | ".join(todo["text"] for todo in todos) if todos_json is not None else (todo_notes or "").strip()
+    todos_text = json.dumps(todos, separators=(",", ":"))
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
+        ensure_sessions_notes_column(conn)
         cur = conn.execute(
-            "UPDATE sessions SET notes = ? WHERE id = ?",
-            (trimmed, sid),
+            "UPDATE sessions SET notes = ?, todo_notes = ?, todos_json = ? WHERE id = ?",
+            (trimmed, trimmed_todo_notes, todos_text, sid),
         )
         conn.commit()
         if cur.rowcount == 0:
             return {"error": "session not found"}
-        return {"ok": True, "session_id": sid, "notes": trimmed}
+        return {
+            "ok": True,
+            "session_id": sid,
+            "notes": trimmed,
+            "todo_notes": trimmed_todo_notes,
+            "todos": todos,
+        }
+
+
+def clear_session_notes() -> dict:
+    if not DB_PATH.exists():
+        return {"ok": True, "updated": 0}
+    with db_connection() as conn:
+        ensure_sessions_notes_column(conn)
+        cur = conn.execute("UPDATE sessions SET notes = '', todo_notes = '', todos_json = '[]'")
+        conn.commit()
+        return {"ok": True, "updated": cur.rowcount}
+
+
+def get_last_session_todos(project_name: str) -> dict:
+    project = (project_name or "").strip()
+    if not project or not DB_PATH.exists():
+        return {"project_name": project, "todos": []}
+    with db_connection() as conn:
+        ensure_sessions_notes_column(conn)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT project_name, todos_json
+            FROM sessions
+            WHERE project_name = ?
+            ORDER BY start_time DESC, id DESC
+            LIMIT 1
+            """,
+            (project,),
+        ).fetchone()
+    if not row:
+        return {"project_name": project, "todos": []}
+    return {"project_name": row["project_name"], "todos": _parse_todos_json(row["todos_json"])}
+
+
+def get_session_notes_entry(session_id, project_name: str = "") -> dict:
+    try:
+        sid = int(session_id)
+    except (TypeError, ValueError):
+        return {"error": "invalid session_id"}
+
+    if not DB_PATH.exists():
+        return {"error": "no data yet"}
+
+    project = (project_name or "").strip()
+    with db_connection() as conn:
+        ensure_sessions_notes_column(conn)
+        conn.row_factory = sqlite3.Row
+        current = conn.execute(
+            """
+            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
+            FROM sessions
+            WHERE id = ?
+            """,
+            (sid,),
+        ).fetchone()
+        if not current:
+            return {"error": "session not found"}
+        if not project:
+            project = current["project_name"]
+
+        rows = conn.execute(
+            """
+            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
+            FROM sessions
+            WHERE project_name = ?
+            ORDER BY start_time DESC, id DESC
+            """,
+            (project,),
+        ).fetchall()
+
+    index = next((i for i, row in enumerate(rows) if int(row["id"]) == sid), None)
+    if index is None:
+        return {"error": "session not found for project"}
+
+    def serialize(row):
+        return {
+            "id": int(row["id"]),
+            "project_name": row["project_name"],
+            "start_time": float(row["start_time"] or 0),
+            "last_seen_time": float(row["last_seen_time"] or 0),
+            "end_time": float(row["end_time"]) if row["end_time"] is not None else None,
+            "active_seconds": float(row["active_seconds"] or 0),
+            "notes": (row["notes"] or "").strip(),
+            "todos": _parse_todos_json(row["todos_json"]),
+        }
+
+    return {
+        "ok": True,
+        "session": serialize(rows[index]),
+        "previous_session_id": int(rows[index + 1]["id"]) if index + 1 < len(rows) else None,
+        "next_session_id": int(rows[index - 1]["id"]) if index > 0 else None,
+    }
 
 
 def ensure_project_category_table(conn: sqlite3.Connection) -> None:
@@ -232,7 +368,7 @@ def ensure_app_settings_table(conn: sqlite3.Connection) -> None:
 def get_app_setting(key: str, default: str | None = None) -> str | None:
     if not DB_PATH.exists():
         return default
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT value FROM app_settings WHERE key = ?", (key,)
@@ -242,7 +378,7 @@ def get_app_setting(key: str, default: str | None = None) -> str | None:
 
 def set_app_setting(key: str, value: str) -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(
             """
@@ -260,12 +396,24 @@ def set_app_setting(key: str, value: str) -> None:
 def get_all_app_settings() -> dict[str, str]:
     if not DB_PATH.exists():
         return {}
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT key, value FROM app_settings ORDER BY key"
         ).fetchall()
         return {row["key"]: row["value"] for row in rows}
+
+
+def ensure_indexes(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_project_name ON sessions(project_name)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_categories_key ON project_categories(category_key)"
+    )
 
 
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
@@ -274,6 +422,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
     ensure_sessions_notes_column(conn)
+    ensure_indexes(conn)
     purge_legacy_categories(conn)
 
 
@@ -283,7 +432,13 @@ def ensure_sessions_notes_column(conn: sqlite3.Connection) -> None:
     }
     if "notes" not in columns:
         conn.execute("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''")
+    if "todo_notes" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN todo_notes TEXT DEFAULT ''")
+    if "todos_json" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN todos_json TEXT DEFAULT '[]'")
     conn.execute("UPDATE sessions SET notes = COALESCE(notes, '') WHERE notes IS NULL")
+    conn.execute("UPDATE sessions SET todo_notes = COALESCE(todo_notes, '') WHERE todo_notes IS NULL")
+    conn.execute("UPDATE sessions SET todos_json = COALESCE(todos_json, '[]') WHERE todos_json IS NULL")
     conn.commit()
 
 
@@ -362,7 +517,7 @@ def set_project_category(project_name: str, category_key: str | None) -> dict:
 
     normalized_key = (category_key or "").strip().lower() or None
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         _, category_by_key = get_category_maps(conn)
         if normalized_key is not None and normalized_key not in category_by_key:
@@ -429,7 +584,7 @@ def create_category(label: str, color: str) -> dict:
     if not normalized_color:
         return {"error": "Pick a valid hex color."}
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         custom_count = conn.execute(
             "SELECT COUNT(*) FROM category_definitions"
@@ -491,7 +646,7 @@ def update_category(category_key: str, label: str, color: str) -> dict:
     if not normalized_color:
         return {"error": "Pick a valid hex color."}
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             """
@@ -543,7 +698,7 @@ def delete_category(category_key: str) -> dict:
     if not normalized_key:
         return {"error": "Category key is required."}
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             """
@@ -664,7 +819,7 @@ def get_daily_target(date_value: str) -> dict:
             "has_target": False,
         }
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         row = conn.execute(
@@ -704,7 +859,7 @@ def set_daily_target(date_value: str, goal_hours: object) -> dict:
         raise ValueError("invalid goal")
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         conn.execute(
@@ -752,7 +907,7 @@ def get_weekly_target(date_value: str = "") -> dict:
     if not DB_PATH.exists():
         return base
 
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         reset_at = datetime.combine(week_end + timedelta(days=1), datetime.min.time())
@@ -784,7 +939,7 @@ def _compute_data_etag(month_value: str = "") -> str:
     """Lightweight hash of DB state — returns None if no DB."""
     if not DB_PATH.exists():
         return ""
-    with sqlite3.connect(DB_PATH, timeout=5) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         s = conn.execute(
             "SELECT COUNT(*), MAX(rowid), MAX(COALESCE(last_seen_time, start_time)),"
@@ -801,7 +956,7 @@ def _compute_data_etag(month_value: str = "") -> str:
 def get_project_list() -> list[str]:
     if not DB_PATH.exists():
         return []
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT DISTINCT project_name FROM sessions WHERE project_name IS NOT NULL ORDER BY LOWER(project_name) ASC").fetchall()
         return [row["project_name"] for row in rows if row["project_name"]]
@@ -810,7 +965,7 @@ def get_project_list() -> list[str]:
 def get_project_report(project_name: str) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data"}
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
             SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes
@@ -828,11 +983,25 @@ def get_project_report(project_name: str) -> dict:
                 "session_count": 0
             }
         
-        # Build notes map for condensation
+        # Build per-session maps for condensed entries.
         raw_notes = {}
+        raw_entries = {}
         for r in rows:
             sid = int(r["id"])
             raw_notes[sid] = (r["notes"] or "").strip()
+            start_ts = r["start_time"]
+            end_ts = r["end_time"] if r["end_time"] is not None else r["last_seen_time"]
+            start_dt = datetime.fromtimestamp(start_ts)
+            end_dt = datetime.fromtimestamp(end_ts) if end_ts else start_dt
+            raw_entries[sid] = {
+                "id": sid,
+                "date": start_dt.strftime("%Y-%m-%d"),
+                "day": start_dt.strftime("%a"),
+                "start_time": start_dt.strftime("%H:%M"),
+                "end_time": end_dt.strftime("%H:%M"),
+                "start_timestamp": start_ts,
+                "end_timestamp": end_ts,
+            }
             
         recent = condense_recent_sessions([dict(r) for r in rows])
         # Reverses order to chronological (oldest → newest)
@@ -873,7 +1042,8 @@ def get_project_report(project_name: str) -> dict:
                 "duration": duration_str,
                 "duration_seconds": dur_sec,
                 "notes": merged_notes,
-                "session_ids": session_ids
+                "session_ids": session_ids,
+                "session_entries": [raw_entries[sid] for sid in session_ids if sid in raw_entries],
             })
             
         th, trem = divmod(total_seconds, 3600)
@@ -892,7 +1062,7 @@ def get_stats(month_value: str = "") -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
     try:
-        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with db_connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.row_factory = sqlite3.Row
             category_options, _ = get_category_maps(conn)
@@ -941,7 +1111,7 @@ def get_stats(month_value: str = "") -> dict:
             ]
 
             recent = conn.execute("""
-                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes
+                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes, todos_json
                 FROM   sessions
                 WHERE  active_seconds >= 5 OR end_time IS NULL
                 ORDER  BY start_time DESC
@@ -949,15 +1119,21 @@ def get_stats(month_value: str = "") -> dict:
             """).fetchall()
             # Build notes, start-time, end-time, and last-seen maps from raw rows before condensation
             raw_notes = {}
+            raw_todo_notes = {}
+            raw_todos = {}
             raw_start_times = {}
             raw_end_times = {}
             raw_last_seen_times = {}
+            raw_active_seconds = {}
             for r in recent:
                 sid = int(r["id"])
                 raw_notes[sid] = (r["notes"] or "").strip()
+                raw_todo_notes[sid] = (r["todo_notes"] or "").strip()
+                raw_todos[sid] = _parse_todos_json(r["todos_json"])
                 raw_start_times[sid] = float(r["start_time"] or 0)
                 raw_end_times[sid] = float(r["end_time"]) if r["end_time"] is not None else None
                 raw_last_seen_times[sid] = float(r["last_seen_time"] or 0)
+                raw_active_seconds[sid] = float(r["active_seconds"] or 0)
             recent = condense_recent_sessions(recent)[:60]
 
             today_str   = today.isoformat()
@@ -1070,16 +1246,26 @@ def get_stats(month_value: str = "") -> dict:
                 session_ids = row.get("session_ids", [])
                 # Build per-session notes, start-times, end-times, and last-seen maps
                 session_notes = {}
+                session_todo_notes = {}
+                session_todos = {}
                 session_start_times = {}
                 session_end_times = {}
                 session_last_seen_times = {}
+                session_active_seconds = {}
                 for sid in session_ids:
                     note = raw_notes.get(sid, "")
                     if note:
                         session_notes[str(sid)] = note
+                    todo_note = raw_todo_notes.get(sid, "")
+                    if todo_note:
+                        session_todo_notes[str(sid)] = todo_note
+                    todos = raw_todos.get(sid, [])
+                    if todos:
+                        session_todos[str(sid)] = todos
                     session_start_times[str(sid)] = raw_start_times.get(sid, 0)
                     session_end_times[str(sid)] = raw_end_times.get(sid)
                     session_last_seen_times[str(sid)] = raw_last_seen_times.get(sid, 0)
+                    session_active_seconds[str(sid)] = raw_active_seconds.get(sid, 0)
                 recent_rows.append(
                     {
                         "project_name": row["project_name"],
@@ -1088,9 +1274,12 @@ def get_stats(month_value: str = "") -> dict:
                         "active_seconds": row["active_seconds"],
                         "session_ids": session_ids,
                         "session_notes": session_notes,
+                        "session_todo_notes": session_todo_notes,
+                        "session_todos": session_todos,
                         "session_start_times": session_start_times,
                         "session_end_times": session_end_times,
                         "session_last_seen_times": session_last_seen_times,
+                        "session_active_seconds": session_active_seconds,
                         "category_key": category["key"] if category else None,
                         "category_label": category["label"] if category else None,
                         "category_color": category["color"] if category else None,
@@ -4475,6 +4664,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
             return None
+        if length > MAX_REQUEST_SIZE:
+            return None
         raw = self.rfile.read(length)
         if not raw:
             return None
@@ -4555,6 +4746,16 @@ class Handler(BaseHTTPRequestHandler):
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-list":
             self._json(get_project_list())
+        elif parsed.path == "/api/last-session-todos":
+            project = parse_qs(parsed.query).get("project", [""])[0]
+            self._json(get_last_session_todos(project))
+        elif parsed.path == "/api/session-notes-entry":
+            query = parse_qs(parsed.query)
+            result = get_session_notes_entry(
+                query.get("session_id", [""])[0],
+                query.get("project", [""])[0],
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
         elif parsed.path == "/api/project-report":
             project = parse_qs(parsed.query).get("project", [""])[0]
             if not project:
@@ -4580,7 +4781,7 @@ class Handler(BaseHTTPRequestHandler):
                 writer = csv.writer(output)
                 writer.writerow(["Date", "Start", "End", "Duration", "Notes"])
                 for s in report["sessions"]:
-                    writer.writerow([s["date"], s["start_time"], s["end_time"], s["duration"], s["notes"]])
+                    writer.writerow([s["date"], s["start_time"], s["end_time"], s["duration"], s.get("notes") or ""])
                 writer.writerow([])
                 writer.writerow(["Total Duration", "", "", report["total_duration"], ""])
                 writer.writerow(["Sessions", "", "", str(report["session_count"]), ""])
@@ -4596,7 +4797,7 @@ class Handler(BaseHTTPRequestHandler):
                     content.append(f"{s['date']}  {s['start_time']} - {s['end_time']}  ({s['duration']})")
                     if s["notes"]:
                         content.append(f"  Notes: {s['notes']}")
-                content_str = "\\n".join(content)
+                content_str = "\n".join(content)
                 content_type = "text/plain"
                 ext = "txt"
                 
@@ -4604,7 +4805,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", f"{content_type}; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
-            filename = f"{report['project_name'].replace(' ', '_')}_report.{ext}"
+            safe_name = report['project_name'].replace(' ', '_').replace('"', '_')
+            filename = f"{safe_name}_report.{ext}"
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.end_headers()
             self.wfile.write(body)
@@ -4649,6 +4851,8 @@ class Handler(BaseHTTPRequestHandler):
             result = set_session_notes(
                 payload.get("session_id"),
                 payload.get("notes", ""),
+                payload.get("todo_notes", ""),
+                payload.get("todos") if "todos" in payload else None,
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-category":
@@ -4758,14 +4962,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         run_schema_migrations(conn)
     server = HTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://localhost:{PORT}"
     print(f"Dashboard running at {url}")
     print("Ctrl+C to stop\n")
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    if os.environ.get("ABLETON_TRACKER_NO_BROWSER") != "1":
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

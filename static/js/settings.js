@@ -9,7 +9,7 @@
  *   toast, confirmDialog, postJson, postAction, escapeHtml, load,
  *   bindColorField, renderColorField, normalizeHexColor,
  *   THEME_STORAGE_KEY, WEEKLY_GOAL_STORAGE_KEY, applyStoredTheme,
- *   localDateKey
+ *   UI_SCALE_STORAGE_KEY, applyUiScale, localDateKey
  */
 (function () {
   'use strict';
@@ -720,6 +720,62 @@
     syncThemePicker();
   }
 
+  function currentUiScale() {
+    try {
+      const stored = localStorage.getItem(window.UI_SCALE_STORAGE_KEY);
+      return typeof window.applyUiScale === 'function'
+        ? window.applyUiScale(stored || 100)
+        : Number(stored || 100);
+    } catch (_) {
+      return 100;
+    }
+  }
+
+  function syncScaleControl(value) {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    const scale = Math.round(Number(value || currentUiScale()));
+    const input = $('[data-ui-scale-input]', root);
+    const output = $('[data-ui-scale-output]', root);
+    if (input) input.value = String(scale);
+    if (output) output.textContent = `${scale}%`;
+  }
+
+  async function loadUiScale() {
+    let scale = currentUiScale();
+    try {
+      const res = await fetch('/api/app-settings');
+      const data = await res.json();
+      if (data && data.ui_scale != null && typeof window.applyUiScale === 'function') {
+        scale = window.applyUiScale(data.ui_scale);
+      }
+    } catch (_) {}
+    syncScaleControl(scale);
+  }
+
+  function bindScaleControl(root) {
+    const input = $('[data-ui-scale-input]', root);
+    if (!input) return;
+    let saveTimer = null;
+    input.addEventListener('input', () => {
+      const scale = typeof window.applyUiScale === 'function'
+        ? window.applyUiScale(input.value)
+        : Number(input.value);
+      syncScaleControl(scale);
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(async () => {
+        try {
+          await window.postJson('/api/app-settings', {
+            key: 'ui_scale',
+            value: String(scale),
+          });
+        } catch (_) {
+          window.toast('Failed to save scale');
+        }
+      }, 220);
+    });
+  }
+
   // ── lifecycle ──────────────────────────────────────────────────────
   function init() {
     if (inited) return;
@@ -728,7 +784,9 @@
     inited = true;
     mountedAt = Date.now();
     bindCategoryDelegation(root);
+    bindScaleControl(root);
     syncThemePicker();
+    loadUiScale();
     refreshGoals();
     loadWeekStartDay();
     loadProjectList();

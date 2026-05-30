@@ -16,10 +16,15 @@ echo "  App dir:   $DIR"
 echo "  LaunchAgent: $PLIST_PATH"
 echo ""
 
-# Ensure rumps is installed
+# Ensure runtime packages are installed
 if ! "$PYTHON" -c "import rumps" 2>/dev/null; then
     echo "Installing required package: rumps"
     "$PYTHON" -m pip install --user rumps
+fi
+
+if ! "$PYTHON" -c "import webview" 2>/dev/null; then
+    echo "Installing required package: pywebview"
+    "$PYTHON" -m pip install --user pywebview
 fi
 
 # Stop any old instance
