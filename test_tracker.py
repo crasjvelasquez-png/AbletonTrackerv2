@@ -64,6 +64,38 @@ class TrackerPauseResumeTests(unittest.TestCase):
             self.assertIsNone(t.resume_hint_project)
             self.assertEqual(t.status().state, tracker.STATE_ABLETON_CLOSED)
 
+    def test_tick_uses_monotonic_elapsed_instead_of_wall_clock_gap(self):
+        t = tracker.Tracker()
+
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Real Project")
+
+        with patch.object(tracker.time, "time", return_value=1100.0), \
+             patch.object(tracker.time, "monotonic", return_value=20.0):
+            t._tick()
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            active = conn.execute(
+                "SELECT active_seconds FROM sessions WHERE id=?", (t.session_id,)
+            ).fetchone()[0]
+
+        self.assertEqual(active, 10.0)
+
+    def test_tick_skips_database_write_when_elapsed_is_zero(self):
+        t = tracker.Tracker()
+
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Real Project")
+
+        with patch.object(tracker.sqlite3, "connect") as connect, \
+             patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._tick()
+
+        connect.assert_not_called()
+
     def test_idle_pause_requires_audio_to_be_quiet(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
              patch.object(tracker, "is_audio_active", return_value=True), \

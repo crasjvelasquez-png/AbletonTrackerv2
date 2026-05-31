@@ -1377,6 +1377,19 @@ header{
 .streak-vinyl-legend-dot.is-ghost{background:rgba(120,120,128,.22);border:1.5px solid rgba(120,120,128,.22)}
 .streak-vinyl-narrative{padding:12px 14px;border-radius:12px;background:var(--control-bg);border:1px solid var(--border);font-size:13px;font-weight:500;color:var(--ink-3);line-height:1.45}
 .streak-vinyl-narrative strong{color:var(--ink);font-weight:700}
+.card--streak{display:flex;flex-direction:column;justify-content:space-between;padding-bottom:20px}
+.streak-card-top{display:flex;justify-content:space-between;width:100%}
+.streak-card-pb{text-align:right;display:flex;flex-direction:column;align-items:flex-end}
+.streak-card-pb .pb-icon{width:28px;height:30px;margin-bottom:6px;border:1.5px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--ink-3);position:relative}
+.streak-card-pb .pb-icon.is-record{border-color:var(--accent);color:var(--accent)}
+.streak-card-pb .pb-label{font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+.streak-card-pb .pb-value{font-size:12px;color:var(--ink-2);margin-top:2px;font-weight:500}
+.streak-mini-track{width:100%;margin-top:24px;display:flex;flex-direction:column;gap:6px}
+.streak-mini-bars{display:flex;gap:4px;width:100%;height:10px}
+.streak-mini-bar{flex:1;background:var(--border);border-radius:2px}
+.streak-mini-bar.is-active{background:var(--accent)}
+.streak-mini-labels{display:flex;gap:4px;width:100%}
+.streak-mini-labels span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:.02em}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
   border:1px dashed var(--border);border-radius:16px;font-size:13px;
@@ -3586,41 +3599,25 @@ function renderStreakDetail({ summary, year_daily }) {
     narrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
   }
 
-  const statusLabel = cur > best ? '🏆 Record' : cur === best && best > 0 ? 'On track' : cur === 0 ? 'Restart' : 'Building';
-
   return `
     <div class="detail-stack">
-      <div class="detail-kpis">
+      <div class="detail-kpis" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
         <div class="detail-kpi"><span>Current streak</span><strong>${cur} day${cur !== 1 ? 's' : ''}</strong></div>
         <div class="detail-kpi"><span>Personal best</span><strong>${best} day${best !== 1 ? 's' : ''}</strong></div>
-        <div class="detail-kpi"><span>Status</span><strong>${statusLabel}</strong></div>
       </div>
       <div class="streak-vinyl-section">
-        <div class="streak-vinyl-label">Streak progress</div>
         <div class="streak-vinyl-track">
           <div class="streak-vinyl-labels">
-            ${markers.map(m => `<div class="streak-vinyl-day">D${m.dayNum}</div>`).join('')}
+            ${markers.map(m => `<div class="streak-vinyl-day">${m.dayNum}</div>`).join('')}
           </div>
           <div class="streak-vinyl-markers">
             ${markers.map(m => {
               const cls = m.isRecord ? 'is-record' : m.isActive ? 'is-active' : '';
-              const tip = m.isActive ? `Day ${m.dayNum} · current streak` : `Day ${m.dayNum} · personal best`;
-              return `<div class="streak-vinyl-marker ${cls}" title="${escapeHtml(tip)}"></div>`;
+              return `<div class="streak-vinyl-marker ${cls}"></div>`;
             }).join('')}
           </div>
         </div>
-        <div class="streak-vinyl-legend">
-          <div class="streak-vinyl-legend-item">
-            <div class="streak-vinyl-legend-dot is-active"></div>
-            <span>Current streak</span>
-          </div>
-          <div class="streak-vinyl-legend-item">
-            <div class="streak-vinyl-legend-dot is-ghost"></div>
-            <span>Personal best</span>
-          </div>
-        </div>
       </div>
-      <div class="streak-vinyl-narrative">${narrative}</div>
     </div>
   `;
 }
@@ -3643,7 +3640,7 @@ function renderDetail(kind, data) {
     return { title: 'Month', subtitle: `${monthName} total, pace, and category mix`, body: renderThisMonthDetail(data) };
   }
   if (kind === 'streak') {
-    return { title: 'Streak', subtitle: 'Personal best and current run', body: renderStreakDetail(data) };
+    return { title: 'Streak', subtitle: '', body: renderStreakDetail(data) };
   }
   return null;
 }
@@ -5597,30 +5594,48 @@ function render(data) {
     : 0;
 
   // ── Streak ──
-  let streakNarrative;
-  if (best === 0 && cur === 0) {
-    streakNarrative = `<strong>Start your first streak.</strong> Open Ableton and log a session to begin.`;
-  } else if (cur === 0 && best > 0) {
-    streakNarrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
-  } else if (cur > best) {
-    streakNarrative = `<strong>New record!</strong> Surpassed your previous best.`;
-  } else if (cur === best && best > 0) {
-    streakNarrative = `<strong>Tied for your personal best.</strong>`;
-  } else {
-    const daysLeft = best - cur;
-    streakNarrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
+  const isRecord = cur > 0 && cur >= best;
+  const pbIconClass = isRecord ? 'pb-icon is-record' : 'pb-icon';
+  const pbIconLabel = isRecord ? 'NEW' : 'PB';
+  
+  const streakTrackDays = [];
+  const todayDate = new Date();
+  todayDate.setHours(12, 0, 0, 0);
+  const startTrack = addDays(todayDate, -6);
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(startTrack, i);
+    const key = localDateKey(d);
+    const hasActivity = year_daily.some(x => x.day === key && (x.total_seconds || 0) > 0);
+    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    streakTrackDays.push({ dayName, hasActivity });
   }
 
-  const streakBadgeHTML = cur > best
-    ? '<span class="card-chip card-chip--record">RECORD</span>'
-    : (cur > 0 && cur === best ? '<span class="card-chip card-chip--record">BEST</span>' : '');
+  const streakTrackHTML = `
+    <div class="streak-mini-track">
+      <div class="streak-mini-bars">
+        ${streakTrackDays.map(d => `<div class="streak-mini-bar ${d.hasActivity ? 'is-active' : ''}"></div>`).join('')}
+      </div>
+      <div class="streak-mini-labels">
+        ${streakTrackDays.map(d => `<span>${d.dayName}</span>`).join('')}
+      </div>
+    </div>
+  `;
 
   document.getElementById('appDashboard').innerHTML = `
     <div class="cards">
-      <div class="card" role="button" tabindex="0" data-detail="streak">
-        <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
-        <div class="card-sub">${streakNarrative}</div>
-        <div class="card-label">Streak ${streakBadgeHTML}</div>
+      <div class="card card--streak" role="button" tabindex="0" data-detail="streak">
+        <div class="streak-card-top">
+          <div class="streak-card-main">
+            <div class="card-label" style="padding-top: 0; margin-bottom: 4px;">Current Streak</div>
+            <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
+          </div>
+          <div class="streak-card-pb">
+            <div class="${pbIconClass}">${pbIconLabel}</div>
+            <div class="pb-label">Personal Best</div>
+            <div class="pb-value">${best} Day${best !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        ${streakTrackHTML}
       </div>
       <div class="card" role="button" tabindex="0" data-detail="top-project">
         ${topProject
