@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from contextlib import closing
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import dashboard
@@ -208,6 +208,600 @@ class DashboardCategoryTests(unittest.TestCase):
 
         self.assertEqual(columns, ["key", "label", "color", "updated_at"])
         self.assertEqual(tuple(row), ("custom-mixing", "Mixing", "#11AA88", 0))
+
+
+class DashboardProjectMetadataTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert_session(self, project_name="Planner Song"):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (project_name, 100.0, 200.0, 200.0, 100.0),
+            )
+            conn.commit()
+
+    def test_set_project_metadata_persists_and_is_returned_by_stats(self):
+        self._insert_session("Planner Song")
+
+        result = dashboard.set_project_metadata(
+            "Planner Song",
+            "in_progress",
+            "personal",
+            "high",
+            "2026-06-10",
+            "2026-06-12",
+            "",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["metadata"]["status"], "in_progress")
+        self.assertEqual(result["metadata"]["status_label"], "In Progress")
+        self.assertEqual(result["metadata"]["type"], "personal")
+        self.assertEqual(result["metadata"]["type_label"], "Personal")
+        self.assertEqual(result["metadata"]["priority"], "high")
+        self.assertEqual(result["metadata"]["priority_label"], "High")
+        self.assertEqual(result["metadata"]["due_date"], "2026-06-10")
+        self.assertEqual(result["metadata"]["hard_deadline"], "2026-06-12")
+        self.assertEqual(result["metadata"]["turn_in_date"], "")
+
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["projects"][0]["status"], "in_progress")
+        self.assertEqual(stats["projects"][0]["status_label"], "In Progress")
+        self.assertEqual(stats["projects"][0]["type"], "personal")
+        self.assertEqual(stats["projects"][0]["type_label"], "Personal")
+        self.assertEqual(stats["projects"][0]["priority"], "high")
+        self.assertEqual(stats["projects"][0]["priority_label"], "High")
+        self.assertEqual(stats["projects"][0]["due_date"], "2026-06-10")
+        self.assertEqual(stats["projects"][0]["hard_deadline"], "2026-06-12")
+        self.assertEqual(stats["projects"][0]["turn_in_date"], "")
+        self.assertEqual(stats["recent"][0]["status"], "in_progress")
+        self.assertEqual(stats["recent"][0]["type"], "personal")
+        self.assertEqual(stats["recent"][0]["priority"], "high")
+        self.assertEqual(stats["recent"][0]["due_date"], "2026-06-10")
+
+    def test_set_project_metadata_accepts_all_planner_statuses_and_types(self):
+        statuses = {"idea", "in_progress", "finishing", "finished", "paused", "abandoned"}
+        types = {"personal", "client", "other"}
+
+        self.assertEqual(set(dashboard.PROJECT_STATUS_OPTIONS), statuses)
+        self.assertEqual(set(dashboard.PROJECT_TYPE_OPTIONS), types)
+
+        for index, status in enumerate(statuses):
+            result = dashboard.set_project_metadata(f"Project {index}", status, "other")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["metadata"]["status"], status)
+
+        for index, project_type in enumerate(types):
+            result = dashboard.set_project_metadata(f"Type Project {index}", "idea", project_type)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["metadata"]["type"], project_type)
+
+    def test_set_project_metadata_rejects_unknown_values(self):
+        bad_status = dashboard.set_project_metadata("Planner Song", "active", "personal")
+        bad_type = dashboard.set_project_metadata("Planner Song", "idea", "track")
+        bad_priority = dashboard.set_project_metadata("Planner Song", "idea", "personal", "urgent")
+        bad_date = dashboard.set_project_metadata(
+            "Planner Song", "idea", "personal", "normal", "06/10/2026"
+        )
+
+        self.assertEqual(bad_status["error"], "Unknown project status.")
+        self.assertEqual(bad_type["error"], "Unknown project type.")
+        self.assertEqual(bad_priority["error"], "Unknown project priority.")
+        self.assertEqual(bad_date["error"], "Project dates must be empty or YYYY-MM-DD.")
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM project_metadata").fetchone()[0]
+
+        self.assertEqual(count, 0)
+
+    def test_set_project_metadata_clears_existing_metadata(self):
+        self._insert_session("Planner Song")
+        dashboard.set_project_metadata("Planner Song", "finishing", "client")
+
+        cleared = dashboard.set_project_metadata("Planner Song", "", "")
+
+        self.assertTrue(cleared["ok"])
+        self.assertEqual(cleared["metadata"]["status"], "")
+        self.assertEqual(cleared["metadata"]["type"], "")
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["projects"][0]["status"], "")
+        self.assertEqual(stats["projects"][0]["status_label"], "")
+        self.assertEqual(stats["projects"][0]["type"], "")
+        self.assertEqual(stats["projects"][0]["type_label"], "")
+        self.assertEqual(stats["projects"][0]["priority"], "")
+        self.assertEqual(stats["projects"][0]["due_date"], "")
+        self.assertEqual(stats["projects"][0]["hard_deadline"], "")
+        self.assertEqual(stats["projects"][0]["turn_in_date"], "")
+        self.assertEqual(stats["recent"][0]["status"], "")
+        self.assertEqual(stats["recent"][0]["type"], "")
+
+    def test_get_project_metadata_ignores_stale_unknown_values(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.row_factory = tracker.sqlite3.Row
+            conn.execute(
+                """
+                INSERT INTO project_metadata (project_name, status, type, updated_at)
+                VALUES (?, ?, ?, 0)
+                """,
+                ("Legacy Project", "active", "track"),
+            )
+            conn.commit()
+            metadata = dashboard.get_project_metadata(conn)
+
+        self.assertEqual(metadata["Legacy Project"]["status"], "")
+        self.assertEqual(metadata["Legacy Project"]["status_label"], "")
+        self.assertEqual(metadata["Legacy Project"]["type"], "")
+        self.assertEqual(metadata["Legacy Project"]["type_label"], "")
+
+    def test_project_metadata_migration_adds_deadline_columns(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("DROP TABLE project_metadata")
+            conn.execute(
+                """
+                CREATE TABLE project_metadata (
+                    project_name TEXT PRIMARY KEY,
+                    status       TEXT NOT NULL DEFAULT '',
+                    type         TEXT NOT NULL DEFAULT '',
+                    updated_at   INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO project_metadata (project_name, status, type, updated_at)
+                VALUES (?, ?, ?, 0)
+                """,
+                ("Legacy Project", "in_progress", "client"),
+            )
+            dashboard.ensure_project_metadata_table(conn)
+            conn.commit()
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(project_metadata)").fetchall()
+            }
+            row = conn.execute(
+                """
+                SELECT priority, due_date, hard_deadline, turn_in_date
+                FROM project_metadata
+                WHERE project_name = ?
+                """,
+                ("Legacy Project",),
+            ).fetchone()
+
+        self.assertIn("priority", columns)
+        self.assertIn("due_date", columns)
+        self.assertIn("hard_deadline", columns)
+        self.assertIn("turn_in_date", columns)
+        self.assertEqual(row, ("", "", "", ""))
+
+    def test_project_deadline_states_are_exposed_in_stats(self):
+        today = date.today()
+        overdue = (today - timedelta(days=1)).isoformat()
+        soon = (today + timedelta(days=2)).isoformat()
+        upcoming = (today + timedelta(days=8)).isoformat()
+
+        self._insert_session("Overdue Client")
+        self._insert_session("Soon Client")
+        self._insert_session("Upcoming Client")
+        self._insert_session("Delivered Client")
+        dashboard.set_project_metadata("Overdue Client", "in_progress", "client", "high", "", overdue, "")
+        dashboard.set_project_metadata("Soon Client", "in_progress", "client", "normal", soon, "", "")
+        dashboard.set_project_metadata("Upcoming Client", "in_progress", "client", "normal", upcoming, "", "")
+        dashboard.set_project_metadata("Delivered Client", "finished", "client", "normal", overdue, overdue, today.isoformat())
+
+        stats = dashboard.get_stats()
+        by_name = {project["project_name"]: project for project in stats["projects"]}
+
+        self.assertEqual(by_name["Overdue Client"]["deadline_state"], "overdue")
+        self.assertEqual(by_name["Overdue Client"]["deadline_label"], "Overdue")
+        self.assertIn(f"Hard deadline {overdue}", by_name["Overdue Client"]["deadline_reasons"])
+        self.assertEqual(by_name["Soon Client"]["deadline_state"], "due_soon")
+        self.assertEqual(by_name["Upcoming Client"]["deadline_state"], "upcoming")
+        self.assertEqual(by_name["Delivered Client"]["deadline_state"], "delivered")
+
+    def test_project_metadata_changes_invalidate_data_etag(self):
+        self._insert_session("Planner Song")
+        before = dashboard._compute_data_etag()
+
+        dashboard.set_project_metadata(
+            "Planner Song", "in_progress", "client", "normal", "2026-06-10", "", ""
+        )
+        after_due_date = dashboard._compute_data_etag()
+        dashboard.set_project_metadata(
+            "Planner Song", "in_progress", "client", "normal", "2026-06-11", "", ""
+        )
+        after_changed_due_date = dashboard._compute_data_etag()
+
+        self.assertNotEqual(before, after_due_date)
+        self.assertNotEqual(after_due_date, after_changed_due_date)
+
+    def test_project_metadata_omitted_fields_preserve_existing_deadlines(self):
+        self._insert_session("Planner Song")
+        dashboard.set_project_metadata(
+            "Planner Song", "in_progress", "client", "high", "2026-06-10", "2026-06-12", ""
+        )
+
+        updated = dashboard.set_project_metadata("Planner Song", "finishing", "client")
+
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["metadata"]["status"], "finishing")
+        self.assertEqual(updated["metadata"]["priority"], "high")
+        self.assertEqual(updated["metadata"]["due_date"], "2026-06-10")
+        self.assertEqual(updated["metadata"]["hard_deadline"], "2026-06-12")
+
+
+class DashboardProjectTaskTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_project_tasks_table_migration_adds_expected_columns(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(project_tasks)").fetchall()
+            }
+
+        self.assertEqual(
+            columns,
+            {
+                "id",
+                "project_name",
+                "title",
+                "status",
+                "priority",
+                "due_date",
+                "completed_at",
+                "sort_order",
+                "created_at",
+                "updated_at",
+            },
+        )
+
+    def test_create_and_list_project_tasks(self):
+        first = dashboard.create_project_task(
+            "Planner Song", "Record vocals", "high", "2026-06-05", 2
+        )
+        second = dashboard.create_project_task("Planner Song", "Export rough", "normal", "", 1)
+
+        self.assertTrue(first["ok"])
+        self.assertEqual(first["task"]["project_name"], "Planner Song")
+        self.assertEqual(first["task"]["title"], "Record vocals")
+        self.assertEqual(first["task"]["status"], "open")
+        self.assertEqual(first["task"]["priority"], "high")
+        self.assertEqual(first["task"]["due_date"], "2026-06-05")
+        self.assertIsNone(first["task"]["completed_at"])
+
+        result = dashboard.get_project_tasks_response("Planner Song")
+        self.assertTrue(result["ok"])
+        self.assertEqual([task["title"] for task in result["tasks"]], ["Export rough", "Record vocals"])
+        self.assertEqual(result["tasks"][0]["id"], second["task"]["id"])
+
+    def test_update_project_task_fields(self):
+        created = dashboard.create_project_task("Planner Song", "Record scratch", "normal")
+
+        updated = dashboard.update_project_task(
+            created["task"]["id"],
+            {
+                "title": "Record final vocal",
+                "priority": "high",
+                "due_date": "2026-06-06",
+                "sort_order": 7,
+            },
+        )
+
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["task"]["title"], "Record final vocal")
+        self.assertEqual(updated["task"]["status"], "open")
+        self.assertEqual(updated["task"]["priority"], "high")
+        self.assertEqual(updated["task"]["due_date"], "2026-06-06")
+        self.assertEqual(updated["task"]["sort_order"], 7)
+
+    def test_complete_and_reopen_project_task(self):
+        created = dashboard.create_project_task("Client Mix", "Send bounce")
+
+        completed = dashboard.update_project_task(created["task"]["id"], {"status": "done"})
+        self.assertTrue(completed["ok"])
+        self.assertEqual(completed["task"]["status"], "done")
+        self.assertIsNotNone(completed["task"]["completed_at"])
+
+        reopened = dashboard.update_project_task(created["task"]["id"], {"status": "open"})
+        self.assertTrue(reopened["ok"])
+        self.assertEqual(reopened["task"]["status"], "open")
+        self.assertIsNone(reopened["task"]["completed_at"])
+
+    def test_delete_project_task(self):
+        created = dashboard.create_project_task("Planner Song", "Delete me")
+
+        deleted = dashboard.delete_project_task(created["task"]["id"])
+
+        self.assertTrue(deleted["ok"])
+        self.assertEqual(deleted["deleted"], 1)
+        result = dashboard.get_project_tasks_response("Planner Song")
+        self.assertEqual(result["tasks"], [])
+
+    def test_project_task_validation(self):
+        missing_project = dashboard.create_project_task("", "Record vocals")
+        missing_title = dashboard.create_project_task("Planner Song", "")
+        bad_priority = dashboard.create_project_task("Planner Song", "Record vocals", "urgent")
+        created = dashboard.create_project_task("Planner Song", "Record vocals")
+        bad_status = dashboard.update_project_task(created["task"]["id"], {"status": "blocked"})
+        missing_id = dashboard.update_project_task("nope", {"status": "done"})
+        not_found = dashboard.delete_project_task(9999)
+
+        self.assertEqual(missing_project["error"], "Project name is required.")
+        self.assertEqual(missing_title["error"], "Task title is required.")
+        self.assertEqual(bad_priority["error"], "Unknown task priority.")
+        self.assertEqual(bad_status["error"], "Unknown task status.")
+        self.assertEqual(missing_id["error"], "Task id is required.")
+        self.assertEqual(not_found["error"], "Task not found.")
+
+    def test_stats_project_rows_include_project_tasks(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Planner Song", 100.0, 200.0, 200.0, 100.0),
+            )
+            conn.commit()
+        dashboard.create_project_task("Planner Song", "Arrange bridge")
+
+        stats = dashboard.get_stats()
+
+        self.assertEqual(len(stats["projects"][0]["project_tasks"]), 1)
+        self.assertEqual(stats["projects"][0]["project_tasks"][0]["title"], "Arrange bridge")
+
+    def test_project_tasks_preserve_session_todos(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("Planner Song", 100.0, 200.0, 200.0, 100.0,
+                 '[{"text":"Session-only task","done":false}]'),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+
+        created = dashboard.create_project_task("Planner Song", "Project-level task")
+        dashboard.update_project_task(created["task"]["id"], {"status": "done"})
+        dashboard.delete_project_task(created["task"]["id"])
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT todos_json FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+
+        self.assertIn("Session-only task", row[0])
+
+
+class DashboardPlannerGoalTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert_session(self, project_name, start_dt, seconds=3600):
+        start_ts = start_dt.timestamp()
+        end_ts = start_ts + seconds
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (project_name, start_ts, end_ts, end_ts, seconds),
+            )
+            conn.commit()
+
+    def test_planner_goals_table_migration_adds_expected_columns(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(planner_goals)").fetchall()
+            }
+
+        self.assertEqual(
+            columns,
+            {
+                "id",
+                "goal_type",
+                "target_value",
+                "period",
+                "scope_type",
+                "scope_value",
+                "active",
+                "created_at",
+                "updated_at",
+            },
+        )
+
+    def test_create_list_update_and_delete_planner_goal(self):
+        created = dashboard.create_planner_goal(
+            "sessions_per_week", 3, "week", "project_type", "client"
+        )
+
+        self.assertTrue(created["ok"])
+        self.assertEqual(created["goal"]["goal_type"], "sessions_per_week")
+        self.assertEqual(created["goal"]["target_value"], 3.0)
+        self.assertEqual(created["goal"]["scope_type"], "project_type")
+        self.assertEqual(created["goal"]["scope_value"], "client")
+        self.assertTrue(created["goal"]["active"])
+
+        listed = dashboard.get_planner_goals_response()
+        self.assertTrue(listed["ok"])
+        self.assertEqual(len(listed["goals"]), 1)
+
+        updated = dashboard.update_planner_goal(
+            created["goal"]["id"],
+            {"target_value": 5, "scope_type": "all", "active": False},
+        )
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["goal"]["target_value"], 5.0)
+        self.assertEqual(updated["goal"]["scope_type"], "all")
+        self.assertEqual(updated["goal"]["scope_value"], "")
+        self.assertFalse(updated["goal"]["active"])
+
+        deleted = dashboard.delete_planner_goal(created["goal"]["id"])
+        self.assertTrue(deleted["ok"])
+        self.assertEqual(dashboard.get_planner_goals_response()["goals"], [])
+
+    def test_planner_goal_validation(self):
+        bad_type = dashboard.create_planner_goal("daily_sessions", 3)
+        bad_period = dashboard.create_planner_goal("sessions_per_week", 3, "day")
+        bad_scope = dashboard.create_planner_goal("sessions_per_week", 3, "week", "artist")
+        missing_scope = dashboard.create_planner_goal("sessions_per_week", 3, "week", "project")
+        bad_target = dashboard.create_planner_goal("sessions_per_week", "many")
+        zero_target = dashboard.create_planner_goal("sessions_per_week", 0)
+        fractional_target = dashboard.create_planner_goal("sessions_per_week", 1.5)
+        missing_id = dashboard.update_planner_goal("nope", {"target_value": 3})
+        not_found = dashboard.delete_planner_goal(9999)
+
+        self.assertEqual(bad_type["error"], "Unknown planner goal type.")
+        self.assertEqual(bad_period["error"], "Unknown planner goal period.")
+        self.assertEqual(bad_scope["error"], "Unknown planner goal scope.")
+        self.assertEqual(missing_scope["error"], "Planner goal scope value is required.")
+        self.assertEqual(bad_target["error"], "Planner goal target must be a number.")
+        self.assertEqual(zero_target["error"], "Planner goal target must be greater than zero.")
+        self.assertEqual(fractional_target["error"], "Planner goal target must be a whole number.")
+        self.assertEqual(missing_id["error"], "Planner goal id is required.")
+        self.assertEqual(not_found["error"], "Planner goal not found.")
+
+    def test_sessions_and_hours_goal_progress_respects_scope(self):
+        today = date.today()
+        week_start, _week_end = dashboard.get_week_range(today)
+        client_start = datetime.combine(week_start + timedelta(days=1), datetime.min.time())
+        personal_start = datetime.combine(week_start + timedelta(days=2), datetime.min.time())
+        self._insert_session("Client Mix", client_start, 7200)
+        self._insert_session("Personal Song", personal_start, 3600)
+        dashboard.set_project_metadata("Client Mix", "in_progress", "client")
+        dashboard.set_project_metadata("Personal Song", "in_progress", "personal")
+
+        sessions_goal = dashboard.create_planner_goal(
+            "sessions_per_week", 2, "week", "project_type", "client"
+        )
+        hours_goal = dashboard.create_planner_goal(
+            "hours_per_week", 3, "week", "project_type", "client"
+        )
+
+        self.assertEqual(sessions_goal["goal"]["progress"]["current_value"], 1.0)
+        self.assertEqual(sessions_goal["goal"]["progress"]["unit"], "sessions")
+        self.assertEqual(hours_goal["goal"]["progress"]["current_value"], 2.0)
+        self.assertEqual(hours_goal["goal"]["progress"]["remaining_value"], 1.0)
+
+    def test_finished_project_goal_counts_current_finished_without_finish_timestamp(self):
+        self._insert_session("Finished Song", datetime.combine(date.today(), datetime.min.time()))
+        self._insert_session("Active Song", datetime.combine(date.today(), datetime.min.time()))
+        dashboard.set_project_metadata("Finished Song", "finished", "personal")
+        dashboard.set_project_metadata("Active Song", "in_progress", "personal")
+
+        goal = dashboard.create_planner_goal(
+            "projects_finished_per_period", 1, "month", "project_type", "personal"
+        )
+
+        self.assertEqual(goal["goal"]["progress"]["current_value"], 1.0)
+        self.assertEqual(goal["goal"]["progress"]["label"], "Finished projects this period")
+
+    def test_finished_project_goal_uses_turn_in_date_when_available(self):
+        today = date.today()
+        previous_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        self._insert_session("Old Client", datetime.combine(today, datetime.min.time()))
+        self._insert_session("New Client", datetime.combine(today, datetime.min.time()))
+        dashboard.set_project_metadata("Old Client", "finished", "client", "normal", "", "", previous_month.isoformat())
+        dashboard.set_project_metadata("New Client", "finished", "client", "normal", "", "", today.isoformat())
+
+        goal = dashboard.create_planner_goal(
+            "projects_finished_per_period", 2, "month", "project_type", "client"
+        )
+
+        self.assertEqual(goal["goal"]["progress"]["current_value"], 1.0)
+
+    def test_touch_active_project_goal_counts_recently_touched_active_projects(self):
+        today = date.today()
+        recent = datetime.combine(today - timedelta(days=1), datetime.min.time())
+        stale = datetime.combine(today - timedelta(days=8), datetime.min.time())
+        self._insert_session("Recent Active", recent, 1800)
+        self._insert_session("Stale Active", stale, 1800)
+        self._insert_session("Finished Project", recent, 1800)
+        dashboard.set_project_metadata("Recent Active", "in_progress", "personal")
+        dashboard.set_project_metadata("Stale Active", "finishing", "personal")
+        dashboard.set_project_metadata("Finished Project", "finished", "personal")
+
+        goal = dashboard.create_planner_goal(
+            "touch_active_project_every_n_days", 3, "week", "project_type", "personal"
+        )
+
+        progress = goal["goal"]["progress"]
+        self.assertEqual(progress["current_value"], 1.0)
+        self.assertEqual(progress["target_value"], 2.0)
+        self.assertEqual(progress["total_active_projects"], 2)
+
+    def test_stats_include_planner_goals_and_goal_changes_invalidate_etag(self):
+        before = dashboard._compute_data_etag()
+        created = dashboard.create_planner_goal("hours_per_week", 4, "week", "all")
+        after_create = dashboard._compute_data_etag()
+        dashboard.update_planner_goal(created["goal"]["id"], {"target_value": 5})
+        after_update = dashboard._compute_data_etag()
+
+        stats = dashboard.get_stats()
+
+        self.assertNotEqual(before, after_create)
+        self.assertNotEqual(after_create, after_update)
+        self.assertEqual(len(stats["planner_goals"]), 1)
+        self.assertEqual(stats["planner_goals"][0]["goal_type"], "hours_per_week")
+        self.assertIn("progress", stats["planner_goals"][0])
 
 
 class DashboardWeeklyTargetTests(unittest.TestCase):

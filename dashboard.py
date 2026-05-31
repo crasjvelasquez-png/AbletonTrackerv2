@@ -41,6 +41,35 @@ STATIC_CONTENT_TYPES = {
 PORT = 7421
 UNTITLED_NAMES = {"untitled", "untitled project"}
 MAX_CUSTOM_CATEGORIES = 12
+PROJECT_STATUS_OPTIONS = {
+    "idea": "Idea",
+    "in_progress": "In Progress",
+    "finishing": "Finishing",
+    "finished": "Finished",
+    "paused": "Paused",
+    "abandoned": "Abandoned",
+}
+PROJECT_TYPE_OPTIONS = {
+    "personal": "Personal",
+    "client": "Client",
+    "other": "Other",
+}
+PROJECT_PRIORITY_OPTIONS = {
+    "low": "Low",
+    "normal": "Normal",
+    "high": "High",
+}
+PROJECT_TASK_STATUS_OPTIONS = {"open", "done"}
+PROJECT_TASK_PRIORITY_OPTIONS = {"low", "normal", "high"}
+PLANNER_GOAL_TYPE_OPTIONS = {
+    "sessions_per_week",
+    "hours_per_week",
+    "projects_finished_per_period",
+    "touch_active_project_every_n_days",
+}
+PLANNER_GOAL_PERIOD_OPTIONS = {"week", "month"}
+PLANNER_GOAL_SCOPE_OPTIONS = {"all", "project_type", "category", "project"}
+ACTIVE_PROJECT_STATUSES = {"idea", "in_progress", "finishing"}
 LEGACY_CATEGORY_KEYS = [
     "c4milo",
     "production",
@@ -297,6 +326,73 @@ def ensure_project_category_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_metadata (
+            project_name TEXT PRIMARY KEY,
+            status       TEXT NOT NULL DEFAULT '',
+            type         TEXT NOT NULL DEFAULT '',
+            priority     TEXT NOT NULL DEFAULT '',
+            due_date     TEXT NOT NULL DEFAULT '',
+            hard_deadline TEXT NOT NULL DEFAULT '',
+            turn_in_date TEXT NOT NULL DEFAULT '',
+            updated_at   INTEGER NOT NULL
+        )
+        """
+    )
+    existing_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(project_metadata)").fetchall()
+    }
+    metadata_columns = {
+        "priority": "TEXT NOT NULL DEFAULT ''",
+        "due_date": "TEXT NOT NULL DEFAULT ''",
+        "hard_deadline": "TEXT NOT NULL DEFAULT ''",
+        "turn_in_date": "TEXT NOT NULL DEFAULT ''",
+    }
+    for column, definition in metadata_columns.items():
+        if column not in existing_columns:
+            conn.execute(f"ALTER TABLE project_metadata ADD COLUMN {column} {definition}")
+
+
+def ensure_project_tasks_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_tasks (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_name TEXT NOT NULL,
+            title        TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'open',
+            priority     TEXT NOT NULL DEFAULT 'normal',
+            due_date     TEXT NOT NULL DEFAULT '',
+            completed_at INTEGER,
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            created_at   INTEGER NOT NULL,
+            updated_at   INTEGER NOT NULL
+        )
+        """
+    )
+
+
+def ensure_planner_goals_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS planner_goals (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_type    TEXT NOT NULL,
+            target_value REAL NOT NULL,
+            period       TEXT NOT NULL,
+            scope_type   TEXT NOT NULL,
+            scope_value  TEXT NOT NULL DEFAULT '',
+            active       INTEGER NOT NULL DEFAULT 1,
+            created_at   INTEGER NOT NULL,
+            updated_at   INTEGER NOT NULL
+        )
+        """
+    )
+
+
 def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -414,11 +510,32 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_project_categories_key ON project_categories(category_key)"
     )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_metadata_status ON project_metadata(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_metadata_type ON project_metadata(type)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_tasks_project_name ON project_tasks(project_name)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_tasks_status ON project_tasks(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_goals_active ON planner_goals(active)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_planner_goals_type ON planner_goals(goal_type)"
+    )
 
 
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_category_definitions_table(conn)
     ensure_project_category_table(conn)
+    ensure_project_metadata_table(conn)
+    ensure_project_tasks_table(conn)
+    ensure_planner_goals_table(conn)
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
     ensure_sessions_notes_column(conn)
@@ -505,6 +622,942 @@ def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
             "color": category["color"],
         }
     return categories
+
+
+def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
+    rows = conn.execute(
+        """
+        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date
+        FROM project_metadata
+        """
+    ).fetchall()
+    metadata = {}
+    for row in rows:
+        status = row["status"] if row["status"] in PROJECT_STATUS_OPTIONS else ""
+        project_type = row["type"] if row["type"] in PROJECT_TYPE_OPTIONS else ""
+        priority = row["priority"] if row["priority"] in PROJECT_PRIORITY_OPTIONS else ""
+        due_date = row["due_date"] if _is_valid_date_string(row["due_date"]) else ""
+        hard_deadline = row["hard_deadline"] if _is_valid_date_string(row["hard_deadline"]) else ""
+        turn_in_date = row["turn_in_date"] if _is_valid_date_string(row["turn_in_date"]) else ""
+        metadata[row["project_name"]] = {
+            "status": status,
+            "status_label": PROJECT_STATUS_OPTIONS.get(status, ""),
+            "type": project_type,
+            "type_label": PROJECT_TYPE_OPTIONS.get(project_type, ""),
+            "priority": priority,
+            "priority_label": PROJECT_PRIORITY_OPTIONS.get(priority, ""),
+            "due_date": due_date,
+            "hard_deadline": hard_deadline,
+            "turn_in_date": turn_in_date,
+        }
+    return metadata
+
+
+def _is_valid_date_string(value: str | None) -> bool:
+    normalized = (value or "").strip()
+    if not normalized:
+        return True
+    try:
+        datetime.strptime(normalized, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _normalize_project_metadata_fields(
+    status: str | None,
+    project_type: str | None,
+    priority: str | None = None,
+    due_date: str | None = "",
+    hard_deadline: str | None = "",
+    turn_in_date: str | None = "",
+) -> tuple[str, str, str, str, str, str] | dict:
+    normalized_status = (status or "").strip().lower()
+    normalized_type = (project_type or "").strip().lower()
+    normalized_priority = (priority or "").strip().lower()
+    normalized_due_date = (due_date or "").strip()
+    normalized_hard_deadline = (hard_deadline or "").strip()
+    normalized_turn_in_date = (turn_in_date or "").strip()
+
+    if normalized_status and normalized_status not in PROJECT_STATUS_OPTIONS:
+        return {"error": "Unknown project status."}
+    if normalized_type and normalized_type not in PROJECT_TYPE_OPTIONS:
+        return {"error": "Unknown project type."}
+    if normalized_priority and normalized_priority not in PROJECT_PRIORITY_OPTIONS:
+        return {"error": "Unknown project priority."}
+    for value in (normalized_due_date, normalized_hard_deadline, normalized_turn_in_date):
+        if not _is_valid_date_string(value):
+            return {"error": "Project dates must be empty or YYYY-MM-DD."}
+
+    return (
+        normalized_status,
+        normalized_type,
+        normalized_priority,
+        normalized_due_date,
+        normalized_hard_deadline,
+        normalized_turn_in_date,
+    )
+
+
+def _project_deadline_summary(metadata: dict, today: date | None = None) -> dict:
+    today = today or date.today()
+    due_date = metadata.get("due_date", "")
+    hard_deadline = metadata.get("hard_deadline", "")
+    turn_in_date = metadata.get("turn_in_date", "")
+    deadline_date = hard_deadline or due_date
+    reasons = []
+
+    if turn_in_date:
+        return {
+            "deadline_state": "delivered",
+            "deadline_label": "Delivered",
+            "deadline_reasons": [f"Turned in {turn_in_date}"],
+        }
+    if not deadline_date:
+        return {
+            "deadline_state": "",
+            "deadline_label": "",
+            "deadline_reasons": [],
+        }
+
+    parsed_deadline = datetime.strptime(deadline_date, "%Y-%m-%d").date()
+    days_until = (parsed_deadline - today).days
+    label_source = "Hard deadline" if hard_deadline else "Due date"
+    reasons.append(f"{label_source} {deadline_date}")
+
+    if days_until < 0:
+        reasons.append(f"{abs(days_until)} day{'s' if abs(days_until) != 1 else ''} overdue")
+        return {
+            "deadline_state": "overdue",
+            "deadline_label": "Overdue",
+            "deadline_reasons": reasons,
+        }
+    if days_until <= 3:
+        if days_until == 0:
+            reasons.append("Due today")
+        else:
+            reasons.append(f"Due in {days_until} day{'s' if days_until != 1 else ''}")
+        return {
+            "deadline_state": "due_soon",
+            "deadline_label": "Due Soon",
+            "deadline_reasons": reasons,
+        }
+
+    reasons.append(f"Due in {days_until} days")
+    return {
+        "deadline_state": "upcoming",
+        "deadline_label": "Upcoming",
+        "deadline_reasons": reasons,
+    }
+
+
+def _format_project_task(row: sqlite3.Row) -> dict:
+    return {
+        "id": int(row["id"]),
+        "project_name": row["project_name"],
+        "title": row["title"],
+        "status": row["status"],
+        "priority": row["priority"],
+        "due_date": row["due_date"] or "",
+        "completed_at": row["completed_at"],
+        "sort_order": row["sort_order"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _normalize_project_task_fields(
+    project_name: str | None,
+    title: str | None,
+    status: str | None = "open",
+    priority: str | None = "normal",
+    due_date: str | None = "",
+    sort_order=0,
+) -> tuple[str, str, str, str, str, int] | dict:
+    normalized_project = (project_name or "").strip()
+    normalized_title = (title or "").strip()
+    normalized_status = (status or "open").strip().lower()
+    normalized_priority = (priority or "normal").strip().lower()
+    normalized_due_date = (due_date or "").strip()
+
+    if not normalized_project:
+        return {"error": "Project name is required."}
+    if not normalized_title:
+        return {"error": "Task title is required."}
+    if normalized_status not in PROJECT_TASK_STATUS_OPTIONS:
+        return {"error": "Unknown task status."}
+    if normalized_priority not in PROJECT_TASK_PRIORITY_OPTIONS:
+        return {"error": "Unknown task priority."}
+    try:
+        normalized_sort_order = int(sort_order or 0)
+    except (TypeError, ValueError):
+        return {"error": "Task sort order must be a number."}
+
+    return (
+        normalized_project,
+        normalized_title,
+        normalized_status,
+        normalized_priority,
+        normalized_due_date,
+        normalized_sort_order,
+    )
+
+
+def get_project_tasks(conn: sqlite3.Connection, project_name: str | None = None) -> list[dict]:
+    if project_name is None:
+        rows = conn.execute(
+            """
+            SELECT id, project_name, title, status, priority, due_date,
+                   completed_at, sort_order, created_at, updated_at
+            FROM project_tasks
+            ORDER BY LOWER(project_name) ASC, status ASC, sort_order ASC, created_at ASC, id ASC
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, project_name, title, status, priority, due_date,
+                   completed_at, sort_order, created_at, updated_at
+            FROM project_tasks
+            WHERE project_name = ?
+            ORDER BY status ASC, sort_order ASC, created_at ASC, id ASC
+            """,
+            ((project_name or "").strip(),),
+        ).fetchall()
+    return [_format_project_task(row) for row in rows]
+
+
+def get_project_tasks_response(project_name: str | None) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    normalized_project = (project_name or "").strip()
+    if not normalized_project:
+        return {"error": "Project name is required."}
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        return {
+            "ok": True,
+            "project_name": normalized_project,
+            "tasks": get_project_tasks(conn, normalized_project),
+        }
+
+
+def get_project_tasks_by_project(conn: sqlite3.Connection) -> dict[str, list[dict]]:
+    tasks_by_project: dict[str, list[dict]] = {}
+    for task in get_project_tasks(conn):
+        tasks_by_project.setdefault(task["project_name"], []).append(task)
+    return tasks_by_project
+
+
+def create_project_task(
+    project_name: str | None,
+    title: str | None,
+    priority: str | None = "normal",
+    due_date: str | None = "",
+    sort_order=0,
+) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+
+    normalized = _normalize_project_task_fields(
+        project_name, title, "open", priority, due_date, sort_order
+    )
+    if isinstance(normalized, dict):
+        return normalized
+    normalized_project, normalized_title, status, normalized_priority, normalized_due_date, normalized_sort_order = normalized
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            """
+            INSERT INTO project_tasks (
+                project_name, title, status, priority, due_date,
+                completed_at, sort_order, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+            """,
+            (
+                normalized_project,
+                normalized_title,
+                status,
+                normalized_priority,
+                normalized_due_date,
+                normalized_sort_order,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT id, project_name, title, status, priority, due_date,
+                   completed_at, sort_order, created_at, updated_at
+            FROM project_tasks
+            WHERE id = ?
+            """,
+            (cur.lastrowid,),
+        ).fetchone()
+        return {"ok": True, "task": _format_project_task(row)}
+
+
+def update_project_task(task_id, fields: dict) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    try:
+        normalized_id = int(task_id)
+    except (TypeError, ValueError):
+        return {"error": "Task id is required."}
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        existing = conn.execute(
+            """
+            SELECT id, project_name, title, status, priority, due_date,
+                   completed_at, sort_order, created_at, updated_at
+            FROM project_tasks
+            WHERE id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        if not existing:
+            return {"error": "Task not found."}
+
+        project_name = fields.get("project_name", existing["project_name"])
+        title = fields.get("title", existing["title"])
+        status = fields.get("status", existing["status"])
+        priority = fields.get("priority", existing["priority"])
+        due_date = fields.get("due_date", existing["due_date"])
+        sort_order = fields.get("sort_order", existing["sort_order"])
+        normalized = _normalize_project_task_fields(
+            project_name, title, status, priority, due_date, sort_order
+        )
+        if isinstance(normalized, dict):
+            return normalized
+        normalized_project, normalized_title, normalized_status, normalized_priority, normalized_due_date, normalized_sort_order = normalized
+        completed_at_sql = (
+            "COALESCE(completed_at, strftime('%s', 'now'))"
+            if normalized_status == "done"
+            else "NULL"
+        )
+
+        conn.execute(
+            f"""
+            UPDATE project_tasks
+            SET project_name = ?,
+                title = ?,
+                status = ?,
+                priority = ?,
+                due_date = ?,
+                completed_at = {completed_at_sql},
+                sort_order = ?,
+                updated_at = strftime('%s', 'now')
+            WHERE id = ?
+            """,
+            (
+                normalized_project,
+                normalized_title,
+                normalized_status,
+                normalized_priority,
+                normalized_due_date,
+                normalized_sort_order,
+                normalized_id,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT id, project_name, title, status, priority, due_date,
+                   completed_at, sort_order, created_at, updated_at
+            FROM project_tasks
+            WHERE id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        return {"ok": True, "task": _format_project_task(row)}
+
+
+def delete_project_task(task_id) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    try:
+        normalized_id = int(task_id)
+    except (TypeError, ValueError):
+        return {"error": "Task id is required."}
+
+    with db_connection() as conn:
+        cur = conn.execute("DELETE FROM project_tasks WHERE id = ?", (normalized_id,))
+        conn.commit()
+        if cur.rowcount < 1:
+            return {"error": "Task not found."}
+        return {"ok": True, "deleted": cur.rowcount, "id": normalized_id}
+
+
+def _format_planner_goal(row: sqlite3.Row, progress: dict | None = None) -> dict:
+    goal = {
+        "id": int(row["id"]),
+        "goal_type": row["goal_type"],
+        "target_value": row["target_value"],
+        "period": row["period"],
+        "scope_type": row["scope_type"],
+        "scope_value": row["scope_value"] or "",
+        "active": bool(row["active"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+    if progress is not None:
+        goal["progress"] = progress
+    return goal
+
+
+def _normalize_planner_goal_fields(
+    goal_type: str | None,
+    target_value,
+    period: str | None,
+    scope_type: str | None,
+    scope_value: str | None = "",
+    active=True,
+) -> tuple[str, float, str, str, str, int] | dict:
+    normalized_type = (goal_type or "").strip().lower()
+    normalized_period = (period or "").strip().lower()
+    normalized_scope_type = (scope_type or "all").strip().lower()
+    normalized_scope_value = (scope_value or "").strip()
+
+    if normalized_type not in PLANNER_GOAL_TYPE_OPTIONS:
+        return {"error": "Unknown planner goal type."}
+    if normalized_period not in PLANNER_GOAL_PERIOD_OPTIONS:
+        return {"error": "Unknown planner goal period."}
+    if normalized_scope_type not in PLANNER_GOAL_SCOPE_OPTIONS:
+        return {"error": "Unknown planner goal scope."}
+    if normalized_scope_type == "all":
+        normalized_scope_value = ""
+    elif not normalized_scope_value:
+        return {"error": "Planner goal scope value is required."}
+
+    try:
+        normalized_target = float(target_value)
+    except (TypeError, ValueError):
+        return {"error": "Planner goal target must be a number."}
+    if normalized_target <= 0:
+        return {"error": "Planner goal target must be greater than zero."}
+    if normalized_type in {
+        "sessions_per_week",
+        "projects_finished_per_period",
+        "touch_active_project_every_n_days",
+    }:
+        if normalized_target != int(normalized_target):
+            return {"error": "Planner goal target must be a whole number."}
+        normalized_target = float(int(normalized_target))
+
+    if isinstance(active, str):
+        normalized_active = 0 if active.strip().lower() in {"0", "false", "no", "off"} else 1
+    else:
+        normalized_active = 1 if bool(active) else 0
+    return (
+        normalized_type,
+        normalized_target,
+        normalized_period,
+        normalized_scope_type,
+        normalized_scope_value,
+        normalized_active,
+    )
+
+
+def _planner_goal_period_range(period: str, today: date | None = None) -> tuple[date, date]:
+    today = today or date.today()
+    if period == "month":
+        start = today.replace(day=1)
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        return start, end
+    return get_week_range(today)
+
+
+def _scope_matches_project(project_name: str, scope_type: str, scope_value: str, metadata: dict, categories: dict) -> bool:
+    if scope_type == "all":
+        return True
+    if scope_type == "project":
+        return project_name == scope_value
+    if scope_type == "project_type":
+        return metadata.get(project_name, {}).get("type", "") == scope_value
+    if scope_type == "category":
+        category = categories.get(project_name)
+        return bool(category and category.get("key") == scope_value)
+    return False
+
+
+def _count_sessions_in_range(
+    conn: sqlite3.Connection,
+    start_date: date,
+    end_date: date,
+    scope_type: str,
+    scope_value: str,
+    metadata: dict,
+    categories: dict,
+) -> int:
+    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
+    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
+    rows = conn.execute(
+        """
+        SELECT project_name
+        FROM sessions
+        WHERE active_seconds > 0
+          AND start_time >= ?
+          AND start_time < ?
+        """,
+        (range_start, range_end),
+    ).fetchall()
+    return sum(
+        1
+        for row in rows
+        if _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories)
+    )
+
+
+def _sum_scoped_seconds_in_range(
+    conn: sqlite3.Connection,
+    start_date: date,
+    end_date: date,
+    scope_type: str,
+    scope_value: str,
+    metadata: dict,
+    categories: dict,
+) -> int:
+    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
+    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
+    rows = conn.execute(
+        """
+        SELECT project_name, start_time, last_seen_time, end_time, active_seconds
+        FROM sessions
+        WHERE active_seconds > 0
+          AND start_time < ?
+          AND COALESCE(end_time, last_seen_time, start_time) >= ?
+        """,
+        (range_end, range_start),
+    ).fetchall()
+    total = 0.0
+    for row in rows:
+        if not _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories):
+            continue
+        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
+        for day_key, _hour, seconds in allocate_session_activity(
+            row["start_time"],
+            end_time,
+            row["active_seconds"],
+        ):
+            if start_date <= date.fromisoformat(day_key) <= end_date:
+                total += seconds
+    return round(total)
+
+
+def _count_finished_projects(
+    conn: sqlite3.Connection,
+    start_date: date,
+    end_date: date,
+    scope_type: str,
+    scope_value: str,
+    metadata: dict,
+    categories: dict,
+) -> int:
+    rows = conn.execute(
+        """
+        SELECT project_name, status, updated_at, turn_in_date
+        FROM project_metadata
+        WHERE status = 'finished'
+        """
+    ).fetchall()
+    total = 0
+    for row in rows:
+        project_name = row["project_name"]
+        if not _scope_matches_project(project_name, scope_type, scope_value, metadata, categories):
+            continue
+        turn_in_date = row["turn_in_date"] or ""
+        if turn_in_date:
+            finished_date = datetime.strptime(turn_in_date, "%Y-%m-%d").date()
+            if start_date <= finished_date <= end_date:
+                total += 1
+            continue
+        # The metadata table does not yet have a dedicated finished_at timestamp.
+        # Count current finished projects so the v1 goal remains useful until
+        # status transition history exists.
+        total += 1
+    return total
+
+
+def _count_touched_active_projects(
+    conn: sqlite3.Connection,
+    days: int,
+    scope_type: str,
+    scope_value: str,
+    metadata: dict,
+    categories: dict,
+    today: date | None = None,
+) -> tuple[int, int]:
+    today = today or date.today()
+    cutoff = datetime.combine(today - timedelta(days=days - 1), datetime.min.time()).timestamp()
+    placeholders = ",".join("?" * len(ACTIVE_PROJECT_STATUSES))
+    rows = conn.execute(
+        f"""
+        SELECT s.project_name,
+               MAX(COALESCE(s.end_time, s.last_seen_time, s.start_time)) AS last_seen
+        FROM sessions s
+        JOIN project_metadata pm ON pm.project_name = s.project_name
+        WHERE s.active_seconds > 0
+          AND pm.status IN ({placeholders})
+        GROUP BY s.project_name
+        """,
+        tuple(ACTIVE_PROJECT_STATUSES),
+    ).fetchall()
+    active_projects = [
+        row
+        for row in rows
+        if _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories)
+    ]
+    touched = sum(1 for row in active_projects if float(row["last_seen"] or 0) >= cutoff)
+    return touched, len(active_projects)
+
+
+def compute_planner_goal_progress(
+    conn: sqlite3.Connection,
+    goal: dict,
+    metadata: dict | None = None,
+    categories: dict | None = None,
+    today: date | None = None,
+) -> dict:
+    metadata = metadata if metadata is not None else get_project_metadata(conn)
+    categories = categories if categories is not None else get_project_categories(conn)
+    today = today or date.today()
+    start_date, end_date = _planner_goal_period_range(goal["period"], today)
+    goal_type = goal["goal_type"]
+    target = float(goal["target_value"])
+    current = 0.0
+    unit = "count"
+    label = ""
+    total_active_projects = None
+
+    if goal_type == "sessions_per_week":
+        current = float(_count_sessions_in_range(
+            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
+        ))
+        unit = "sessions"
+        label = "Sessions this period"
+    elif goal_type == "hours_per_week":
+        seconds = _sum_scoped_seconds_in_range(
+            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
+        )
+        current = round(seconds / 3600, 2)
+        unit = "hours"
+        label = "Hours this period"
+    elif goal_type == "projects_finished_per_period":
+        current = float(_count_finished_projects(
+            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
+        ))
+        unit = "projects"
+        label = "Finished projects this period"
+    elif goal_type == "touch_active_project_every_n_days":
+        days = int(target)
+        touched, total_active_projects = _count_touched_active_projects(
+            conn, days, goal["scope_type"], goal["scope_value"], metadata, categories, today
+        )
+        current = float(touched)
+        target = float(total_active_projects)
+        unit = "projects"
+        label = f"Active projects touched in {days} days"
+
+    remaining = max(target - current, 0.0)
+    percent = 100.0 if target <= 0 else min(100.0, round((current / target) * 100, 1))
+    return {
+        "current_value": current,
+        "target_value": target,
+        "remaining_value": remaining,
+        "percent": percent,
+        "unit": unit,
+        "label": label,
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        "total_active_projects": total_active_projects,
+    }
+
+
+def get_planner_goals(conn: sqlite3.Connection, include_inactive: bool = True) -> list[dict]:
+    query = """
+        SELECT id, goal_type, target_value, period, scope_type, scope_value,
+               active, created_at, updated_at
+        FROM planner_goals
+    """
+    params = ()
+    if not include_inactive:
+        query += " WHERE active = ?"
+        params = (1,)
+    query += " ORDER BY active DESC, created_at ASC, id ASC"
+    rows = conn.execute(query, params).fetchall()
+    metadata = get_project_metadata(conn)
+    categories = get_project_categories(conn)
+    goals = []
+    for row in rows:
+        base = _format_planner_goal(row)
+        goals.append(_format_planner_goal(row, compute_planner_goal_progress(conn, base, metadata, categories)))
+    return goals
+
+
+def get_planner_goals_response() -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        return {"ok": True, "goals": get_planner_goals(conn)}
+
+
+def create_planner_goal(
+    goal_type: str | None,
+    target_value,
+    period: str | None = "week",
+    scope_type: str | None = "all",
+    scope_value: str | None = "",
+    active=True,
+) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    normalized = _normalize_planner_goal_fields(
+        goal_type, target_value, period, scope_type, scope_value, active
+    )
+    if isinstance(normalized, dict):
+        return normalized
+    normalized_type, normalized_target, normalized_period, normalized_scope_type, normalized_scope_value, normalized_active = normalized
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            """
+            INSERT INTO planner_goals (
+                goal_type, target_value, period, scope_type, scope_value,
+                active, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+            """,
+            (
+                normalized_type,
+                normalized_target,
+                normalized_period,
+                normalized_scope_type,
+                normalized_scope_value,
+                normalized_active,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT id, goal_type, target_value, period, scope_type, scope_value,
+                   active, created_at, updated_at
+            FROM planner_goals
+            WHERE id = ?
+            """,
+            (cur.lastrowid,),
+        ).fetchone()
+        goal = _format_planner_goal(row)
+        return {"ok": True, "goal": _format_planner_goal(row, compute_planner_goal_progress(conn, goal))}
+
+
+def update_planner_goal(goal_id, fields: dict) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    try:
+        normalized_id = int(goal_id)
+    except (TypeError, ValueError):
+        return {"error": "Planner goal id is required."}
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        existing = conn.execute(
+            """
+            SELECT id, goal_type, target_value, period, scope_type, scope_value,
+                   active, created_at, updated_at
+            FROM planner_goals
+            WHERE id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        if not existing:
+            return {"error": "Planner goal not found."}
+
+        normalized = _normalize_planner_goal_fields(
+            fields.get("goal_type", existing["goal_type"]),
+            fields.get("target_value", existing["target_value"]),
+            fields.get("period", existing["period"]),
+            fields.get("scope_type", existing["scope_type"]),
+            fields.get("scope_value", existing["scope_value"]),
+            fields.get("active", bool(existing["active"])),
+        )
+        if isinstance(normalized, dict):
+            return normalized
+        normalized_type, normalized_target, normalized_period, normalized_scope_type, normalized_scope_value, normalized_active = normalized
+
+        conn.execute(
+            """
+            UPDATE planner_goals
+            SET goal_type = ?,
+                target_value = ?,
+                period = ?,
+                scope_type = ?,
+                scope_value = ?,
+                active = ?,
+                updated_at = strftime('%s', 'now')
+            WHERE id = ?
+            """,
+            (
+                normalized_type,
+                normalized_target,
+                normalized_period,
+                normalized_scope_type,
+                normalized_scope_value,
+                normalized_active,
+                normalized_id,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT id, goal_type, target_value, period, scope_type, scope_value,
+                   active, created_at, updated_at
+            FROM planner_goals
+            WHERE id = ?
+            """,
+            (normalized_id,),
+        ).fetchone()
+        goal = _format_planner_goal(row)
+        return {"ok": True, "goal": _format_planner_goal(row, compute_planner_goal_progress(conn, goal))}
+
+
+def delete_planner_goal(goal_id) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    try:
+        normalized_id = int(goal_id)
+    except (TypeError, ValueError):
+        return {"error": "Planner goal id is required."}
+
+    with db_connection() as conn:
+        cur = conn.execute("DELETE FROM planner_goals WHERE id = ?", (normalized_id,))
+        conn.commit()
+        if cur.rowcount < 1:
+            return {"error": "Planner goal not found."}
+        return {"ok": True, "deleted": cur.rowcount, "id": normalized_id}
+
+
+def set_project_metadata(
+    project_name: str,
+    status: str | None,
+    project_type: str | None,
+    priority: str | None = None,
+    due_date: str | None = None,
+    hard_deadline: str | None = None,
+    turn_in_date: str | None = None,
+) -> dict:
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+
+    normalized_name = (project_name or "").strip()
+    if not normalized_name:
+        return {"error": "Project name is required."}
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        existing = conn.execute(
+            """
+            SELECT status, type, priority, due_date, hard_deadline, turn_in_date
+            FROM project_metadata
+            WHERE project_name = ?
+            """,
+            (normalized_name,),
+        ).fetchone()
+        normalized = _normalize_project_metadata_fields(
+            existing["status"] if status is None and existing else status,
+            existing["type"] if project_type is None and existing else project_type,
+            existing["priority"] if priority is None and existing else priority,
+            existing["due_date"] if due_date is None and existing else due_date,
+            existing["hard_deadline"] if hard_deadline is None and existing else hard_deadline,
+            existing["turn_in_date"] if turn_in_date is None and existing else turn_in_date,
+        )
+        if isinstance(normalized, dict):
+            return normalized
+        (
+            normalized_status,
+            normalized_type,
+            normalized_priority,
+            normalized_due_date,
+            normalized_hard_deadline,
+            normalized_turn_in_date,
+        ) = normalized
+
+        if not any(
+            (
+                normalized_status,
+                normalized_type,
+                normalized_priority,
+                normalized_due_date,
+                normalized_hard_deadline,
+                normalized_turn_in_date,
+            )
+        ):
+            cur = conn.execute(
+                "DELETE FROM project_metadata WHERE project_name = ?",
+                (normalized_name,),
+            )
+            conn.commit()
+            return {
+                "ok": True,
+                "deleted": cur.rowcount,
+                "project_name": normalized_name,
+                "metadata": {
+                    "status": "",
+                    "status_label": "",
+                    "type": "",
+                    "type_label": "",
+                    "priority": "",
+                    "priority_label": "",
+                    "due_date": "",
+                    "hard_deadline": "",
+                    "turn_in_date": "",
+                },
+            }
+
+        conn.execute(
+            """
+            INSERT INTO project_metadata (
+                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            ON CONFLICT(project_name) DO UPDATE SET
+                status = excluded.status,
+                type = excluded.type,
+                priority = excluded.priority,
+                due_date = excluded.due_date,
+                hard_deadline = excluded.hard_deadline,
+                turn_in_date = excluded.turn_in_date,
+                updated_at = excluded.updated_at
+            """,
+            (
+                normalized_name,
+                normalized_status,
+                normalized_type,
+                normalized_priority,
+                normalized_due_date,
+                normalized_hard_deadline,
+                normalized_turn_in_date,
+            ),
+        )
+        conn.commit()
+        return {
+            "ok": True,
+            "project_name": normalized_name,
+            "metadata": {
+                "status": normalized_status,
+                "status_label": PROJECT_STATUS_OPTIONS.get(normalized_status, ""),
+                "type": normalized_type,
+                "type_label": PROJECT_TYPE_OPTIONS.get(normalized_type, ""),
+                "priority": normalized_priority,
+                "priority_label": PROJECT_PRIORITY_OPTIONS.get(normalized_priority, ""),
+                "due_date": normalized_due_date,
+                "hard_deadline": normalized_hard_deadline,
+                "turn_in_date": normalized_turn_in_date,
+            },
+        }
 
 
 def set_project_category(project_name: str, category_key: str | None) -> dict:
@@ -948,8 +2001,41 @@ def _compute_data_etag(month_value: str = "") -> str:
         ).fetchone()
         cd = conn.execute("SELECT COUNT(*), MAX(rowid) FROM category_definitions").fetchone()
         pc = conn.execute("SELECT COUNT(*), MAX(rowid) FROM project_categories").fetchone()
+        pm = conn.execute(
+            """
+            SELECT COUNT(*), MAX(rowid), MAX(updated_at),
+                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date, '|')
+            FROM (
+                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, updated_at
+                FROM project_metadata
+                ORDER BY project_name
+            )
+            """
+        ).fetchone()
+        pt = conn.execute(
+            """
+            SELECT COUNT(*), MAX(id), MAX(updated_at),
+                   GROUP_CONCAT(id || ':' || project_name || ':' || status || ':' || priority || ':' || updated_at, '|')
+            FROM (
+                SELECT id, project_name, status, priority, updated_at
+                FROM project_tasks
+                ORDER BY id
+            )
+            """
+        ).fetchone()
+        pg = conn.execute(
+            """
+            SELECT COUNT(*), MAX(id), MAX(updated_at),
+                   GROUP_CONCAT(id || ':' || goal_type || ':' || target_value || ':' || period || ':' || scope_type || ':' || scope_value || ':' || active || ':' || updated_at, '|')
+            FROM (
+                SELECT id, goal_type, target_value, period, scope_type, scope_value, active, updated_at
+                FROM planner_goals
+                ORDER BY id
+            )
+            """
+        ).fetchone()
         dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
-        raw = f"{s}|{cd}|{pc}|{dm}|{month_value}"
+        raw = f"{s}|{cd}|{pc}|{pm}|{pt}|{pg}|{dm}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -1067,6 +2153,9 @@ def get_stats(month_value: str = "") -> dict:
             conn.row_factory = sqlite3.Row
             category_options, _ = get_category_maps(conn)
             project_categories = get_project_categories(conn)
+            project_metadata = get_project_metadata(conn)
+            project_tasks = get_project_tasks_by_project(conn)
+            planner_goals = get_planner_goals(conn)
 
             activity_rows = conn.execute("""
                 SELECT project_name, start_time, last_seen_time, end_time, active_seconds
@@ -1237,12 +2326,26 @@ def get_stats(month_value: str = "") -> dict:
                 project["category_key"] = category["key"] if category else None
                 project["category_label"] = category["label"] if category else None
                 project["category_color"] = category["color"] if category else None
+                metadata = project_metadata.get(project["project_name"], {})
+                project["status"] = metadata.get("status", "")
+                project["status_label"] = metadata.get("status_label", "")
+                project["type"] = metadata.get("type", "")
+                project["type_label"] = metadata.get("type_label", "")
+                project["priority"] = metadata.get("priority", "")
+                project["priority_label"] = metadata.get("priority_label", "")
+                project["due_date"] = metadata.get("due_date", "")
+                project["hard_deadline"] = metadata.get("hard_deadline", "")
+                project["turn_in_date"] = metadata.get("turn_in_date", "")
+                project.update(_project_deadline_summary(metadata, today))
+                project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
                 project_rows.append(project)
 
             recent_rows = []
             for row in recent:
                 category = project_categories.get(row["project_name"])
+                metadata = project_metadata.get(row["project_name"], {})
+                deadline_summary = _project_deadline_summary(metadata, today)
                 session_ids = row.get("session_ids", [])
                 # Build per-session notes, start-times, end-times, and last-seen maps
                 session_notes = {}
@@ -1283,6 +2386,18 @@ def get_stats(month_value: str = "") -> dict:
                         "category_key": category["key"] if category else None,
                         "category_label": category["label"] if category else None,
                         "category_color": category["color"] if category else None,
+                        "status": metadata.get("status", ""),
+                        "status_label": metadata.get("status_label", ""),
+                        "type": metadata.get("type", ""),
+                        "type_label": metadata.get("type_label", ""),
+                        "priority": metadata.get("priority", ""),
+                        "priority_label": metadata.get("priority_label", ""),
+                        "due_date": metadata.get("due_date", ""),
+                        "hard_deadline": metadata.get("hard_deadline", ""),
+                        "turn_in_date": metadata.get("turn_in_date", ""),
+                        "deadline_state": deadline_summary["deadline_state"],
+                        "deadline_label": deadline_summary["deadline_label"],
+                        "deadline_reasons": deadline_summary["deadline_reasons"],
                     }
                 )
 
@@ -1323,6 +2438,7 @@ def get_stats(month_value: str = "") -> dict:
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
                 "category_options": category_options,
+                "planner_goals": planner_goals,
                 "custom_category_limit": MAX_CUSTOM_CATEGORIES,
                 "custom_category_count": len(category_options),
             }
@@ -4749,6 +5865,13 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/last-session-todos":
             project = parse_qs(parsed.query).get("project", [""])[0]
             self._json(get_last_session_todos(project))
+        elif parsed.path == "/api/project-tasks":
+            project = parse_qs(parsed.query).get("project", [""])[0]
+            result = get_project_tasks_response(project)
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif parsed.path == "/api/planner-goals":
+            result = get_planner_goals_response()
+            self._json(result, status=200 if result.get("ok") else 400)
         elif parsed.path == "/api/session-notes-entry":
             query = parse_qs(parsed.query)
             result = get_session_notes_entry(
@@ -4868,6 +5991,104 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_name", ""),
                 payload.get("category_key"),
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-metadata":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = set_project_metadata(
+                payload.get("project_name", ""),
+                payload.get("status"),
+                payload.get("type"),
+                payload.get("priority"),
+                payload.get("due_date"),
+                payload.get("hard_deadline"),
+                payload.get("turn_in_date"),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-tasks":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = create_project_task(
+                payload.get("project_name", ""),
+                payload.get("title", ""),
+                payload.get("priority", "normal"),
+                payload.get("due_date", ""),
+                payload.get("sort_order", 0),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-tasks/update":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = update_project_task(payload.get("id"), payload)
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-tasks/delete":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = delete_project_task(payload.get("id"))
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/planner-goals":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = create_planner_goal(
+                payload.get("goal_type"),
+                payload.get("target_value"),
+                payload.get("period", "week"),
+                payload.get("scope_type", "all"),
+                payload.get("scope_value", ""),
+                payload.get("active", True),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/planner-goals/update":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = update_planner_goal(payload.get("id"), payload)
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/planner-goals/delete":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = delete_planner_goal(payload.get("id"))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/category-options":
             try:

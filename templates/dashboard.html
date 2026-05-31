@@ -1429,6 +1429,100 @@ header{
 .category-modal-foot{
   margin-top:18px;display:flex;justify-content:flex-end;
 }
+.task-modal{
+  max-width:640px;
+}
+.task-modal-body{
+  display:grid;gap:14px;margin-bottom:18px;
+}
+.project-planning-form{
+  display:grid;gap:12px;padding:14px;border:1px solid var(--border);
+  border-radius:16px;background:var(--control-bg);
+}
+.project-planning-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.project-planning-title{
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+}
+.project-planning-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;
+}
+.project-planning-field{display:grid;gap:5px;min-width:0}
+.project-planning-field label{
+  font-size:11px;font-weight:700;color:var(--ink-4);
+}
+.project-planning-input{
+  min-height:38px;border:1px solid var(--border);border-radius:11px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:12px;
+  padding:8px 10px;outline:none;min-width:0;
+}
+.project-planning-input:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.project-planning-status{
+  display:flex;gap:6px;flex-wrap:wrap;
+}
+.task-form{
+  display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:10px;
+  align-items:center;padding:12px;border:1px solid var(--border);
+  border-radius:16px;background:var(--control-bg);
+}
+.task-input,
+.task-priority-select{
+  min-height:38px;border:1px solid var(--border);border-radius:11px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13px;
+  outline:none;
+}
+.task-input{padding:8px 11px;min-width:0}
+.task-priority-select{padding:8px 26px 8px 10px;font-weight:600}
+.task-input:focus,
+.task-priority-select:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.project-task-pill{
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+  color:var(--ink-2);padding:7px 11px;display:inline-flex;align-items:center;gap:7px;
+  font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;
+  transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
+}
+.project-task-pill:hover{
+  background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink);
+  transform:translateY(-1px);
+}
+.project-task-pill.is-empty{color:var(--ink-3)}
+.project-task-pill strong{
+  color:var(--ink);font-family:var(--font-mono);font-size:12px;
+}
+.task-list{
+  display:grid;gap:8px;max-height:min(46vh,380px);overflow:auto;padding-right:2px;
+}
+.task-row{
+  display:grid;grid-template-columns:auto minmax(0,1fr) 112px auto;gap:10px;align-items:center;
+  padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--surface);
+}
+.task-row.is-done{opacity:.62}
+.task-check{
+  appearance:none;-webkit-appearance:none;width:18px;height:18px;border-radius:999px;
+  border:1.5px solid var(--border-strong);background:var(--control-bg);display:grid;place-items:center;
+  cursor:pointer;transition:background .15s ease,border-color .15s ease;
+}
+.task-check:checked{background:var(--accent);border-color:var(--accent)}
+.task-check:checked::after{content:"";width:7px;height:7px;border-radius:999px;background:#fff}
+.task-title{
+  min-width:0;color:var(--ink);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.task-row.is-done .task-title{text-decoration:line-through;color:var(--ink-4)}
+.task-delete{
+  width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;
+  color:var(--danger);font-size:16px;line-height:1;cursor:pointer;opacity:.66;
+}
+.task-delete:hover{opacity:1;background:var(--danger-soft);border-color:rgba(255,59,48,.28)}
+.task-empty{
+  padding:28px 14px;text-align:center;border:1px dashed var(--border-strong);border-radius:16px;
+  color:var(--ink-4);font-size:13px;
+}
 
 .settings-shell{display:grid;gap:28px}
 .settings-grid{
@@ -1997,6 +2091,155 @@ tbody tr:hover .row-note{opacity:1}
   min-width:0;
 }
 .category-pill.empty .category-pill-swatch{background:var(--category-color)}
+.project-meta-controls{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.project-meta-select{
+  min-width:118px;border:1px solid var(--border);background:var(--control-bg);
+  color:var(--ink);border-radius:12px;padding:8px 28px 8px 10px;
+  font-size:12px;font-weight:600;appearance:auto;
+}
+.project-meta-select:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.planner-shell{display:grid;gap:20px}
+.planner-summary{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;
+}
+.planner-summary-tile,
+.planner-panel{
+  border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--radius);box-shadow:var(--card-shadow);
+}
+.planner-summary-tile{
+  min-height:126px;padding:20px;display:grid;align-content:space-between;gap:14px;
+}
+.planner-kpi{
+  font-family:var(--font-display);font-size:30px;font-weight:700;line-height:1;
+  color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.planner-kpi-label{
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+}
+.planner-kpi-note{font-size:12px;color:var(--ink-3);line-height:1.35}
+.planner-grid{
+  display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:18px;
+}
+.planner-panel{padding:22px;min-width:0}
+.planner-panel-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;
+}
+.planner-panel-title{
+  font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.02em;
+}
+.planner-panel-meta{font-size:12px;color:var(--ink-4);line-height:1.35}
+.planner-focus-list,
+.planner-deadline-list,
+.planner-goal-list,
+.planner-board,
+.planner-recent-list{display:grid;gap:10px}
+.planner-focus-row,
+.planner-deadline-row,
+.planner-goal-row,
+.planner-board-project,
+.planner-recent-row{
+  border:1px solid var(--border);background:var(--control-bg);
+  border-radius:16px;padding:13px 14px;min-width:0;
+}
+.planner-goal-form{
+  display:grid;grid-template-columns:minmax(180px,1.2fr) repeat(2,minmax(100px,.7fr)) minmax(120px,.8fr) minmax(120px,.8fr) auto;
+  gap:10px;align-items:end;margin-bottom:14px;
+}
+.planner-goal-field{display:grid;gap:6px;min-width:0}
+.planner-goal-field label{
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+}
+.planner-goal-input{
+  width:100%;border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  color:var(--ink);padding:10px 11px;font-size:13px;font-weight:600;appearance:auto;
+}
+.planner-goal-input:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.planner-goal-row{display:grid;gap:12px}
+.planner-goal-row.is-paused{opacity:.72}
+.planner-goal-top{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;
+}
+.planner-goal-progress{
+  height:9px;border-radius:999px;background:var(--surface);border:1px solid var(--border);overflow:hidden;
+}
+.planner-goal-progress span{
+  display:block;height:100%;width:var(--goal-progress,0%);background:var(--accent);
+}
+.planner-goal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.planner-goal-muted{color:var(--ink-4);font-size:12px;line-height:1.4}
+.planner-deadline-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;
+}
+.planner-deadline-date{
+  display:grid;justify-items:end;gap:4px;min-width:88px;
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+}
+.planner-deadline-date strong{
+  font-size:13px;color:var(--ink);letter-spacing:0;text-transform:none;font-variant-numeric:tabular-nums;
+}
+.planner-focus-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;
+}
+.planner-row-main{display:grid;gap:6px;min-width:0}
+.planner-row-title{
+  display:flex;align-items:center;gap:8px;min-width:0;color:var(--ink);
+  font-size:14px;font-weight:700;
+}
+.planner-row-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.planner-row-meta{font-size:12px;color:var(--ink-4);line-height:1.4}
+.planner-reason-list{display:flex;gap:6px;flex-wrap:wrap}
+.planner-pill{
+  display:inline-flex;align-items:center;gap:6px;max-width:100%;
+  border:1px solid var(--border);border-radius:999px;background:var(--surface);
+  color:var(--ink-3);padding:5px 9px;font-size:11px;font-weight:700;white-space:nowrap;
+}
+.planner-pill.is-client{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 32%,transparent);background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.planner-pill.is-finishing{color:var(--live);border-color:rgba(52,199,89,.24);background:rgba(52,199,89,.09)}
+.planner-pill.is-overdue{color:var(--danger);border-color:rgba(255,59,48,.30);background:var(--danger-soft)}
+.planner-pill.is-due-soon{color:#b36b00;border-color:rgba(255,159,10,.32);background:rgba(255,159,10,.10)}
+.planner-pill.is-delivered{color:var(--live);border-color:rgba(52,199,89,.24);background:rgba(52,199,89,.09)}
+.planner-pill.is-priority{color:var(--ink);border-color:var(--border-strong)}
+.planner-pill.is-task{color:var(--danger);border-color:rgba(255,59,48,.22);background:var(--danger-soft)}
+.planner-pill.is-momentum{color:#0f7a55;border-color:rgba(15,122,85,.24);background:rgba(15,122,85,.09)}
+.planner-pill.is-goal{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.planner-action-label{
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+}
+.planner-board-column{
+  border:1px solid var(--border);border-radius:18px;background:var(--control-bg);
+  padding:14px;display:grid;gap:10px;align-content:start;
+}
+.planner-board-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);
+}
+.planner-board-count{
+  font-family:var(--font-mono);font-size:11px;color:var(--ink-4);
+  border:1px solid var(--border);border-radius:999px;padding:3px 7px;background:var(--surface);
+}
+.planner-board-project{display:grid;gap:10px;background:var(--surface)}
+.planner-board-project .project-meta-controls{gap:6px}
+.planner-board-project .project-meta-select{min-width:0;width:100%}
+.planner-project-line{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;
+}
+.planner-project-stats{font-size:12px;color:var(--ink-4);white-space:nowrap}
+.planner-recent-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;
+}
+.planner-empty{
+  padding:28px 14px;text-align:center;border:1px dashed var(--border-strong);
+  border-radius:16px;color:var(--ink-4);font-size:13px;
+}
 
 .rank{
   font-family:var(--font-mono);color:var(--ink-3);font-size:12px;
@@ -2045,6 +2288,9 @@ tbody tr:hover .row-note{opacity:1}
   .goal-input-row{grid-template-columns:1fr}
   .target-card .goal-shell{grid-template-columns:minmax(170px,220px) minmax(0,1fr)}
   .target-card .goal-ring{width:min(200px,100%)}
+  .planner-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .planner-grid{grid-template-columns:1fr}
+  .planner-goal-form{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
@@ -2085,9 +2331,24 @@ tbody tr:hover .row-note{opacity:1}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
   .scale-control-panel{grid-template-columns:1fr auto}
+  .planner-summary{grid-template-columns:1fr}
+  .planner-panel{padding:18px}
+  .planner-focus-row,
+  .planner-deadline-row,
+  .planner-goal-top,
+  .planner-recent-row{grid-template-columns:1fr}
+  .planner-deadline-date{justify-items:start}
+  .planner-row-name{white-space:normal}
+  .planner-goal-form{grid-template-columns:1fr}
+  .planner-goal-actions{justify-content:flex-start}
   .scale-slider{grid-column:1 / -1}
   .scale-endpoint{display:none}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .task-form{grid-template-columns:1fr}
+  .project-planning-grid{grid-template-columns:1fr}
+  .project-planning-head{align-items:flex-start}
+  .task-row{grid-template-columns:auto minmax(0,1fr) auto}
+  .task-row .task-priority-select{grid-column:2 / -1}
   .detail-modal-backdrop{padding:14px}
   .detail-modal-head{padding:20px 20px 16px}
   .detail-modal-body{padding:18px 20px 22px}
@@ -2134,6 +2395,7 @@ tbody tr:hover .row-note{opacity:1}
   <div class="header-right">
     <div class="header-nav" role="tablist" aria-label="Pages">
       <button class="nav-tab is-active" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
+      <button class="nav-tab" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
       <button class="nav-tab" id="navSettings" type="button" data-view-tab="settings">Settings</button>
     </div>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
@@ -2183,6 +2445,7 @@ tbody tr:hover .row-note{opacity:1}
   </div>
   <div id="app">
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
+    <div id="appPlanner" hidden></div>
     <div id="appSettings" hidden></div>
   </div>
   <div class="mark">
@@ -2215,6 +2478,66 @@ tbody tr:hover .row-note{opacity:1}
     <div class="category-list" id="categoryModalList"></div>
     <div class="category-modal-foot">
       <button class="btn" id="categoryModalClear" type="button">Clear category</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="taskModal">
+  <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+    <div class="category-modal-head">
+      <div>
+        <h3 id="taskModalTitle">Project tasks</h3>
+        <div class="category-modal-kicker" id="taskModalProject"></div>
+      </div>
+      <button class="category-close" id="taskModalClose" type="button" aria-label="Close project tasks">×</button>
+    </div>
+    <div class="task-modal-body">
+      <form class="project-planning-form" id="projectPlanningForm">
+        <div class="project-planning-head">
+          <div>
+            <div class="project-planning-title">Planning</div>
+            <div class="category-modal-kicker" id="projectPlanningSummary"></div>
+          </div>
+          <button class="btn small" id="projectPlanningSave" type="submit">Save</button>
+        </div>
+        <div class="project-planning-grid">
+          <div class="project-planning-field">
+            <label for="projectPriorityInput">Priority</label>
+            <select class="project-planning-input" id="projectPriorityInput">
+              <option value="">None</option>
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="project-planning-field">
+            <label for="projectDueDateInput">Due Date</label>
+            <input class="project-planning-input" id="projectDueDateInput" type="date">
+          </div>
+          <div class="project-planning-field">
+            <label for="projectHardDeadlineInput">Hard Deadline</label>
+            <input class="project-planning-input" id="projectHardDeadlineInput" type="date">
+          </div>
+          <div class="project-planning-field">
+            <label for="projectTurnInDateInput">Turn-In Date</label>
+            <input class="project-planning-input" id="projectTurnInDateInput" type="date">
+          </div>
+        </div>
+        <div class="project-planning-status" id="projectPlanningReasons"></div>
+      </form>
+      <form class="task-form" id="taskForm">
+        <input class="task-input" id="taskTitleInput" type="text" maxlength="180" placeholder="Add a project task" autocomplete="off">
+        <select class="task-priority-select" id="taskPriorityInput" aria-label="Task priority">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn small" id="taskAddButton" type="submit">Add</button>
+      </form>
+      <div class="task-list" id="taskModalList"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="taskModalDone" type="button">Done</button>
     </div>
   </div>
 </div>
@@ -2268,7 +2591,9 @@ const CATEGORY_COLOR_PRESETS = [
 ];
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
-let activeView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
+let activeView = window.location.hash === '#settings'
+  ? 'settings'
+  : (window.location.hash === '#planner' ? 'planner' : 'dashboard');
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
 const dashboardMonthState = {
@@ -2451,8 +2776,8 @@ function updateMonthNav(summary = null) {
   const nextBtn = document.getElementById('monthNavNext');
   const resetBtn = document.getElementById('monthNavReset');
   const monthNav = document.getElementById('monthNav');
-  const isSettings = activeView === 'settings';
-  if (monthNav) monthNav.hidden = isSettings;
+  const isDashboard = activeView === 'dashboard';
+  if (monthNav) monthNav.hidden = !isDashboard;
   if (label) label.textContent = summary?.selected_month_label || monthLabel(monthKey);
   if (nextBtn) nextBtn.disabled = monthKey >= currentMonthKey();
   if (resetBtn) resetBtn.hidden = monthKey === currentMonthKey();
@@ -2460,14 +2785,18 @@ function updateMonthNav(summary = null) {
 
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
-  document.getElementById('navDashboard').classList.toggle('is-active', !isSettings);
+  const isPlanner = activeView === 'planner';
+  document.getElementById('navDashboard').classList.toggle('is-active', activeView === 'dashboard');
+  document.getElementById('navPlanner').classList.toggle('is-active', isPlanner);
   document.getElementById('navSettings').classList.toggle('is-active', isSettings);
   document.getElementById('pageTitle').innerHTML = isSettings
     ? 'Workspace <em>settings</em>'
-    : '<strong class="page-title-dashboard">Dashboard</strong>';
+    : (isPlanner ? 'Planner' : '<strong class="page-title-dashboard">Dashboard</strong>');
   document.getElementById('pageSubtitle').innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
-    : `
+    : (isPlanner
+      ? 'Projects, tasks, momentum, and weekly focus'
+      : `
       <span class="session-status" id="sessionStatus" data-state="live">
         <span class="session-status__text" id="sessionStatusText">Live</span>
         <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
@@ -2475,8 +2804,8 @@ function updateHeaderForView() {
         </span>
       </span>
       · <span id="introDate"></span> · <span id="introTime"></span>
-    `;
-  if (!isSettings) {
+    `);
+  if (activeView === 'dashboard') {
     setIntroDates();
   }
   updateMonthNav(latestDashboardData?.summary || null);
@@ -2484,17 +2813,18 @@ function updateHeaderForView() {
 
 function setActiveView(nextView, { pushHash = true } = {}) {
   const prevView = activeView;
-  activeView = nextView === 'settings' ? 'settings' : 'dashboard';
+  activeView = ['settings', 'planner'].includes(nextView) ? nextView : 'dashboard';
   if (pushHash) {
-    const nextHash = activeView === 'settings' ? '#settings' : '#dashboard';
+    const nextHash = activeView === 'settings' ? '#settings' : (activeView === 'planner' ? '#planner' : '#dashboard');
     if (window.location.hash !== nextHash) window.location.hash = nextHash;
   }
   const applyView = () => {
   updateHeaderForView();
 
   const dashEl = document.getElementById('appDashboard');
+  const plannerEl = document.getElementById('appPlanner');
   const setEl  = document.getElementById('appSettings');
-  if (dashEl && setEl) {
+  if (dashEl && plannerEl && setEl) {
     const root = document.documentElement;
     const viewChanged = prevView !== activeView;
     if (viewChanged) root.classList.add('view-switching');
@@ -2508,8 +2838,15 @@ function setActiveView(nextView, { pushHash = true } = {}) {
       });
       setEl.hidden = false;
       dashEl.hidden = true;
+      plannerEl.hidden = true;
+    } else if (activeView === 'planner') {
+      if (latestDashboardData) renderPlanner(latestDashboardData);
+      plannerEl.hidden = false;
+      dashEl.hidden = true;
+      setEl.hidden = true;
     } else {
       dashEl.hidden = false;
+      plannerEl.hidden = true;
       setEl.hidden = true;
     }
     if (viewChanged) {
@@ -2533,6 +2870,7 @@ systemTheme.addEventListener('change', () => {
 applyStoredTheme();
 hydrateUiScaleSetting();
 document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
+document.getElementById('navPlanner').addEventListener('click', () => setActiveView('planner'));
 document.getElementById('navSettings').addEventListener('click', () => setActiveView('settings'));
 document.getElementById('monthNavPrev').addEventListener('click', () => {
   dashboardMonthState.selectedMonth = monthKeyFromDate(addMonths(dateFromMonthKey(currentMonthStateKey()), -1));
@@ -2548,10 +2886,12 @@ document.getElementById('monthNavReset').addEventListener('click', () => {
   load();
 });
 window.addEventListener('hashchange', () => {
-  const nextView = window.location.hash === '#settings' ? 'settings' : 'dashboard';
+  const nextView = window.location.hash === '#settings'
+    ? 'settings'
+    : (window.location.hash === '#planner' ? 'planner' : 'dashboard');
   if (nextView !== activeView) setActiveView(nextView, { pushHash: false });
 });
-updateHeaderForView();
+setActiveView(activeView, { pushHash: false });
 
 const fmt = {
   dur(s) {
@@ -2635,6 +2975,159 @@ function categoryPill(project) {
     >
       <span class="category-pill-swatch"></span>
       <span>${escapeHtml(category.label)}</span>
+    </button>
+  `;
+}
+
+const PROJECT_STATUS_OPTIONS = [
+  ['', 'Set status'],
+  ['idea', 'Idea'],
+  ['in_progress', 'In Progress'],
+  ['finishing', 'Finishing'],
+  ['finished', 'Finished'],
+  ['paused', 'Paused'],
+  ['abandoned', 'Abandoned'],
+];
+const PROJECT_TYPE_OPTIONS = [
+  ['', 'Set type'],
+  ['personal', 'Personal'],
+  ['client', 'Client'],
+  ['other', 'Other'],
+];
+const TASK_PRIORITY_OPTIONS = [
+  ['low', 'Low'],
+  ['normal', 'Normal'],
+  ['high', 'High'],
+];
+const PROJECT_PRIORITY_OPTIONS = [
+  ['', 'None'],
+  ['low', 'Low'],
+  ['normal', 'Normal'],
+  ['high', 'High'],
+];
+const PLANNER_GOAL_TYPE_OPTIONS = [
+  ['sessions_per_week', 'Sessions per week'],
+  ['hours_per_week', 'Hours per week'],
+  ['projects_finished_per_period', 'Projects finished'],
+  ['touch_active_project_every_n_days', 'Touch active projects'],
+];
+const PLANNER_GOAL_PERIOD_OPTIONS = [
+  ['week', 'Week'],
+  ['month', 'Month'],
+];
+const PLANNER_GOAL_SCOPE_OPTIONS = [
+  ['all', 'All projects'],
+  ['project_type', 'Project type'],
+  ['category', 'Category'],
+  ['project', 'Project'],
+];
+
+function projectMetaSelect(project, field, options) {
+  const encodedProject = encodeURIComponent(project.project_name);
+  const current = String(project?.[field] || '');
+  return `
+    <select class="project-meta-select" data-project-meta="${field}" data-project-name="${encodedProject}" aria-label="Project ${field}">
+      ${options.map(([value, label]) => `<option value="${value}" ${current === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+    </select>
+  `;
+}
+
+function projectMetaControls(project) {
+  return `
+    <div class="project-meta-controls" data-project-meta-scope>
+      ${projectMetaSelect(project, 'status', PROJECT_STATUS_OPTIONS)}
+      ${projectMetaSelect(project, 'type', PROJECT_TYPE_OPTIONS)}
+    </div>
+  `;
+}
+
+function projectPriorityLabel(priority) {
+  const found = PROJECT_PRIORITY_OPTIONS.find(([value]) => value === (priority || ''));
+  return found ? found[1] : 'None';
+}
+
+function plannerGoalTypeLabel(type) {
+  const found = PLANNER_GOAL_TYPE_OPTIONS.find(([value]) => value === (type || ''));
+  return found ? found[1] : 'Goal';
+}
+
+function plannerGoalPeriodLabel(period) {
+  const found = PLANNER_GOAL_PERIOD_OPTIONS.find(([value]) => value === (period || ''));
+  return found ? found[1] : 'Period';
+}
+
+function plannerGoalScopeLabel(goal) {
+  const scopeType = goal?.scope_type || 'all';
+  const scopeValue = goal?.scope_value || '';
+  if (scopeType === 'all') return 'All projects';
+  if (scopeType === 'project_type') return projectTypeLabel(scopeValue) || scopeValue || 'Project type';
+  if (scopeType === 'category') return getCategoryMeta(scopeValue)?.label || scopeValue || 'Category';
+  if (scopeType === 'project') return scopeValue || 'Project';
+  return scopeValue || scopeType;
+}
+
+function plannerGoalNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '0';
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function plannerGoalProgressSummary(goal) {
+  const progress = goal?.progress || {};
+  const current = plannerGoalNumber(progress.current_value);
+  const target = plannerGoalNumber(progress.target_value ?? goal?.target_value);
+  const remaining = plannerGoalNumber(progress.remaining_value);
+  const unit = progress.unit || 'count';
+  return `${current}/${target} ${unit} · ${remaining} remaining`;
+}
+
+function projectDeadlineLabel(project) {
+  if (project?.deadline_label) return project.deadline_label;
+  if (project?.hard_deadline) return `Hard ${project.hard_deadline}`;
+  if (project?.due_date) return `Due ${project.due_date}`;
+  return '';
+}
+
+function deadlinePillClass(state) {
+  if (state === 'overdue') return 'is-overdue';
+  if (state === 'due_soon') return 'is-due-soon';
+  if (state === 'delivered') return 'is-delivered';
+  return '';
+}
+
+function findProjectByName(projectName) {
+  const projects = Array.isArray(latestDashboardData?.projects) ? latestDashboardData.projects : [];
+  return projects.find(project => project.project_name === projectName) || null;
+}
+
+function projectDeadlineReasons(project) {
+  const reasons = Array.isArray(project?.deadline_reasons) ? project.deadline_reasons : [];
+  return reasons.map(reason => {
+    if (typeof reason === 'string') return { label: reason, className: deadlinePillClass(project?.deadline_state) };
+    return {
+      label: reason?.label || reason?.reason || String(reason || ''),
+      className: reason?.className || reason?.class || deadlinePillClass(project?.deadline_state),
+    };
+  }).filter(reason => reason.label);
+}
+
+function projectTaskSummary(project) {
+  const tasks = Array.isArray(project.project_tasks) ? project.project_tasks : [];
+  const openCount = tasks.filter(task => task.status !== 'done').length;
+  const totalCount = tasks.length;
+  if (totalCount === 0) return { openCount, totalCount, label: 'Tasks' };
+  if (openCount === 0) return { openCount, totalCount, label: `${totalCount} done` };
+  return { openCount, totalCount, label: `${openCount} open` };
+}
+
+function projectTaskButton(project) {
+  const encodedProject = encodeURIComponent(project.project_name || '');
+  const summary = projectTaskSummary(project);
+  const emptyClass = summary.totalCount === 0 ? ' is-empty' : '';
+  return `
+    <button class="project-task-pill${emptyClass}" type="button" data-project-tasks-trigger="true" data-project-name="${encodedProject}">
+      <strong>${summary.openCount}</strong>
+      <span>${escapeHtml(summary.label)}</span>
     </button>
   `;
 }
@@ -3618,6 +4111,396 @@ function bindCategoryTriggers() {
   });
 }
 
+function bindProjectMetaControls() {
+  document.querySelectorAll('[data-project-meta]').forEach(select => {
+    select.addEventListener('change', async () => {
+      const projectName = decodeURIComponent(select.dataset.projectName || '');
+      const scope = select.closest('[data-project-meta-scope]') || select.closest('tr');
+      const statusSelect = scope?.querySelector('[data-project-meta="status"]');
+      const typeSelect = scope?.querySelector('[data-project-meta="type"]');
+      if (!projectName || !statusSelect || !typeSelect) return;
+
+      const previous = select.dataset.previousValue || '';
+      select.disabled = true;
+      try {
+        const result = await postJson('/api/project-metadata', {
+          project_name: projectName,
+          status: statusSelect.value,
+          type: typeSelect.value,
+        });
+        statusSelect.dataset.previousValue = result.metadata?.status || '';
+        typeSelect.dataset.previousValue = result.metadata?.type || '';
+        toast(`Updated ${projectName}`);
+        load();
+      } catch (error) {
+        select.value = previous;
+        toast(error.message || 'Failed to save project metadata');
+      } finally {
+        select.disabled = false;
+      }
+    });
+    select.dataset.previousValue = select.value || '';
+  });
+}
+
+function bindProjectTaskTriggers() {
+  document.querySelectorAll('[data-project-tasks-trigger]').forEach(button => {
+    button.addEventListener('click', () => {
+      openProjectTasks(decodeURIComponent(button.dataset.projectName || ''));
+    });
+  });
+}
+
+function plannerGoalScopeValueOptions(scopeType, selectedValue = '') {
+  if (scopeType === 'project_type') {
+    return PROJECT_TYPE_OPTIONS
+      .filter(([value]) => value)
+      .map(([value, label]) => `<option value="${value}" ${selectedValue === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+      .join('');
+  }
+  if (scopeType === 'category') {
+    return CATEGORY_OPTIONS
+      .map(option => `<option value="${option.key}" ${selectedValue === option.key ? 'selected' : ''}>${escapeHtml(option.label)}</option>`)
+      .join('');
+  }
+  if (scopeType === 'project') {
+    const projects = Array.isArray(latestDashboardData?.projects) ? latestDashboardData.projects : [];
+    return projects
+      .map(project => `<option value="${escapeHtml(project.project_name)}" ${selectedValue === project.project_name ? 'selected' : ''}>${escapeHtml(project.project_name)}</option>`)
+      .join('');
+  }
+  return '';
+}
+
+function renderPlannerGoalScopeValueControl(scopeType, selectedValue = '') {
+  if (scopeType === 'all') {
+    return '<input class="planner-goal-input" data-goal-scope-value type="text" value="" placeholder="All projects" disabled>';
+  }
+  const options = plannerGoalScopeValueOptions(scopeType, selectedValue);
+  if (options) {
+    return `<select class="planner-goal-input" data-goal-scope-value>${options}</select>`;
+  }
+  return `<input class="planner-goal-input" data-goal-scope-value type="text" value="${escapeHtml(selectedValue)}" placeholder="Scope value">`;
+}
+
+function syncPlannerGoalScopeValue(form) {
+  const scopeSelect = form?.querySelector('[data-goal-scope-type]');
+  const valueWrap = form?.querySelector('[data-goal-scope-value-wrap]');
+  if (!scopeSelect || !valueWrap) return;
+  valueWrap.innerHTML = renderPlannerGoalScopeValueControl(scopeSelect.value || 'all', valueWrap.dataset.selectedValue || '');
+}
+
+function plannerGoalPayloadFromForm(form) {
+  const scopeType = form.querySelector('[data-goal-scope-type]')?.value || 'all';
+  return {
+    goal_type: form.querySelector('[data-goal-type]')?.value || 'sessions_per_week',
+    target_value: form.querySelector('[data-goal-target]')?.value || 1,
+    period: form.querySelector('[data-goal-period]')?.value || 'week',
+    scope_type: scopeType,
+    scope_value: scopeType === 'all' ? '' : (form.querySelector('[data-goal-scope-value]')?.value || ''),
+    active: form.querySelector('[data-goal-active]')?.checked !== false,
+  };
+}
+
+function bindPlannerGoals() {
+  document.querySelectorAll('[data-goal-scope-type]').forEach(select => {
+    select.addEventListener('change', () => {
+      const form = select.closest('[data-planner-goal-form]');
+      const valueWrap = form?.querySelector('[data-goal-scope-value-wrap]');
+      if (valueWrap) valueWrap.dataset.selectedValue = '';
+      syncPlannerGoalScopeValue(form);
+    });
+  });
+
+  const createForm = document.getElementById('plannerGoalCreateForm');
+  if (createForm) {
+    syncPlannerGoalScopeValue(createForm);
+    createForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = createForm.querySelector('[type="submit"]');
+      if (submit) submit.disabled = true;
+      try {
+        await postJson('/api/planner-goals', plannerGoalPayloadFromForm(createForm));
+        createForm.reset();
+        syncPlannerGoalScopeValue(createForm);
+        toast('Goal added');
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to add goal');
+      } finally {
+        if (submit) submit.disabled = false;
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-goal-toggle]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await postJson('/api/planner-goals/update', {
+          id: button.dataset.goalToggle,
+          active: button.dataset.goalActive !== 'true',
+        });
+        toast(button.dataset.goalActive === 'true' ? 'Goal paused' : 'Goal reactivated');
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to update goal');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-goal-delete]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await postJson('/api/planner-goals/delete', { id: button.dataset.goalDelete });
+        toast('Goal deleted');
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to delete goal');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+let projectTaskModalState = null;
+
+function priorityLabel(priority) {
+  const found = TASK_PRIORITY_OPTIONS.find(([value]) => value === priority);
+  return found ? found[1] : 'Normal';
+}
+
+function taskPrioritySelect(task) {
+  const current = task.priority || 'normal';
+  return `
+    <select class="task-priority-select" data-task-priority="${task.id}" aria-label="Priority for ${escapeHtml(task.title)}">
+      ${TASK_PRIORITY_OPTIONS.map(([value, label]) => `<option value="${value}" ${current === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+    </select>
+  `;
+}
+
+function renderProjectTaskRows(tasks) {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return '<div class="task-empty">No project tasks yet.</div>';
+  }
+  return tasks.map(task => {
+    const done = task.status === 'done';
+    return `
+      <div class="task-row ${done ? 'is-done' : ''}" data-task-row="${task.id}">
+        <input class="task-check" type="checkbox" data-task-toggle="${task.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} ${escapeHtml(task.title)}">
+        <div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(task.title)}</div>
+        ${taskPrioritySelect(task)}
+        <button class="task-delete" type="button" data-task-delete="${task.id}" aria-label="Delete ${escapeHtml(task.title)}">×</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function refreshProjectTaskModal(projectName) {
+  const list = document.getElementById('taskModalList');
+  if (!list) return;
+  refreshProjectPlanningForm(projectName);
+  list.innerHTML = '<div class="task-empty">Loading tasks…</div>';
+  try {
+    const result = await getJson(`/api/project-tasks?project=${encodeURIComponent(projectName)}`);
+    list.innerHTML = renderProjectTaskRows(result.tasks || []);
+    bindProjectTaskModalRows(projectName);
+  } catch (error) {
+    list.innerHTML = `<div class="task-empty">${escapeHtml(error.message || 'Could not load tasks')}</div>`;
+  }
+}
+
+function refreshProjectPlanningForm(projectName) {
+  const project = findProjectByName(projectName) || { project_name: projectName };
+  const priorityInput = document.getElementById('projectPriorityInput');
+  const dueInput = document.getElementById('projectDueDateInput');
+  const hardInput = document.getElementById('projectHardDeadlineInput');
+  const turnInInput = document.getElementById('projectTurnInDateInput');
+  const summary = document.getElementById('projectPlanningSummary');
+  const reasonsEl = document.getElementById('projectPlanningReasons');
+  if (!priorityInput || !dueInput || !hardInput || !turnInInput) return;
+
+  priorityInput.value = project.priority || '';
+  dueInput.value = project.due_date || '';
+  hardInput.value = project.hard_deadline || '';
+  turnInInput.value = project.turn_in_date || '';
+  if (summary) {
+    const bits = [
+      projectDeadlineLabel(project),
+      project.priority ? `${projectPriorityLabel(project.priority)} priority` : '',
+    ].filter(Boolean);
+    summary.textContent = bits.length ? bits.join(' · ') : 'Set deadline, delivery, and priority details';
+  }
+  if (reasonsEl) {
+    const reasons = projectDeadlineReasons(project);
+    reasonsEl.innerHTML = reasons.length
+      ? plannerReasonPills(reasons)
+      : '<span class="planner-pill">No deadline signals</span>';
+  }
+}
+
+async function saveProjectPlanning(projectName) {
+  const project = findProjectByName(projectName) || {};
+  const priorityInput = document.getElementById('projectPriorityInput');
+  const dueInput = document.getElementById('projectDueDateInput');
+  const hardInput = document.getElementById('projectHardDeadlineInput');
+  const turnInInput = document.getElementById('projectTurnInDateInput');
+  const result = await postJson('/api/project-metadata', {
+    project_name: projectName,
+    status: project.status || '',
+    type: project.type || '',
+    priority: priorityInput?.value || '',
+    due_date: dueInput?.value || '',
+    hard_deadline: hardInput?.value || '',
+    turn_in_date: turnInInput?.value || '',
+  });
+  return result.metadata || null;
+}
+
+function bindProjectTaskModalRows(projectName) {
+  document.querySelectorAll('[data-task-toggle]').forEach(input => {
+    input.addEventListener('change', async () => {
+      input.disabled = true;
+      try {
+        await postJson('/api/project-tasks/update', {
+          id: input.dataset.taskToggle,
+          status: input.checked ? 'done' : 'open',
+        });
+        await refreshProjectTaskModal(projectName);
+        await load();
+      } catch (error) {
+        input.checked = !input.checked;
+        toast(error.message || 'Failed to update task');
+      } finally {
+        input.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-task-priority]').forEach(select => {
+    select.addEventListener('change', async () => {
+      const previous = select.dataset.previousValue || 'normal';
+      select.disabled = true;
+      try {
+        await postJson('/api/project-tasks/update', {
+          id: select.dataset.taskPriority,
+          priority: select.value,
+        });
+        select.dataset.previousValue = select.value;
+        await refreshProjectTaskModal(projectName);
+        await load();
+      } catch (error) {
+        select.value = previous;
+        toast(error.message || 'Failed to update priority');
+      } finally {
+        select.disabled = false;
+      }
+    });
+    select.dataset.previousValue = select.value || 'normal';
+  });
+
+  document.querySelectorAll('[data-task-delete]').forEach(button => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await postJson('/api/project-tasks/delete', { id: button.dataset.taskDelete });
+        await refreshProjectTaskModal(projectName);
+        await load();
+      } catch (error) {
+        toast(error.message || 'Failed to delete task');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+function openProjectTasks(projectName) {
+  const modal = document.getElementById('taskModal');
+  const projectLabel = document.getElementById('taskModalProject');
+  const closeBtn = document.getElementById('taskModalClose');
+  const doneBtn = document.getElementById('taskModalDone');
+  const form = document.getElementById('taskForm');
+  const planningForm = document.getElementById('projectPlanningForm');
+  const planningSave = document.getElementById('projectPlanningSave');
+  const titleInput = document.getElementById('taskTitleInput');
+  const priorityInput = document.getElementById('taskPriorityInput');
+  const addBtn = document.getElementById('taskAddButton');
+  if (!modal || !projectName) return;
+
+  if (projectTaskModalState?.close) projectTaskModalState.close();
+  projectLabel.textContent = projectName;
+  titleInput.value = '';
+  priorityInput.value = 'normal';
+
+  const close = () => {
+    modal.classList.remove('show');
+    closeBtn.removeEventListener('click', close);
+    doneBtn.removeEventListener('click', close);
+    modal.removeEventListener('click', onBackdrop);
+    document.removeEventListener('keydown', onKey);
+    form.removeEventListener('submit', onSubmit);
+    planningForm?.removeEventListener('submit', onPlanningSubmit);
+    projectTaskModalState = null;
+  };
+  const onBackdrop = event => { if (event.target === modal) close(); };
+  const onKey = event => { if (event.key === 'Escape') close(); };
+  const onSubmit = async event => {
+    event.preventDefault();
+    const title = titleInput.value.trim();
+    if (!title) {
+      titleInput.focus();
+      return;
+    }
+    addBtn.disabled = true;
+    try {
+      await postJson('/api/project-tasks', {
+        project_name: projectName,
+        title,
+        priority: priorityInput.value || 'normal',
+      });
+      titleInput.value = '';
+      priorityInput.value = 'normal';
+      await refreshProjectTaskModal(projectName);
+      await load();
+      titleInput.focus();
+    } catch (error) {
+      toast(error.message || 'Failed to add task');
+    } finally {
+      addBtn.disabled = false;
+    }
+  };
+  const onPlanningSubmit = async event => {
+    event.preventDefault();
+    if (planningSave) planningSave.disabled = true;
+    try {
+      await saveProjectPlanning(projectName);
+      toast(`Updated ${projectName}`);
+      await load();
+      refreshProjectPlanningForm(projectName);
+    } catch (error) {
+      toast(error.message || 'Failed to save project planning');
+    } finally {
+      if (planningSave) planningSave.disabled = false;
+    }
+  };
+
+  projectTaskModalState = { close };
+  modal.classList.add('show');
+  closeBtn.addEventListener('click', close);
+  doneBtn.addEventListener('click', close);
+  modal.addEventListener('click', onBackdrop);
+  document.addEventListener('keydown', onKey);
+  form.addEventListener('submit', onSubmit);
+  planningForm?.addEventListener('submit', onPlanningSubmit);
+  refreshProjectTaskModal(projectName);
+  titleInput.focus();
+}
+
 function openCategoryPicker({ projectName, categoryKey }) {
   const modal = document.getElementById('categoryModal');
   const title = document.getElementById('categoryModalProject');
@@ -4188,6 +5071,456 @@ function longestStreak(yearDaily) {
   return best;
 }
 
+function projectStatusLabel(status) {
+  const found = PROJECT_STATUS_OPTIONS.find(([value]) => value === (status || ''));
+  return found ? found[1] : 'Unsorted';
+}
+
+function projectTypeLabel(type) {
+  const found = PROJECT_TYPE_OPTIONS.find(([value]) => value === (type || ''));
+  return found ? found[1] : '';
+}
+
+function plannerActiveProjects(projects) {
+  return (projects || []).filter(project => !['finished', 'paused', 'abandoned'].includes(project.status || ''));
+}
+
+function plannerOpenTasks(projects) {
+  return (projects || []).flatMap(project => {
+    const tasks = Array.isArray(project.project_tasks) ? project.project_tasks : [];
+    return tasks.filter(task => task.status !== 'done').map(task => ({ task, project }));
+  });
+}
+
+function daysSinceTimestamp(timestamp) {
+  const ts = Number(timestamp || 0);
+  if (!Number.isFinite(ts) || ts <= 0) return null;
+  return Math.max(0, Math.floor((Date.now() / 1000 - ts) / 86400));
+}
+
+function lastWorkedLabel(project) {
+  const days = daysSinceTimestamp(project?.last_seen);
+  if (days == null) return 'No sessions yet';
+  if (days === 0) return 'Worked today';
+  if (days === 1) return 'Worked yesterday';
+  return `Worked ${days} days ago`;
+}
+
+function plannerReasonPills(reasons) {
+  return `<div class="planner-reason-list">${reasons.map(reason => `
+    <span class="planner-pill ${reason.className || ''}">${escapeHtml(reason.label)}</span>
+  `).join('')}</div>`;
+}
+
+function plannerGoalReasonPills(goals, project) {
+  const activeGoals = (goals || []).filter(goal => goal.active !== false);
+  const matches = activeGoals.filter(goal => {
+    const scopeType = goal.scope_type || 'all';
+    const scopeValue = goal.scope_value || '';
+    if (scopeType === 'project') return scopeValue === project.project_name;
+    if (scopeType === 'project_type') return scopeValue === project.type;
+    if (scopeType === 'category') return scopeValue === project.category_key;
+    return scopeType === 'all';
+  });
+  return matches.slice(0, 2).map(goal => {
+    const progress = goal.progress || {};
+    const percent = Number(progress.percent || 0);
+    const label = percent >= 100 ? 'Goal met' : `${plannerGoalNumber(progress.remaining_value)} ${progress.unit || 'left'} to goal`;
+    return { label, className: 'is-goal' };
+  });
+}
+
+function plannerAddSuggestion(items, seen, item) {
+  const key = `${item.kind || 'project'}:${item.project?.project_name || ''}:${item.title}`;
+  if (!item.project || seen.has(key)) return;
+  seen.add(key);
+  items.push(item);
+}
+
+function plannerFocusItems(projects, goals = []) {
+  const activeProjects = plannerActiveProjects(projects);
+  const items = [];
+  const seen = new Set();
+  plannerOpenTasks(activeProjects).forEach(({ task, project }) => {
+    const deadlineReasons = projectDeadlineReasons(project);
+    plannerAddSuggestion(items, seen, {
+      project,
+      kind: 'task',
+      action: 'Next task',
+      title: task.title,
+      meta: project.project_name,
+      score: 70 + (task.priority === 'high' ? 18 : task.priority === 'normal' ? 8 : 0) + (project.type === 'client' ? 18 : 0) + Math.max(0, 12 - (daysSinceTimestamp(project.last_seen) || 0)),
+      reasons: [
+        { label: `${priorityLabel(task.priority)} task`, className: 'is-task' },
+        ...(project.type === 'client' ? [{ label: 'Client', className: 'is-client' }] : []),
+        ...deadlineReasons.slice(0, 2),
+        ...plannerGoalReasonPills(goals, project),
+      ],
+    });
+  });
+  activeProjects.forEach(project => {
+    const openCount = projectTaskSummary(project).openCount;
+    const days = daysSinceTimestamp(project.last_seen);
+    const isRecentPersonal = project.type === 'personal' && days != null && days <= 3;
+    const isClient = project.type === 'client';
+    const isFinishing = project.status === 'finishing';
+    const isFinishCandidate = project.type === 'personal' && ['in_progress', 'finishing'].includes(project.status || '') && days != null && days <= 7;
+    const deadlineReasons = projectDeadlineReasons(project);
+    if (isFinishCandidate) {
+      plannerAddSuggestion(items, seen, {
+        project,
+        kind: 'finish',
+        action: isFinishing ? 'Push toward finish' : 'Keep momentum',
+        title: project.project_name,
+        meta: `${fmt.dur(project.total_seconds || 0)} tracked · ${lastWorkedLabel(project)}`,
+        score: 68 + (isFinishing ? 24 : 10) + Math.max(0, 10 - days) + Math.min(openCount * 5, 18),
+        reasons: [
+          { label: isFinishing ? 'Finishing' : 'In progress', className: 'is-finishing' },
+          { label: days === 0 ? 'Worked today' : `Worked ${days}d ago`, className: 'is-momentum' },
+          ...(openCount ? [{ label: `${openCount} open task${openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
+          ...plannerGoalReasonPills(goals, project),
+        ],
+      });
+    }
+    if (isClient || isFinishing || isRecentPersonal || openCount || deadlineReasons.length) {
+      plannerAddSuggestion(items, seen, {
+      project,
+      kind: 'project',
+      action: isClient ? 'Protect deadline' : isFinishing ? 'Finish candidate' : 'Project focus',
+      title: project.project_name,
+      meta: `${fmt.dur(project.total_seconds || 0)} tracked · ${lastWorkedLabel(project)}`,
+      score: (isClient ? 48 : 0) + (isFinishing ? 34 : 0) + (isRecentPersonal ? 24 : 0) + Math.min(openCount * 6, 24) + (deadlineReasons.length ? 22 : 0),
+      reasons: [
+        ...(isClient ? [{ label: 'Client', className: 'is-client' }] : []),
+        ...(isFinishing ? [{ label: 'Finishing', className: 'is-finishing' }] : []),
+        ...(isRecentPersonal ? [{ label: 'Personal momentum', className: 'is-momentum' }] : []),
+        ...(openCount ? [{ label: `${openCount} open task${openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
+        ...deadlineReasons.slice(0, 2),
+        ...plannerGoalReasonPills(goals, project),
+      ],
+      });
+    }
+  });
+  return items
+    .sort((a, b) => b.score - a.score || String(a.title).localeCompare(String(b.title)))
+    .slice(0, 10);
+}
+
+function plannerDeadlineRank(project) {
+  const state = project?.deadline_state || '';
+  if (state === 'overdue') return 0;
+  if (state === 'due_soon') return 1;
+  if (state === 'upcoming') return 2;
+  if (state === 'delivered') return 3;
+  return 4;
+}
+
+function plannerDeadlineProjects(projects) {
+  return (projects || [])
+    .filter(project => project.type === 'client' || project.due_date || project.hard_deadline)
+    .sort((a, b) => {
+      const rank = plannerDeadlineRank(a) - plannerDeadlineRank(b);
+      if (rank !== 0) return rank;
+      const aDate = a.hard_deadline || a.due_date || '9999-12-31';
+      const bDate = b.hard_deadline || b.due_date || '9999-12-31';
+      return String(aDate).localeCompare(String(bDate)) || String(a.project_name).localeCompare(String(b.project_name));
+    });
+}
+
+function compactDateLabel(value) {
+  if (!value) return 'No date';
+  const parts = String(value).split('-').map(Number);
+  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return String(value);
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderPlannerGoalForm() {
+  return `
+    <form class="planner-goal-form" id="plannerGoalCreateForm" data-planner-goal-form>
+      <div class="planner-goal-field">
+        <label for="plannerGoalType">Goal</label>
+        <select class="planner-goal-input" id="plannerGoalType" data-goal-type>
+          ${PLANNER_GOAL_TYPE_OPTIONS.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="planner-goal-field">
+        <label for="plannerGoalTarget">Target</label>
+        <input class="planner-goal-input" id="plannerGoalTarget" data-goal-target type="number" min="0.25" step="0.25" value="1">
+      </div>
+      <div class="planner-goal-field">
+        <label for="plannerGoalPeriod">Period</label>
+        <select class="planner-goal-input" id="plannerGoalPeriod" data-goal-period>
+          ${PLANNER_GOAL_PERIOD_OPTIONS.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="planner-goal-field">
+        <label for="plannerGoalScope">Scope</label>
+        <select class="planner-goal-input" id="plannerGoalScope" data-goal-scope-type>
+          ${PLANNER_GOAL_SCOPE_OPTIONS.map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="planner-goal-field">
+        <label>Scope Value</label>
+        <span data-goal-scope-value-wrap>${renderPlannerGoalScopeValueControl('all')}</span>
+      </div>
+      <div class="planner-goal-field">
+        <label for="plannerGoalActive">Active</label>
+        <label class="planner-goal-muted">
+          <input id="plannerGoalActive" data-goal-active type="checkbox" checked> Track
+        </label>
+      </div>
+      <button class="btn small" type="submit">Add</button>
+    </form>
+  `;
+}
+
+function renderPlannerGoalRows(goals) {
+  if (!Array.isArray(goals) || goals.length === 0) {
+    return '<div class="planner-empty">No planner goals yet. Add one to start tracking direction alongside time.</div>';
+  }
+  return `<div class="planner-goal-list">${goals.map(goal => {
+    const progress = goal.progress || {};
+    const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+    const active = goal.active !== false;
+    const reasons = [
+      { label: `${plannerGoalPeriodLabel(goal.period)} goal` },
+      { label: plannerGoalScopeLabel(goal) },
+      { label: active ? 'Active' : 'Paused', className: active ? 'is-finishing' : '' },
+    ];
+    return `
+      <div class="planner-goal-row ${active ? '' : 'is-paused'}">
+        <div class="planner-goal-top">
+          <div class="planner-row-main">
+            <div class="planner-row-title">
+              <span class="planner-row-name">${escapeHtml(plannerGoalTypeLabel(goal.goal_type))}</span>
+            </div>
+            <div class="planner-row-meta">${escapeHtml(progress.label || plannerGoalProgressSummary(goal))}</div>
+            ${plannerReasonPills(reasons)}
+          </div>
+          <div class="planner-goal-actions">
+            <button class="btn small" type="button" data-goal-toggle="${goal.id}" data-goal-active="${active ? 'true' : 'false'}">${active ? 'Pause' : 'Reactivate'}</button>
+            <button class="btn small" type="button" data-goal-delete="${goal.id}">Delete</button>
+          </div>
+        </div>
+        <div class="planner-goal-progress" aria-label="${escapeHtml(percent)} percent complete" style="--goal-progress:${percent}%"><span></span></div>
+        <div class="planner-goal-muted">${escapeHtml(plannerGoalProgressSummary(goal))} · ${escapeHtml(plannerGoalNumber(percent))}% complete</div>
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+function renderPlanner(data) {
+  const plannerEl = document.getElementById('appPlanner');
+  if (!plannerEl) return;
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const plannerGoals = Array.isArray(data.planner_goals) ? data.planner_goals : [];
+  const activeProjects = plannerActiveProjects(projects);
+  const openTasks = plannerOpenTasks(projects);
+  const recentActive = activeProjects
+    .filter(project => {
+      const days = daysSinceTimestamp(project.last_seen);
+      return days != null && days <= 7;
+    })
+    .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
+  const staleActive = activeProjects
+    .filter(project => {
+      const days = daysSinceTimestamp(project.last_seen);
+      return days == null || days >= 7;
+    })
+    .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
+  const statusGroups = PROJECT_STATUS_OPTIONS
+    .filter(([value]) => value)
+    .map(([value, label]) => ({
+      value,
+      label,
+      projects: projects.filter(project => (project.status || '') === value),
+    }));
+  const unsortedProjects = projects.filter(project => !(project.status || ''));
+  const focusItems = plannerFocusItems(projects, plannerGoals);
+  const topSuggestion = focusItems[0] || null;
+  const deadlineProjects = plannerDeadlineProjects(projects);
+  const clientCount = activeProjects.filter(project => project.type === 'client').length;
+  const finishingCount = projects.filter(project => project.status === 'finishing').length;
+
+  const renderFocus = () => {
+    if (focusItems.length === 0) {
+      return '<div class="planner-empty">No focus items yet. Add project tasks or set project status/type to build direction here.</div>';
+    }
+    return `<div class="planner-focus-list">${focusItems.map(item => `
+      <div class="planner-focus-row">
+        <div class="planner-row-main">
+          <div class="planner-action-label">${escapeHtml(item.action || 'Suggested action')}</div>
+          <div class="planner-row-title">
+            <span class="proj-dot" style="background:${projectColor(item.project, 0)}"></span>
+            <span class="planner-row-name" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
+          </div>
+          <div class="planner-row-meta">${escapeHtml(item.meta)}</div>
+          ${plannerReasonPills(item.reasons)}
+        </div>
+        ${projectTaskButton(item.project)}
+      </div>
+    `).join('')}</div>`;
+  };
+
+  const renderDeadlineRadar = () => {
+    if (deadlineProjects.length === 0) {
+      return '<div class="planner-empty">No client projects or deadlines yet.</div>';
+    }
+    return `<div class="planner-deadline-list">${deadlineProjects.map((project, index) => {
+      const dateValue = project.hard_deadline || project.due_date || '';
+      const label = projectDeadlineLabel(project) || (project.type === 'client' ? 'Client project' : 'Deadline');
+      const reasons = [
+        { label, className: deadlinePillClass(project.deadline_state) },
+        ...(project.priority ? [{ label: `${projectPriorityLabel(project.priority)} priority`, className: 'is-priority' }] : []),
+        ...projectDeadlineReasons(project),
+      ];
+      return `
+        <div class="planner-deadline-row">
+          <div class="planner-row-main">
+            <div class="planner-row-title">${projectBadge(project, index)}</div>
+            <div class="planner-row-meta">${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(projectStatusLabel(project.status))} · ${escapeHtml(lastWorkedLabel(project))}</div>
+            ${plannerReasonPills(reasons)}
+          </div>
+          <div class="planner-deadline-date">
+            <span>${project.hard_deadline ? 'Hard' : project.due_date ? 'Due' : 'Date'}</span>
+            <strong>${escapeHtml(compactDateLabel(dateValue))}</strong>
+            ${projectTaskButton(project)}
+          </div>
+        </div>
+      `;
+    }).join('')}</div>`;
+  };
+
+  const renderBoardProject = (project, index) => `
+    <div class="planner-board-project">
+      <div class="planner-project-line">
+        ${projectBadge(project, index)}
+        <span class="planner-project-stats">${fmt.dur(project.total_seconds || 0)}</span>
+      </div>
+      <div class="planner-row-meta">${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(lastWorkedLabel(project))}</div>
+      ${projectMetaControls(project)}
+      ${projectTaskButton(project)}
+    </div>
+  `;
+
+  const renderBoardColumn = ({ value, label, projects: groupProjects }) => `
+    <div class="planner-board-column" data-planner-status="${value}">
+      <div class="planner-board-head">
+        <span>${escapeHtml(label)}</span>
+        <span class="planner-board-count">${groupProjects.length}</span>
+      </div>
+      ${groupProjects.length
+        ? groupProjects.map(renderBoardProject).join('')
+        : '<div class="planner-empty">No projects</div>'}
+    </div>
+  `;
+
+  plannerEl.innerHTML = `
+    <div class="planner-shell">
+      <div class="planner-summary">
+        <div class="planner-summary-tile">
+          <div class="planner-kpi">${focusItems.length}</div>
+          <div>
+            <div class="planner-kpi-label">Next Actions</div>
+            <div class="planner-kpi-note">${topSuggestion ? escapeHtml(topSuggestion.action) : 'Add tasks or metadata'}</div>
+          </div>
+        </div>
+        <div class="planner-summary-tile">
+          <div class="planner-kpi">${clientCount}</div>
+          <div>
+            <div class="planner-kpi-label">Client Projects</div>
+            <div class="planner-kpi-note">Active client work only</div>
+          </div>
+        </div>
+        <div class="planner-summary-tile">
+          <div class="planner-kpi">${finishingCount}</div>
+          <div>
+            <div class="planner-kpi-label">Finishing</div>
+            <div class="planner-kpi-note">Songs closest to done</div>
+          </div>
+        </div>
+        <div class="planner-summary-tile">
+          <div class="planner-kpi">${staleActive.length}</div>
+          <div>
+            <div class="planner-kpi-label">Stale Active</div>
+            <div class="planner-kpi-note">No tracked work in 7+ days</div>
+          </div>
+        </div>
+      </div>
+
+      <section class="planner-panel">
+        <div class="planner-panel-head">
+          <div>
+            <div class="planner-panel-title">Deadline Radar</div>
+            <div class="planner-panel-meta">Client projects and dated work ordered by urgency, with visible reasons from tracked activity and task state</div>
+          </div>
+        </div>
+        ${renderDeadlineRadar()}
+      </section>
+
+      <section class="planner-panel">
+        <div class="planner-panel-head">
+          <div>
+            <div class="planner-panel-title">Goals</div>
+            <div class="planner-panel-meta">Flexible session, hour, finish, and project-touch goals measured from tracked activity</div>
+          </div>
+        </div>
+        ${renderPlannerGoalForm()}
+        ${renderPlannerGoalRows(plannerGoals)}
+      </section>
+
+      <div class="planner-grid">
+        <section class="planner-panel">
+          <div class="planner-panel-head">
+            <div>
+              <div class="planner-panel-title">Suggested Next Actions</div>
+              <div class="planner-panel-meta">Task, deadline, goal, and momentum-aware recommendations with visible reasons</div>
+            </div>
+          </div>
+          ${renderFocus()}
+        </section>
+
+        <section class="planner-panel">
+          <div class="planner-panel-head">
+            <div>
+              <div class="planner-panel-title">Recent Active</div>
+              <div class="planner-panel-meta">Active projects touched in the last 7 days</div>
+            </div>
+          </div>
+          ${recentActive.length
+            ? `<div class="planner-recent-list">${recentActive.slice(0, 8).map((project, index) => `
+                <div class="planner-recent-row">
+                  <div class="planner-row-main">
+                    <div class="planner-row-title">${projectBadge(project, index)}</div>
+                    <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status))} · ${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(lastWorkedLabel(project))}</div>
+                  </div>
+                  ${projectTaskButton(project)}
+                </div>
+              `).join('')}</div>`
+            : '<div class="planner-empty">No recently active projects.</div>'}
+        </section>
+      </div>
+
+      <section class="planner-panel">
+        <div class="planner-panel-head">
+          <div>
+            <div class="planner-panel-title">Project Board</div>
+            <div class="planner-panel-meta">Grouped by project status. Use the controls to keep planning metadata current.</div>
+          </div>
+        </div>
+        <div class="planner-board">
+          ${unsortedProjects.length ? renderBoardColumn({ value: '', label: 'Unsorted', projects: unsortedProjects }) : ''}
+          ${statusGroups.map(renderBoardColumn).join('')}
+        </div>
+      </section>
+    </div>
+  `;
+  bindProjectMetaControls();
+  bindProjectTaskTriggers();
+  bindPlannerGoals();
+}
+
 function render(data) {
   if (detailModalAbort) {
     detailModalAbort.abort();
@@ -4196,8 +5529,10 @@ function render(data) {
   if (data.error) {
     const errHtml = `<div class="empty"><p>${escapeHtml(data.error)}</p><small>run start_tracker.command</small></div>`;
     const dashEl = document.getElementById('appDashboard');
+    const plannerEl = document.getElementById('appPlanner');
     const setEl  = document.getElementById('appSettings');
     if (dashEl) dashEl.innerHTML = errHtml;
+    if (plannerEl) plannerEl.innerHTML = errHtml;
     if (setEl)  { setEl.innerHTML = errHtml; setEl.dataset.rendered = 'true'; }
     return;
   }
@@ -4217,6 +5552,9 @@ function render(data) {
   if (activeView === 'settings') {
     renderSettings(data);
     // fall through and also refresh the (hidden) dashboard so the next switch is instant
+  }
+  if (activeView === 'planner') {
+    renderPlanner(data);
   }
 
   updateSessionStatus(summary);
@@ -4380,6 +5718,8 @@ function render(data) {
               <th style="width:40px">#</th>
               <th>Project</th>
               <th>Category</th>
+              <th>Status / Type</th>
+              <th>Tasks</th>
               <th style="text-align:right">Total</th>
               <th style="text-align:right">Sessions</th>
             </tr></thead>
@@ -4394,6 +5734,8 @@ function render(data) {
                     </div>
                   </td>
                   <td>${categoryPill(p)}</td>
+                  <td>${projectMetaControls(p)}</td>
+                  <td>${projectTaskButton(p)}</td>
                   <td class="dur">${fmt.dur(p.total_seconds)}</td>
                   <td class="num">${p.session_count}</td>
                 </tr>`;
@@ -4492,6 +5834,8 @@ function render(data) {
   if (bp) bp.addEventListener('click', clearPhantoms);
   if (bu) bu.addEventListener('click', clearUnsaved);
   bindCategoryTriggers();
+  bindProjectMetaControls();
+  bindProjectTaskTriggers();
   bindRowDeleteTriggers();
   bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
