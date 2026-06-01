@@ -21,7 +21,6 @@ from tracker import (
     cleanup_phantom_sessions,
     condense_recent_sessions,
     count_phantom_sessions,
-    get_project_name,
     is_ableton_running,
 )
 
@@ -2310,6 +2309,7 @@ def get_stats(month_value: str = "") -> dict:
             """).fetchone()
             live_duration_seconds = 0.0
             live_start_time = None
+            ableton_has_project = False
             if live:
                 live_start_time = float(live["start_time"] or 0)
                 live_last_seen = float(live["last_seen_time"] or live_start_time or now_ts)
@@ -2318,6 +2318,8 @@ def get_stats(month_value: str = "") -> dict:
                     live_active_seconds + max(0.0, now_ts - live_last_seen),
                     0.0,
                 )
+                ableton_has_project = bool((live["project_name"] or "").strip())
+            ableton_running = True if ableton_has_project else is_ableton_running()
 
             project_rows = []
             for row in projects:
@@ -2426,8 +2428,8 @@ def get_stats(month_value: str = "") -> dict:
                     "live_project":   live["project_name"] if live else None,
                     "live_session_start_time": live_start_time,
                     "live_session_duration_seconds": live_duration_seconds,
-                    "ableton_running": is_ableton_running(),
-                    "ableton_has_project": bool(get_project_name()),
+                    "ableton_running": ableton_running,
+                    "ableton_has_project": ableton_has_project,
                     "generated_at": now_ts,
                     "closed_session_count": closed_session_count,
                     "unsaved_closed_count": unsaved_closed_count,

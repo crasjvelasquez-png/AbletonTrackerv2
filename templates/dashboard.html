@@ -1106,6 +1106,158 @@ header{
   letter-spacing:-.04em;
   color:var(--ink);
 }
+.pace-card .chart-wrap{
+  min-height:250px;
+}
+.pace-panel{
+  height:100%;
+  display:grid;
+  align-content:space-between;
+  gap:18px;
+}
+.pace-hero{
+  display:grid;
+  gap:8px;
+}
+.pace-kicker{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.pace-value{
+  font-family:var(--font-display);
+  font-size:clamp(34px,4vw,52px);
+  line-height:.95;
+  letter-spacing:-.045em;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.pace-value small{
+  font-family:var(--font-body);
+  font-size:.34em;
+  font-weight:800;
+  color:var(--ink-4);
+  letter-spacing:0;
+}
+.pace-subline{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  color:var(--ink-3);
+  font-size:13px;
+  font-weight:700;
+}
+.pace-status{
+  color:var(--pace-accent,var(--ink-3));
+}
+.pace-bar{
+  height:14px;
+  border-radius:999px;
+  overflow:hidden;
+  background:color-mix(in srgb, var(--ink-4) 16%, transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--border) 76%, transparent);
+}
+.pace-bar-fill{
+  height:100%;
+  width:var(--pace-progress,0%);
+  max-width:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,var(--pace-accent,var(--accent)),color-mix(in srgb,var(--pace-accent,var(--accent)) 68%,white 24%));
+  transition:width .7s var(--ease-spring), background .25s ease;
+}
+.pace-stats{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.pace-stat{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:12px;
+  background:color-mix(in srgb, var(--control-bg) 74%, transparent);
+}
+.pace-stat span{
+  display:block;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.pace-stat strong{
+  display:block;
+  margin-top:5px;
+  font-family:var(--font-display);
+  font-size:24px;
+  line-height:1;
+  letter-spacing:-.04em;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.pace-goal-edit{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:12px;
+  align-items:end;
+}
+.pace-goal-edit .goal-input-row{
+  justify-items:start;
+  grid-template-columns:1fr auto;
+}
+.pace-goal-edit .goal-presets{
+  justify-content:flex-end;
+}
+.week-strip{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:8px;
+}
+.week-day{
+  display:grid;
+  gap:7px;
+  justify-items:center;
+  min-width:0;
+}
+.week-dot{
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  border:2px solid color-mix(in srgb,var(--ink-4) 36%,transparent);
+  background:transparent;
+  box-shadow:inset 0 0 0 4px color-mix(in srgb,var(--surface-2) 52%,transparent);
+}
+.week-day.is-logged .week-dot{
+  border-color:var(--pace-accent,var(--accent));
+  background:var(--pace-accent,var(--accent));
+  box-shadow:0 0 18px color-mix(in srgb,var(--pace-accent,var(--accent)) 24%,transparent);
+}
+.week-day.is-today .week-dot{
+  border-color:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent),0 0 18px color-mix(in srgb,var(--accent) 22%,transparent);
+}
+.week-day.is-today.is-logged .week-dot{
+  background:linear-gradient(90deg,var(--pace-accent,var(--accent)) 55%,transparent 55%);
+}
+.week-day span{
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+  white-space:nowrap;
+}
+.week-day.is-today span{
+  color:var(--ink-2);
+}
+.required-note{
+  color:var(--ink-3);
+  font-size:13px;
+  font-weight:700;
+  line-height:1.45;
+}
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
 }
@@ -1488,13 +1640,21 @@ header{
   outline:none;
 }
 .task-input{padding:8px 11px;min-width:0}
-.task-priority-select{padding:8px 26px 8px 10px;font-weight:600}
+.task-priority-select{
+  padding:8px 26px 8px 10px;font-weight:600;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
+  cursor:pointer;
+}
 .task-input:focus,
 .task-priority-select:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
 .project-task-pill{
-  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg-strong);
   color:var(--ink-2);padding:7px 11px;display:inline-flex;align-items:center;gap:7px;
   font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;
   transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
@@ -2108,9 +2268,14 @@ tbody tr:hover .row-note{opacity:1}
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
 }
 .project-meta-select{
-  min-width:118px;border:1px solid var(--border);background:var(--control-bg);
+  min-width:118px;border:1px solid var(--border);background:var(--control-bg-strong);
   color:var(--ink);border-radius:12px;padding:8px 28px 8px 10px;
-  font-size:12px;font-weight:600;appearance:auto;
+  font-size:12px;font-weight:600;appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
+  cursor:pointer;
 }
 .project-meta-select:focus{
   outline:none;border-color:var(--accent);
@@ -2321,6 +2486,11 @@ tbody tr:hover .row-note{opacity:1}
   .target-card .goal-shell{grid-template-columns:1fr;gap:14px}
   .target-card .goal-ring{width:min(200px,100%)}
   .target-card .goal-controls{padding:12px}
+  .pace-goal-edit{grid-template-columns:1fr}
+  .pace-goal-edit .goal-presets{justify-content:start}
+  .pace-stats{grid-template-columns:1fr}
+  .week-strip{gap:5px}
+  .week-dot{width:18px;height:18px}
   .card{min-height:190px;padding:24px 18px 20px}
   .card-value{font-size:32px}
   .card-value--text{font-size:21px}
@@ -2623,6 +2793,7 @@ const weeklyTargetState = {
   requestToken: 0,
   historyRequestToken: 0,
   historyRows: [],
+  dailyRows: [],
 };
 
 function activeTheme() {
@@ -3410,6 +3581,21 @@ function buildWeeklyTargetModel(target) {
   const tone = targetTone(progressRatio, hasGoal);
   const shortfallSeconds = hasGoal ? Math.max(0, Math.round(goalHours * 3600 - progressSeconds)) : 0;
   const percent = hasGoal ? Math.round(progressRatio * 100) : 0;
+  const todayKey = localDateKey(new Date());
+  const isCurrentWeek = weekStart === currentWeekStartKey();
+  const isPastWeek = weekEnd < todayKey;
+  const isFutureWeek = weekStart > todayKey;
+  const dayIndex = clamp(Math.floor((dateFromKey(todayKey) - dateFromKey(weekStart)) / 86400000), 0, 6);
+  const elapsedDays = isFutureWeek ? 0 : (isPastWeek ? 7 : dayIndex + 1);
+  const remainingDays = isCurrentWeek ? Math.max(1, 7 - dayIndex) : 0;
+  const elapsedFraction = isFutureWeek ? 0 : (isPastWeek ? 1 : elapsedDays / 7);
+  const idealSeconds = hasGoal ? Math.round(goalHours * 3600 * elapsedFraction) : 0;
+  const paceDeltaSeconds = hasGoal ? Math.round(progressSeconds - idealSeconds) : 0;
+  const projectedSeconds = hasGoal
+    ? (elapsedDays > 0 ? Math.round((progressSeconds / elapsedDays) * 7) : 0)
+    : progressSeconds;
+  const requiredPerDaySeconds = hasGoal && remainingDays > 0 ? Math.ceil(shortfallSeconds / remainingDays) : 0;
+  const status = weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek });
   return {
     weekStart,
     weekEnd,
@@ -3423,7 +3609,69 @@ function buildWeeklyTargetModel(target) {
     progressText: hasGoal ? `${fmt.dur(progressSeconds)} of ${formatHoursNumber(goalHours)}h` : fmt.dur(progressSeconds),
     shortfallText: hasGoal ? (shortfallSeconds > 0 ? `${fmt.dur(shortfallSeconds)} short` : goalRemainingText(goalHours * 3600, progressSeconds)) : 'No weekly goal saved',
     remainingLabel: hasGoal ? goalRemainingText(goalHours * 3600, progressSeconds) : 'No weekly goal saved',
+    shortfallSeconds,
+    todayKey,
+    isCurrentWeek,
+    isPastWeek,
+    isFutureWeek,
+    elapsedDays,
+    remainingDays,
+    idealSeconds,
+    paceDeltaSeconds,
+    projectedSeconds,
+    requiredPerDaySeconds,
+    status,
   };
+}
+
+function weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek }) {
+  if (!hasGoal) return { label: 'Set a weekly goal', accent: '#8e8e93', className: 'is-empty' };
+  const goalSeconds = goalHours * 3600;
+  if (progressSeconds >= goalSeconds) return { label: 'Goal met', accent: '#30a455', className: 'is-met' };
+  if (isFutureWeek) return { label: 'Starts soon', accent: '#8e8e93', className: 'is-empty' };
+  const abs = Math.abs(paceDeltaSeconds);
+  if (isPastWeek) return { label: `${fmt.dur(goalSeconds - progressSeconds)} short`, accent: '#a05050', className: 'is-far' };
+  if (paceDeltaSeconds >= 0) return { label: `Ahead by ${fmt.dur(abs)}`, accent: '#30a455', className: 'is-met' };
+  const amberCutoff = Math.max(30 * 60, goalSeconds * 0.04);
+  return {
+    label: `Behind by ${fmt.dur(abs)}`,
+    accent: abs <= amberCutoff ? '#c89430' : '#a05050',
+    className: abs <= amberCutoff ? 'is-mid' : 'is-far',
+  };
+}
+
+function dailySecondsByKey(rows = []) {
+  const map = new Map();
+  rows.forEach(row => {
+    if (row && row.day) map.set(row.day, Math.max(0, row.total_seconds || 0));
+  });
+  return map;
+}
+
+function renderWeekStrip(model) {
+  const byDay = dailySecondsByKey(weeklyTargetState.dailyRows);
+  const start = dateFromKey(model.weekStart);
+  const todayKey = model.todayKey;
+  return `
+    <div class="week-strip" aria-label="Weekly activity by day">
+      ${Array.from({ length: 7 }, (_, index) => {
+        const dateKey = localDateKey(addDays(start, index));
+        const seconds = byDay.get(dateKey) || 0;
+        const classes = [
+          'week-day',
+          seconds > 0 ? 'is-logged' : '',
+          dateKey === todayKey ? 'is-today' : '',
+        ].filter(Boolean).join(' ');
+        const dayLabel = dateFromKey(dateKey).toLocaleDateString('en-US', { weekday: 'short' });
+        return `
+          <div class="${classes}" title="${dayLabel} · ${fmt.dur(seconds)}">
+            <i class="week-dot" aria-hidden="true"></i>
+            <span>${dayLabel.slice(0, 3)}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 function renderWeeklyTargetDetail() {
@@ -5656,33 +5904,20 @@ function render(data) {
     </div>
 
     <div class="rings-row">
-      <div class="chart-card target-card" role="button" tabindex="0" data-detail="daily-target" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
         <div class="section-head daily-target-head">
-          <h3 class="section-title">Daily <em>Target</em></h3>
+          <h3 class="section-title">Weekly <em>Pace</em></h3>
           <div class="daily-target-head-side">
-            <div class="daily-target-nav" aria-label="Daily target date navigation">
-              <button class="btn small daily-target-today-btn" id="dailyTargetTodayBtn" type="button" hidden>Today</button>
-              <button class="daily-target-nav-btn" id="dailyTargetPrev" type="button" aria-label="Show previous date">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
-                </svg>
-              </button>
-              <button class="daily-target-nav-btn" id="dailyTargetNext" type="button" aria-label="Show next date">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
-                </svg>
-              </button>
-            </div>
             <div class="section-meta">
-              <span id="dailyTargetViewedLabel">Today</span>
+              <span id="weeklyTargetRangeLabel">Current Week</span>
             </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
+        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
       </div>
-      <div class="chart-card target-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
         <div class="section-head daily-target-head">
-          <h3 class="section-title">Weekly <em>Target</em></h3>
+          <h3 class="section-title">Today's <em>Required</em></h3>
           <div class="daily-target-head-side">
             <div class="daily-target-nav" aria-label="Weekly target date navigation">
               <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
@@ -5698,11 +5933,11 @@ function render(data) {
               </button>
             </div>
             <div class="section-meta">
-              <span id="weeklyTargetRangeLabel">Current Week</span>
+              <span id="weeklyRequiredContext">This week</span>
             </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
+        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
       </div>
     </div>
 
@@ -5856,8 +6091,7 @@ function render(data) {
   bindDetailCards({ summary, projects, year_daily });
 
   renderWeeklyRhythm(year_daily, year_hourly);
-  renderDailyGoal(summary);
-  renderWeeklyGoal(summary);
+  renderWeeklyGoal(summary, year_daily);
   renderCategoryChart(projects, summary);
 }
 
@@ -6255,52 +6489,112 @@ function updateWeeklyTargetMeta({ weekStart }) {
 
 function renderWeeklyTargetCard(target) {
   const mount = document.getElementById('weeklyGoalCard');
+  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
 
   const model = buildWeeklyTargetModel(target);
-  const progress = model.progressRatio;
-  const percent = model.percent;
-  const tone = model.tone;
-  const remainingLabel = model.remainingLabel;
+  const progressPct = model.hasGoal ? clamp(Math.round(model.progressRatio * 100), 0, 100) : 0;
+  const progressLabel = model.hasGoal ? `${Math.min(model.percent, 999)}%` : 'No goal';
+  const goalLabel = model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : 'Goal';
+  const editGoalHours = model.hasGoal ? model.goalHours : 20;
+  const projectedLabel = model.hasGoal ? fmt.dur(model.projectedSeconds) : '--';
+  const remainingLabel = model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--';
+  const requiredLabel = model.hasGoal ? fmt.dur(model.requiredPerDaySeconds) : '--';
+  const requiredContext = document.getElementById('weeklyRequiredContext');
+  const requiredHeadline = !model.hasGoal
+    ? 'Set a weekly goal'
+    : model.isPastWeek
+      ? 'Final result'
+      : model.isFutureWeek
+        ? 'Starts soon'
+        : model.isMet
+          ? '0m'
+          : requiredLabel;
+  const requiredCopy = !model.hasGoal
+    ? 'Add a weekly target to turn progress into a daily pace.'
+    : model.isPastWeek
+      ? `${model.progressText} logged.`
+      : model.isFutureWeek
+        ? `Week starts ${shortDate(model.weekStart)}.`
+        : model.isMet
+          ? 'Weekly goal met. Extra time is optional.'
+          : `needed per remaining day · ${model.remainingDays} day${model.remainingDays === 1 ? '' : 's'} left`;
 
   updateWeeklyTargetMeta({
     weekStart: model.weekStart,
     weekEnd: model.weekEnd,
   });
+  if (requiredContext) {
+    requiredContext.textContent = model.isCurrentWeek ? 'This week' : humanWeeklyTargetLabel(model.weekStart);
+  }
 
   mount.innerHTML = `
-    <div class="goal-shell">
-      <div class="goal-ring-wrap">
-        ${renderGoalRing({
-          progressRatio: progress,
-          hasGoal: model.hasGoal,
-          label: `${Math.min(percent, 999)}% complete`,
-        })}
-      </div>
-      <div class="goal-controls" style="--target-accent:${tone.accent}">
-        <div class="goal-progress-copy">
-          <span>Time spent: <strong>${fmt.dur(model.progressSeconds)}</strong></span>
-          <span class="goal-left">Time left: ${remainingLabel}</span>
+    <div class="pace-panel" style="--pace-accent:${model.status.accent};--pace-progress:${progressPct}%">
+      <div class="pace-hero">
+        <div class="pace-kicker">${model.hasGoal ? 'Logged / goal' : 'Logged this week'}</div>
+        <div class="pace-value">${fmt.dur(model.progressSeconds)} <small>/ ${goalLabel}</small></div>
+        <div class="pace-bar" aria-label="${escapeHtml(progressLabel)} complete">
+          <div class="pace-bar-fill"></div>
         </div>
+        <div class="pace-subline">
+          <span class="pace-status">${escapeHtml(model.status.label)}</span>
+          <span>${progressLabel}</span>
+        </div>
+      </div>
+      <div class="pace-stats">
+        <div class="pace-stat">
+          <span>Projected</span>
+          <strong>${projectedLabel}</strong>
+        </div>
+        <div class="pace-stat">
+          <span>Remaining</span>
+          <strong>${remainingLabel}</strong>
+        </div>
+      </div>
+      <div class="pace-goal-edit">
         <div class="goal-input-row">
           <label class="goal-label" for="weeklyGoalCardInput">
             <strong>Weekly goal</strong>
           </label>
           <div class="goal-input-wrap">
-            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${model.goalHours}">
+            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${editGoalHours}">
             <span class="goal-unit">hours</span>
           </div>
         </div>
         <div class="goal-presets">
           ${[10, 20, 30, 40].map(hours => `
-            <button class="goal-chip ${Math.abs(model.goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
+            <button class="goal-chip ${Math.abs(editGoalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
           `).join('')}
         </div>
       </div>
     </div>
   `;
 
-  animateGoalRings(mount);
+  if (requiredMount) {
+    requiredMount.innerHTML = `
+      <div class="pace-panel" style="--pace-accent:${model.status.accent}">
+        <div class="pace-hero">
+          <div class="pace-kicker">${model.isCurrentWeek ? 'Today' : 'Selected week'}</div>
+          <div class="pace-value">${requiredHeadline}</div>
+          <div class="required-note">${requiredCopy}</div>
+        </div>
+        ${renderWeekStrip(model)}
+        <div class="pace-stats">
+          <div class="pace-stat">
+            <span>Goal</span>
+            <strong>${model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : '--'}</strong>
+          </div>
+          <div class="pace-stat">
+            <span>${model.isPastWeek ? 'Shortfall' : 'Left'}</span>
+            <strong>${model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--'}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+    requiredMount.classList.remove('is-fresh');
+    void requiredMount.offsetWidth;
+    requiredMount.classList.add('is-fresh');
+  }
 
   mount.classList.remove('is-fresh');
   void mount.offsetWidth;
@@ -6308,7 +6602,7 @@ function renderWeeklyTargetCard(target) {
 
   const input = mount.querySelector('#weeklyGoalCardInput');
   const repaint = async nextValue => {
-    const normalized = clamp(Math.round((Number(nextValue) || model.goalHours) * 10) / 10, 1, 100);
+    const normalized = clamp(Math.round((Number(nextValue) || editGoalHours) * 10) / 10, 1, 100);
     mount.classList.add('is-loading');
     try {
       await postJson('/api/weekly-target', { goal_hours: normalized });
@@ -6331,9 +6625,11 @@ function renderWeeklyTargetCard(target) {
   });
 }
 
-async function loadWeeklyTarget(summary = {}) {
+async function loadWeeklyTarget(summary = {}, yearDaily = []) {
   const mount = document.getElementById('weeklyGoalCard');
+  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
+  weeklyTargetState.dailyRows = Array.isArray(yearDaily) ? yearDaily : [];
   if (!weeklyTargetState.currentWeekStartDate) {
     weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
   }
@@ -6346,6 +6642,7 @@ async function loadWeeklyTarget(summary = {}) {
     note: 'Loading target…',
   });
   mount.classList.add('is-loading');
+  if (requiredMount) requiredMount.classList.add('is-loading');
   mount.setAttribute('aria-busy', 'true');
   const token = ++weeklyTargetState.requestToken;
   try {
@@ -6364,20 +6661,23 @@ async function loadWeeklyTarget(summary = {}) {
       note: 'Could not load target',
     });
     mount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
+    if (requiredMount) requiredMount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
     toast(error.message || 'Failed to load weekly target');
   } finally {
     if (token === weeklyTargetState.requestToken) {
       mount.classList.remove('is-loading');
+      if (requiredMount) requiredMount.classList.remove('is-loading');
       mount.removeAttribute('aria-busy');
     }
   }
 }
 
-function renderWeeklyGoal(summary) {
+function renderWeeklyGoal(summary, yearDaily = []) {
   const prevBtn = document.getElementById('weeklyTargetPrev');
   const nextBtn = document.getElementById('weeklyTargetNext');
   const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
   if (!prevBtn || !nextBtn || !currentBtn) return;
+  weeklyTargetState.dailyRows = Array.isArray(yearDaily) ? yearDaily : [];
 
   if (!weeklyTargetState.currentWeekStartDate) {
     weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
@@ -6385,17 +6685,17 @@ function renderWeeklyGoal(summary) {
 
   const moveByWeeks = amount => {
     weeklyTargetState.currentWeekStartDate = localDateKey(addDays(dateFromKey(weeklyTargetState.currentWeekStartDate), amount * 7));
-    loadWeeklyTarget(summary);
+    loadWeeklyTarget(summary, yearDaily);
   };
 
-  prevBtn.addEventListener('click', () => moveByWeeks(-1));
-  nextBtn.addEventListener('click', () => moveByWeeks(1));
-  currentBtn.addEventListener('click', () => {
+  prevBtn.onclick = () => moveByWeeks(-1);
+  nextBtn.onclick = () => moveByWeeks(1);
+  currentBtn.onclick = () => {
     weeklyTargetState.currentWeekStartDate = currentWeekStartKey();
-    loadWeeklyTarget(summary);
-  });
+    loadWeeklyTarget(summary, yearDaily);
+  };
 
-  loadWeeklyTarget(summary);
+  loadWeeklyTarget(summary, yearDaily);
 }
 
 function updateDailyTargetMeta({ dateKey }) {
