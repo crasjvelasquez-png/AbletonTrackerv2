@@ -325,6 +325,22 @@ def ensure_project_category_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_artists_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS artists (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            email      TEXT NOT NULL DEFAULT '',
+            phone      TEXT NOT NULL DEFAULT '',
+            instagram  TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """
+    )
+
+
 def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -336,6 +352,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
             due_date     TEXT NOT NULL DEFAULT '',
             hard_deadline TEXT NOT NULL DEFAULT '',
             turn_in_date TEXT NOT NULL DEFAULT '',
+            artist_id    TEXT NOT NULL DEFAULT '',
             updated_at   INTEGER NOT NULL
         )
         """
@@ -349,6 +366,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         "due_date": "TEXT NOT NULL DEFAULT ''",
         "hard_deadline": "TEXT NOT NULL DEFAULT ''",
         "turn_in_date": "TEXT NOT NULL DEFAULT ''",
+        "artist_id": "TEXT NOT NULL DEFAULT ''",
     }
     for column, definition in metadata_columns.items():
         if column not in existing_columns:
@@ -530,6 +548,7 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
 
 
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
+    ensure_artists_table(conn)
     ensure_category_definitions_table(conn)
     ensure_project_category_table(conn)
     ensure_project_metadata_table(conn)
@@ -623,33 +642,115 @@ def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
     return categories
 
 
+def get_project_status_options(conn: sqlite3.Connection) -> dict[str, str]:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = 'project_status_options'").fetchone()
+    if row and row[0]:
+        try:
+            return json.loads(row[0])
+        except Exception:
+            pass
+    return PROJECT_STATUS_OPTIONS
+
+
+def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = 'project_type_options'").fetchone()
+    if row and row[0]:
+        try:
+            return json.loads(row[0])
+        except Exception:
+            pass
+    return PROJECT_TYPE_OPTIONS
+
+
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date
+        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id
         FROM project_metadata
         """
     ).fetchall()
     metadata = {}
+    status_options = get_project_status_options(conn)
+    type_options = get_project_type_options(conn)
     for row in rows:
-        status = row["status"] if row["status"] in PROJECT_STATUS_OPTIONS else ""
-        project_type = row["type"] if row["type"] in PROJECT_TYPE_OPTIONS else ""
+        status = row["status"] if row["status"] in status_options else ""
+        project_type = row["type"] if row["type"] in type_options else ""
         priority = row["priority"] if row["priority"] in PROJECT_PRIORITY_OPTIONS else ""
         due_date = row["due_date"] if _is_valid_date_string(row["due_date"]) else ""
         hard_deadline = row["hard_deadline"] if _is_valid_date_string(row["hard_deadline"]) else ""
         turn_in_date = row["turn_in_date"] if _is_valid_date_string(row["turn_in_date"]) else ""
         metadata[row["project_name"]] = {
             "status": status,
-            "status_label": PROJECT_STATUS_OPTIONS.get(status, ""),
+            "status_label": status_options.get(status, ""),
             "type": project_type,
-            "type_label": PROJECT_TYPE_OPTIONS.get(project_type, ""),
+            "type_label": type_options.get(project_type, ""),
             "priority": priority,
             "priority_label": PROJECT_PRIORITY_OPTIONS.get(priority, ""),
             "due_date": due_date,
             "hard_deadline": hard_deadline,
             "turn_in_date": turn_in_date,
+            "artist_id": row["artist_id"] or "",
         }
     return metadata
+
+
+def get_artists(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT id, name, email, phone, instagram, created_at, updated_at
+        FROM artists
+        ORDER BY name COLLATE NOCASE ASC
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_artist(conn: sqlite3.Connection, artist_id: str, name: str, email: str = "", phone: str = "", instagram: str = "") -> dict:
+    normalized_name = name.strip()
+    if not normalized_name:
+        return {"error": "Artist name is required."}
+    
+    conn.execute(
+        """
+        INSERT INTO artists (id, name, email, phone, instagram, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+        """,
+        (artist_id, normalized_name, email.strip(), phone.strip(), instagram.strip())
+    )
+    conn.commit()
+    return {"ok": True, "id": artist_id, "name": normalized_name}
+
+
+def update_artist(conn: sqlite3.Connection, artist_id: str, name: str, email: str = "", phone: str = "", instagram: str = "") -> dict:
+    normalized_name = name.strip()
+    if not normalized_name:
+        return {"error": "Artist name is required."}
+
+    cur = conn.execute(
+        """
+        UPDATE artists
+        SET name = ?, email = ?, phone = ?, instagram = ?, updated_at = strftime('%s', 'now')
+        WHERE id = ?
+        """,
+        (normalized_name, email.strip(), phone.strip(), instagram.strip(), artist_id)
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        return {"error": "Artist not found."}
+    return {"ok": True, "id": artist_id, "name": normalized_name}
+
+
+def delete_artist(conn: sqlite3.Connection, artist_id: str) -> dict:
+    cur = conn.execute("DELETE FROM artists WHERE id = ?", (artist_id,))
+    conn.commit()
+    if cur.rowcount == 0:
+        return {"error": "Artist not found."}
+    
+    # Remove artist_id from projects
+    conn.execute("UPDATE project_metadata SET artist_id = '' WHERE artist_id = ?", (artist_id,))
+    conn.commit()
+    
+    return {"ok": True, "deleted": cur.rowcount}
 
 
 def _is_valid_date_string(value: str | None) -> bool:
@@ -670,17 +771,24 @@ def _normalize_project_metadata_fields(
     due_date: str | None = "",
     hard_deadline: str | None = "",
     turn_in_date: str | None = "",
-) -> tuple[str, str, str, str, str, str] | dict:
+    artist_id: str | None = "",
+    status_options: dict[str, str] | None = None,
+    type_options: dict[str, str] | None = None,
+) -> tuple[str, str, str, str, str, str, str] | dict:
+    status_options = status_options or PROJECT_STATUS_OPTIONS
+    type_options = type_options or PROJECT_TYPE_OPTIONS
+
     normalized_status = (status or "").strip().lower()
     normalized_type = (project_type or "").strip().lower()
     normalized_priority = (priority or "").strip().lower()
     normalized_due_date = (due_date or "").strip()
     normalized_hard_deadline = (hard_deadline or "").strip()
     normalized_turn_in_date = (turn_in_date or "").strip()
+    normalized_artist_id = (artist_id or "").strip()
 
-    if normalized_status and normalized_status not in PROJECT_STATUS_OPTIONS:
+    if normalized_status and normalized_status not in status_options:
         return {"error": "Unknown project status."}
-    if normalized_type and normalized_type not in PROJECT_TYPE_OPTIONS:
+    if normalized_type and normalized_type not in type_options:
         return {"error": "Unknown project type."}
     if normalized_priority and normalized_priority not in PROJECT_PRIORITY_OPTIONS:
         return {"error": "Unknown project priority."}
@@ -695,6 +803,7 @@ def _normalize_project_metadata_fields(
         normalized_due_date,
         normalized_hard_deadline,
         normalized_turn_in_date,
+        normalized_artist_id,
     )
 
 
@@ -1447,6 +1556,7 @@ def set_project_metadata(
     due_date: str | None = None,
     hard_deadline: str | None = None,
     turn_in_date: str | None = None,
+    artist_id: str | None = None,
 ) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
@@ -1459,7 +1569,7 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT status, type, priority, due_date, hard_deadline, turn_in_date
+            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id
             FROM project_metadata
             WHERE project_name = ?
             """,
@@ -1472,6 +1582,9 @@ def set_project_metadata(
             existing["due_date"] if due_date is None and existing else due_date,
             existing["hard_deadline"] if hard_deadline is None and existing else hard_deadline,
             existing["turn_in_date"] if turn_in_date is None and existing else turn_in_date,
+            existing["artist_id"] if artist_id is None and existing else artist_id,
+            get_project_status_options(conn),
+            get_project_type_options(conn),
         )
         if isinstance(normalized, dict):
             return normalized
@@ -1482,6 +1595,7 @@ def set_project_metadata(
             normalized_due_date,
             normalized_hard_deadline,
             normalized_turn_in_date,
+            normalized_artist_id,
         ) = normalized
 
         if not any(
@@ -1492,6 +1606,7 @@ def set_project_metadata(
                 normalized_due_date,
                 normalized_hard_deadline,
                 normalized_turn_in_date,
+                normalized_artist_id,
             )
         ):
             cur = conn.execute(
@@ -1513,15 +1628,16 @@ def set_project_metadata(
                     "due_date": "",
                     "hard_deadline": "",
                     "turn_in_date": "",
+                    "artist_id": "",
                 },
             }
 
         conn.execute(
             """
             INSERT INTO project_metadata (
-                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, updated_at
+                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             ON CONFLICT(project_name) DO UPDATE SET
                 status = excluded.status,
                 type = excluded.type,
@@ -1529,6 +1645,7 @@ def set_project_metadata(
                 due_date = excluded.due_date,
                 hard_deadline = excluded.hard_deadline,
                 turn_in_date = excluded.turn_in_date,
+                artist_id = excluded.artist_id,
                 updated_at = excluded.updated_at
             """,
             (
@@ -1539,6 +1656,7 @@ def set_project_metadata(
                 normalized_due_date,
                 normalized_hard_deadline,
                 normalized_turn_in_date,
+                normalized_artist_id,
             ),
         )
         conn.commit()
@@ -1547,14 +1665,15 @@ def set_project_metadata(
             "project_name": normalized_name,
             "metadata": {
                 "status": normalized_status,
-                "status_label": PROJECT_STATUS_OPTIONS.get(normalized_status, ""),
+                "status_label": get_project_status_options(conn).get(normalized_status, ""),
                 "type": normalized_type,
-                "type_label": PROJECT_TYPE_OPTIONS.get(normalized_type, ""),
+                "type_label": get_project_type_options(conn).get(normalized_type, ""),
                 "priority": normalized_priority,
                 "priority_label": PROJECT_PRIORITY_OPTIONS.get(normalized_priority, ""),
                 "due_date": normalized_due_date,
                 "hard_deadline": normalized_hard_deadline,
                 "turn_in_date": normalized_turn_in_date,
+                "artist_id": normalized_artist_id,
             },
         }
 
@@ -2155,6 +2274,7 @@ def get_stats(month_value: str = "") -> dict:
             project_metadata = get_project_metadata(conn)
             project_tasks = get_project_tasks_by_project(conn)
             planner_goals = get_planner_goals(conn)
+            artists = get_artists(conn)
 
             activity_rows = conn.execute("""
                 SELECT project_name, start_time, last_seen_time, end_time, active_seconds
@@ -2440,7 +2560,10 @@ def get_stats(month_value: str = "") -> dict:
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
                 "category_options": category_options,
+                "project_status_options": list(get_project_status_options(conn).items()),
+                "project_type_options": list(get_project_type_options(conn).items()),
                 "planner_goals": planner_goals,
+                "artists": artists,
                 "custom_category_limit": MAX_CUSTOM_CATEGORIES,
                 "custom_category_count": len(category_options),
             }
@@ -6011,7 +6134,61 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("due_date"),
                 payload.get("hard_deadline"),
                 payload.get("turn_in_date"),
+                payload.get("artist_id"),
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/artists":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            
+            with db_connection() as conn:
+                result = create_artist(
+                    conn,
+                    payload.get("id", ""),
+                    payload.get("name", ""),
+                    payload.get("email", ""),
+                    payload.get("phone", ""),
+                    payload.get("instagram", ""),
+                )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/artists/update":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            
+            with db_connection() as conn:
+                result = update_artist(
+                    conn,
+                    payload.get("id", ""),
+                    payload.get("name", ""),
+                    payload.get("email", ""),
+                    payload.get("phone", ""),
+                    payload.get("instagram", ""),
+                )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/artists/delete":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            
+            with db_connection() as conn:
+                result = delete_artist(conn, payload.get("id", ""))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-tasks":
             try:

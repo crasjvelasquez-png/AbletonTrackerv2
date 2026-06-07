@@ -17,9 +17,10 @@ class _RumpsApp:
         pass
 
 class _RumpsMenuItem:
-    def __init__(self, title, callback=None):
+    def __init__(self, title, callback=None, key=None):
         self.title = title
         self.callback = callback
+        self.key = key
 
     def set_callback(self, callback):
         self.callback = callback
@@ -450,7 +451,7 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             hid_idle_seconds=45)
         with patch.object(menubar, "day_seconds", return_value=0):
             self.app._refresh(None)
-        self.assertIn("Paused: idle", self.app.status_item.title)
+        self.assertIn("Idle 45s", self.app.status_item.title)
         self.assertIn("My Song", self.app.status_item.title)
 
     def test_refresh_idle_paused_seconds_label(self):
@@ -487,18 +488,21 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
     def test_refresh_shows_error(self):
         self.app.tracker_thread.tracker._consecutive_failures = 3
         self.app.tracker_thread.tracker._last_error = "Something broke badly"
-        with patch.object(menubar, "day_seconds", return_value=1800):
+        with patch.object(menubar, "day_seconds", return_value=1800), \
+             patch.object(menubar, "streak_days", return_value=0), \
+             patch.object(menubar, "_get_default_goals", return_value=(None, None)):
             self.app._refresh(None)
-        self.assertEqual(self.app.title, "\u26a0")
+        self.assertEqual(self.app.title, "\u26a0 \u00bd")
         self.assertIn("Error (3): Something broke badly", self.app.status_item.title)
-        self.assertIn("Today: 30m", self.app.today_item.title)
+        self.assertIn("Today: \u00bd", self.app.today_item.title)
 
     def test_refresh_today_item_formatted(self):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
-        with patch.object(menubar, "day_seconds", return_value=3660):
+        with patch.object(menubar, "day_seconds", return_value=3660), \
+             patch.object(menubar, "_get_default_goals", return_value=(None, None)):
             self.app._refresh(None)
-        self.assertIn("1h 1m", self.app.today_item.title)
+        self.assertIn("1", self.app.today_item.title)
 
     def test_refresh_title_includes_quarter(self):
         self.app.tracker_thread.status.return_value = self._make_status(
@@ -506,6 +510,22 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         with patch.object(menubar, "day_seconds", return_value=5400):
             self.app._refresh(None)
         self.assertIn("1\u00bd", self.app.title)
+
+    def test_refresh_title_includes_streak_while_tracking(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with patch.object(menubar, "day_seconds", return_value=5400), \
+             patch.object(menubar, "streak_days", return_value=7):
+            self.app._refresh(None)
+        self.assertIn("💿7", self.app.title)
+
+    def test_refresh_title_marks_daily_goal_complete(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with patch.object(menubar, "day_seconds", return_value=7200), \
+             patch.object(menubar, "_get_default_goals", return_value=(2.0, None)):
+            self.app._refresh(None)
+        self.assertIn("✓", self.app.title)
 
     def test_refresh_title_no_quarter_when_zero(self):
         self.app.tracker_thread.status.return_value = self._make_status(
@@ -564,6 +584,13 @@ class AbletonTrackerAppInitTests(_AppTestBase):
     def test_init_pause_tracking_when_not_paused(self):
         app = AbletonTrackerApp()
         self.assertEqual(app.pause_item.title, "Pause tracking")
+
+    def test_init_sets_menu_shortcuts(self):
+        app = AbletonTrackerApp()
+        self.assertEqual(app.pause_item.key, "p")
+        keyed_items = {item.title: item.key for item in app.menu if item and item.key}
+        self.assertEqual(keyed_items["Open Dashboard"], "d")
+        self.assertEqual(keyed_items["Quit"], "q")
 
 
 if __name__ == "__main__":

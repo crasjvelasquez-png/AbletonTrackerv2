@@ -450,6 +450,77 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(updated["metadata"]["due_date"], "2026-06-10")
         self.assertEqual(updated["metadata"]["hard_deadline"], "2026-06-12")
 
+    def test_project_metadata_supports_artist_id(self):
+        self._insert_session("Collaboration Song")
+        dashboard.set_project_metadata("Collaboration Song", "in_progress", "client", artist_id="artist_123")
+
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["projects"][0]["artist_id"], "artist_123")
+        self.assertEqual(stats["recent"][0]["artist_id"], "artist_123")
+
+
+class DashboardArtistTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_create_and_get_artists(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.create_artist(conn, "a1", "Daft Punk", "info@daftpunk.com")
+            dashboard.create_artist(conn, "a2", "Justice", "", "", "@justice")
+        
+        stats = dashboard.get_stats()
+        artists = stats["artists"]
+        self.assertEqual(len(artists), 2)
+        self.assertEqual(artists[0]["name"], "Daft Punk")
+        self.assertEqual(artists[0]["email"], "info@daftpunk.com")
+        self.assertEqual(artists[1]["name"], "Justice")
+        self.assertEqual(artists[1]["instagram"], "@justice")
+
+    def test_update_artist(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.create_artist(conn, "a1", "Daft Punk")
+            dashboard.update_artist(conn, "a1", "Daft Punk Updated", "dp@example.com", "555", "@dp")
+            
+        stats = dashboard.get_stats()
+        artist = stats["artists"][0]
+        self.assertEqual(artist["name"], "Daft Punk Updated")
+        self.assertEqual(artist["email"], "dp@example.com")
+        self.assertEqual(artist["phone"], "555")
+        self.assertEqual(artist["instagram"], "@dp")
+
+    def test_delete_artist_clears_project_artist_id(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.create_artist(conn, "a1", "Daft Punk")
+            conn.execute(
+                "INSERT INTO project_metadata (project_name, artist_id, updated_at) VALUES (?, ?, 0)",
+                ("Collab Song", "a1")
+            )
+            conn.commit()
+
+            dashboard.delete_artist(conn, "a1")
+            
+            row = conn.execute("SELECT artist_id FROM project_metadata WHERE project_name = 'Collab Song'").fetchone()
+            self.assertEqual(row[0], "")
+
+        stats = dashboard.get_stats()
+        self.assertEqual(len(stats["artists"]), 0)
+
 
 class DashboardProjectTaskTests(unittest.TestCase):
     def setUp(self):

@@ -149,6 +149,135 @@
     </div>
   </div>
 
+  <!-- ─────────────────────────────  ARTISTS  ───────────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="artists-intro">
+    <div class="section-head">
+      <h3 class="section-title">Artists</h3>
+      <span class="section-meta" data-artists-meta>—</span>
+    </div>
+    <p class="settings-copy">
+      Manage artists you collaborate with.
+    </p>
+  </section>
+
+  <div class="settings-grid">
+    <div class="chart-card settings-card" data-settings-section="artists-create">
+      <div class="section-head">
+        <h3 class="section-title">New Artist</h3>
+      </div>
+      <form class="artist-form" data-artist-create-form>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input
+              class="text-input"
+              data-artist-name-input
+              name="name"
+              type="text"
+              maxlength="64"
+              placeholder="Ex. Daft Punk"
+              required
+            >
+          </label>
+          <label class="field">
+            <span class="field-label">Email</span>
+            <input
+              class="text-input"
+              data-artist-email-input
+              name="email"
+              type="email"
+              placeholder="Ex. info@daftpunk.com"
+            >
+          </label>
+          <label class="field">
+            <span class="field-label">Phone</span>
+            <input
+              class="text-input"
+              data-artist-phone-input
+              name="phone"
+              type="text"
+              placeholder="Ex. +1 555-0100"
+            >
+          </label>
+          <label class="field">
+            <span class="field-label">Instagram</span>
+            <input
+              class="text-input"
+              data-artist-ig-input
+              name="instagram"
+              type="text"
+              placeholder="Ex. @daftpunk"
+            >
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button class="btn" type="submit" data-artist-submit>Save artist</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="settings-stack">
+      <div class="chart-card settings-card" data-settings-section="artists-glance">
+        <div class="section-head">
+          <h3 class="section-title">Summary</h3>
+        </div>
+        <div class="settings-kpis">
+          <div class="settings-kpi">
+            <div class="settings-kpi-label">Artists</div>
+            <div class="settings-kpi-value" data-kpi-artists>0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card" data-settings-section="artists-library">
+    <div class="section-head">
+      <h3 class="section-title">Library</h3>
+      <span class="section-meta" data-artists-library-meta>0 total</span>
+    </div>
+    <div class="artist-library">
+      <div class="artist-library-grid" data-artist-library-grid></div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────  PROJECT METADATA  ─────────────────────── -->
+  <section class="chart-card settings-card" data-settings-section="project-options">
+    <div class="section-head">
+      <h3 class="section-title">Project Options</h3>
+      <span class="section-meta">status &amp; type</span>
+    </div>
+    <p class="settings-copy">
+      Manage the statuses and types available for projects.
+    </p>
+
+    <div class="option-columns">
+      <div class="option-column">
+        <div class="option-column-label">
+          Statuses
+          <span class="option-count" data-option-count="statuses">0</span>
+        </div>
+        <div class="option-list" data-option-list="statuses"></div>
+        <div class="option-add">
+          <input type="text" class="text-input option-add-input" placeholder="Add status..." data-option-add-input="statuses" maxlength="32">
+        </div>
+      </div>
+      <div class="option-column">
+        <div class="option-column-label">
+          Types
+          <span class="option-count" data-option-count="types">0</span>
+        </div>
+        <div class="option-list" data-option-list="types"></div>
+        <div class="option-add">
+          <input type="text" class="text-input option-add-input" placeholder="Add type..." data-option-add-input="types" maxlength="32">
+        </div>
+      </div>
+    </div>
+    <div class="option-feedback-wrap">
+      <span class="option-feedback" data-project-options-feedback hidden>Saved ✓</span>
+    </div>
+  </section>
+
   <!-- ─────────────────────────  DATA MANAGEMENT  ──────────────────────── -->
   <section class="chart-card settings-card" data-settings-section="data">
     <div class="section-head">
@@ -236,43 +365,4 @@
     </div>
   </section>
 
-  <!-- ───────────────────────────  PROJECT REPORT  ────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="project-report">
-    <div class="section-head">
-      <h3 class="section-title">Reports</h3>
-      <span class="section-meta">export sessions</span>
-    </div>
-    <p class="settings-copy">
-      Export sessions for one project.
-    </p>
-
-    <form class="report-form" data-report-form novalidate>
-      <div class="field-grid" style="margin-bottom: 20px;">
-        <label class="field">
-          <span class="field-label">Project</span>
-          <select class="text-input" data-report-project-select required style="appearance: auto; padding-right: 32px;">
-            <option value="" disabled selected>Loading projects...</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">Format</span>
-          <div class="theme-picker" style="margin-top: 0; grid-template-columns: 1fr 1fr;" role="radiogroup" aria-label="Format">
-            <button class="theme-option is-active" type="button" role="radio" data-report-format="text" aria-checked="true">
-              <span class="theme-option-label">Text</span>
-            </button>
-            <button class="theme-option" type="button" role="radio" data-report-format="csv" aria-checked="false">
-              <span class="theme-option-label">CSV</span>
-            </button>
-          </div>
-        </label>
-      </div>
-      <div class="settings-actions">
-        <button class="btn" type="submit" data-report-generate>Generate report</button>
-        <button class="btn" type="button" data-report-download hidden style="margin-left: 10px;">Download</button>
-      </div>
-    </form>
-    <div data-report-preview-container hidden style="margin-top: 20px;">
-      <pre class="report-preview" data-report-preview></pre>
-    </div>
-  </section>
 </div>
