@@ -1710,6 +1710,9 @@ select.project-planning-input{
 .settings-grid{
   display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:18px;
 }
+.artist-create-grid{
+  display:grid;grid-template-columns:1fr;gap:18px;
+}
 .settings-stack{display:grid;gap:18px}
 .settings-card{
   border-radius:var(--radius);
@@ -1811,6 +1814,14 @@ select.project-planning-input{
   font-size:12px;color:var(--ink-4);
 }
 .settings-actions{display:flex;justify-content:flex-start}
+.artist-form{
+  display:grid;gap:16px;
+}
+.artist-form .field-grid,
+.artist-editor .field-grid{
+  grid-template-columns:repeat(2,minmax(220px,1fr));
+  gap:16px;
+}
 
 /* Project Options Editor */
 .option-columns{
@@ -1946,6 +1957,61 @@ select.project-planning-input{
 }
 .category-library-actions{
   display:flex;gap:8px;flex-wrap:wrap;
+}
+.artist-library{
+  display:grid;gap:12px;
+}
+.artist-library-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;
+}
+.artist-item{
+  display:grid;gap:14px;padding:16px;border-radius:18px;
+  background:var(--control-bg);border:1px solid var(--border);
+}
+.artist-display{
+  display:grid;gap:12px;
+}
+.artist-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+}
+.artist-title-block{
+  display:grid;gap:10px;min-width:0;
+}
+.artist-name{
+  font-size:16px;font-weight:700;color:var(--ink);line-height:1.2;
+  overflow-wrap:anywhere;
+}
+.artist-details{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.artist-detail-chip{
+  max-width:100%;
+  padding:5px 9px;border-radius:999px;
+  background:var(--surface-hover);border:1px solid var(--border);
+  color:var(--ink-3);font-size:12px;line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.artist-detail-chip.is-empty{
+  color:var(--ink-4);border-style:dashed;
+}
+.artist-edit-btn{
+  flex:0 0 auto;margin-top:1px;
+}
+.artist-editor{
+  display:grid;gap:14px;padding:14px;border-radius:16px;
+  background:var(--surface-hover);border:1px solid var(--border);
+}
+.artist-editor[hidden]{
+  display:none;
+}
+.artist-editor-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.artist-editor-title{
+  font-size:13px;font-weight:700;color:var(--ink);
+}
+.artist-editor-actions{
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;
 }
 .btn.small{
   padding:7px 11px;font-size:12px;
@@ -2567,8 +2633,10 @@ select.planner-goal-input{
   --status-bg: color-mix(in srgb, var(--status-color) 3%, var(--control-bg));
 }
 .planner-board-project{display:grid;gap:10px;background:var(--surface)}
-.planner-board-project .project-meta-controls{gap:6px}
+.planner-board-project .project-meta-controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
 .planner-board-project .project-meta-select{min-width:0;width:100%}
+.planner-board-project .project-progress-slider-wrap{grid-column:1 / -1;margin-top:2px}
+.planner-board-project .project-task-pill{width:100%;justify-content:center}
 .planner-project-line{
   display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;
 }
@@ -2618,7 +2686,6 @@ select.planner-goal-input{
 .planner-board-project{
   position:relative;
   transition:transform .15s ease, box-shadow .15s ease;
-  border-left:3px solid var(--card-accent, var(--border));
 }
 .planner-board-project:hover{
   transform:translateY(-2px);
@@ -2779,6 +2846,10 @@ select.planner-goal-input{
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
   .field-grid{grid-template-columns:1fr}
+  .artist-form .field-grid,
+  .artist-editor .field-grid{grid-template-columns:1fr}
+  .artist-header{align-items:stretch;flex-direction:column;gap:12px}
+  .artist-edit-btn{align-self:flex-start}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
   .scale-control-panel{grid-template-columns:1fr auto}
@@ -2824,6 +2895,42 @@ select.planner-goal-input{
   border:1px solid var(--border);max-height:400px;overflow:auto;
   white-space:pre-wrap;word-break:break-word;
 }
+.project-progress-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.project-meta-slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.project-progress-bar {
+  height: 4px;
+  background: var(--surface-1);
+  border-radius: 2px;
+  margin: 8px 0;
+  overflow: hidden;
+  position: relative;
+}
+.project-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.planner-board-project.is-overdue {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.planner-board-project.is-due-soon {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
 </style>
 </head>
 <body>
@@ -2850,8 +2957,8 @@ select.planner-goal-input{
   </div>
   <div class="header-right">
     <div class="header-nav" role="tablist" aria-label="Pages">
-      <button class="nav-tab is-active" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
-      <button class="nav-tab" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
+      <button class="nav-tab is-active" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
+      <button class="nav-tab" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
       <button class="nav-tab" id="navSettings" type="button" data-view-tab="settings">Settings</button>
     </div>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
@@ -3051,7 +3158,7 @@ let boardSearchQuery = '';
 let boardTypeFilter = '';
 let activeView = window.location.hash === '#settings'
   ? 'settings'
-  : (window.location.hash === '#planner' ? 'planner' : 'dashboard');
+  : (window.location.hash === '#dashboard' ? 'dashboard' : 'planner');
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
 const dashboardMonthState = {
@@ -3515,12 +3622,18 @@ function projectArtistSelect(project) {
   `;
 }
 
-function projectMetaControls(project) {
+function projectMetaControls(project, extraHtml = '') {
   return `
     <div class="project-meta-controls" data-project-meta-scope>
       ${projectMetaSelect(project, 'status', PROJECT_STATUS_OPTIONS)}
       ${projectMetaSelect(project, 'type', PROJECT_TYPE_OPTIONS)}
       ${projectArtistSelect(project)}
+      ${extraHtml}
+      <div class="project-progress-slider-wrap">
+        <label>Progress</label>
+        <input type="range" class="project-meta-slider" data-project-meta="progress_percent" data-project-name="${encodeURIComponent(project.project_name)}" min="0" max="100" value="${project.progress_percent || 0}">
+        <span class="project-progress-val">${project.progress_percent || 0}%</span>
+      </div>
     </div>
   `;
 }
@@ -4657,37 +4770,57 @@ function bindCategoryTriggers() {
 }
 
 function bindProjectMetaControls() {
-  document.querySelectorAll('[data-project-meta]').forEach(select => {
-    select.addEventListener('change', async () => {
-      const projectName = decodeURIComponent(select.dataset.projectName || '');
-      const scope = select.closest('[data-project-meta-scope]') || select.closest('tr');
+  document.querySelectorAll('[data-project-meta]').forEach(input => {
+    if (input.dataset.projectMeta === 'progress_percent') {
+      input.addEventListener('input', () => {
+        const wrap = input.closest('.project-progress-slider-wrap');
+        if (wrap) {
+          const valEl = wrap.querySelector('.project-progress-val');
+          if (valEl) valEl.textContent = `${input.value}%`;
+        }
+      });
+    }
+
+    input.addEventListener('change', async () => {
+      const projectName = decodeURIComponent(input.dataset.projectName || '');
+      const scope = input.closest('[data-project-meta-scope]') || input.closest('tr');
       const statusSelect = scope?.querySelector('[data-project-meta="status"]');
       const typeSelect = scope?.querySelector('[data-project-meta="type"]');
       const artistSelect = scope?.querySelector('[data-project-meta="artist_id"]');
-      if (!projectName || !statusSelect || !typeSelect || !artistSelect) return;
+      const progressInput = scope?.querySelector('[data-project-meta="progress_percent"]');
+      if (!projectName || !statusSelect || !typeSelect) return;
 
-      const previous = select.dataset.previousValue || '';
-      select.disabled = true;
+      const previous = input.dataset.previousValue || '';
+      input.disabled = true;
       try {
         const result = await postJson('/api/project-metadata', {
           project_name: projectName,
           status: statusSelect.value,
           type: typeSelect.value,
-          artist_id: artistSelect.value,
+          artist_id: artistSelect ? artistSelect.value : '',
+          progress_percent: progressInput ? parseInt(progressInput.value, 10) : 0,
         });
         statusSelect.dataset.previousValue = result.metadata?.status || '';
         typeSelect.dataset.previousValue = result.metadata?.type || '';
-        artistSelect.dataset.previousValue = result.metadata?.artist_id || '';
+        if (artistSelect) artistSelect.dataset.previousValue = result.metadata?.artist_id || '';
+        if (progressInput) progressInput.dataset.previousValue = result.metadata?.progress_percent || '0';
         toast(`Updated ${projectName}`);
         load();
       } catch (error) {
-        select.value = previous;
+        input.value = previous;
+        if (input.dataset.projectMeta === 'progress_percent') {
+          const wrap = input.closest('.project-progress-slider-wrap');
+          if (wrap) {
+            const valEl = wrap.querySelector('.project-progress-val');
+            if (valEl) valEl.textContent = `${previous}%`;
+          }
+        }
         toast(error.message || 'Failed to save project metadata');
       } finally {
-        select.disabled = false;
+        input.disabled = false;
       }
     });
-    select.dataset.previousValue = select.value || '';
+    input.dataset.previousValue = input.value || '';
   });
 }
 
@@ -5963,7 +6096,7 @@ function renderPlanner(data) {
     ].filter(Boolean);
     
     return `
-      <div class="planner-board-project" draggable="true" data-project-name="${encodedProject}" data-current-status="${project.status || ''}" style="--card-accent:${accentColor}">
+      <div class="planner-board-project ${project.deadline_state === 'overdue' ? 'is-overdue' : project.deadline_state === 'due_soon' ? 'is-due-soon' : ''}" draggable="true" data-project-name="${encodedProject}" data-current-status="${project.status || ''}" style="--card-accent:${accentColor}">
         <div class="board-card-header">
           <div class="board-card-title-wrap">
             <span class="board-card-activity" style="--activity-color:${activityColor}" title="${escapeHtml(lastWorkedLabel(project))}"></span>
@@ -5971,14 +6104,15 @@ function renderPlanner(data) {
           </div>
           <span class="planner-project-stats">${fmt.dur(project.total_seconds || 0)}</span>
         </div>
-        
+
         <div class="board-card-tags">
           ${priority ? `<span class="board-card-priority ${priorityClass}">${projectPriorityLabel(priority)}</span>` : ''}
           ${deadlineTags.map(t => `<span class="planner-pill ${t.className}" style="padding:2px 6px;font-size:10px">${escapeHtml(t.label)}</span>`).join('')}
         </div>
-        
-        ${projectMetaControls(project)}
-        ${projectTaskButton(project)}
+
+        <div class="project-progress-bar" style="--progress: ${project.progress_percent || 0}%" title="Progress: ${project.progress_percent || 0}%"></div>
+
+        ${projectMetaControls(project, projectTaskButton(project))}
       </div>
     `;
   };
@@ -6054,89 +6188,15 @@ function renderPlanner(data) {
 
   plannerEl.innerHTML = `
     <div class="planner-shell">
-      <div class="planner-summary">
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${focusItems.length}</div>
-          <div>
-            <div class="planner-kpi-label">Next Actions</div>
-            <div class="planner-kpi-note">${topSuggestion ? escapeHtml(topSuggestion.action) : 'Add tasks or metadata'}</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${clientCount}</div>
-          <div>
-            <div class="planner-kpi-label">Client Projects</div>
-            <div class="planner-kpi-note">Active client work only</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${finishingCount}</div>
-          <div>
-            <div class="planner-kpi-label">Finishing</div>
-            <div class="planner-kpi-note">Songs closest to done</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${staleActive.length}</div>
-          <div>
-            <div class="planner-kpi-label">Stale Active</div>
-            <div class="planner-kpi-note">No tracked work in 7+ days</div>
-          </div>
-        </div>
-      </div>
-
       <section class="planner-panel">
         <div class="planner-panel-head">
           <div>
-            <div class="planner-panel-title">Deadline Radar</div>
-            <div class="planner-panel-meta">Client projects and dated work ordered by urgency, with visible reasons from tracked activity and task state</div>
+            <div class="planner-panel-title">Today's Focus</div>
+            <div class="planner-panel-meta">Projects requiring your immediate attention.</div>
           </div>
         </div>
         ${renderDeadlineRadar()}
       </section>
-
-      <section class="planner-panel">
-        <div class="planner-panel-head">
-          <div>
-            <div class="planner-panel-title">Goals</div>
-            <div class="planner-panel-meta">Flexible session, hour, finish, and project-touch goals measured from tracked activity</div>
-          </div>
-        </div>
-        ${renderPlannerGoalForm()}
-        ${renderPlannerGoalRows(plannerGoals)}
-      </section>
-
-      <div class="planner-grid">
-        <section class="planner-panel">
-          <div class="planner-panel-head">
-            <div>
-              <div class="planner-panel-title">Suggested Next Actions</div>
-              <div class="planner-panel-meta">Task, deadline, goal, and momentum-aware recommendations with visible reasons</div>
-            </div>
-          </div>
-          ${renderFocus()}
-        </section>
-
-        <section class="planner-panel">
-          <div class="planner-panel-head">
-            <div>
-              <div class="planner-panel-title">Recent Active</div>
-              <div class="planner-panel-meta">Active projects touched in the last 7 days</div>
-            </div>
-          </div>
-          ${recentActive.length
-            ? `<div class="planner-recent-list">${recentActive.slice(0, 8).map((project, index) => `
-                <div class="planner-recent-row">
-                  <div class="planner-row-main">
-                    <div class="planner-row-title">${projectBadge(project, index)}</div>
-                    <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status))} · ${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(lastWorkedLabel(project))}</div>
-                  </div>
-                  ${projectTaskButton(project)}
-                </div>
-              `).join('')}</div>`
-            : '<div class="planner-empty">No recently active projects.</div>'}
-        </section>
-      </div>
 
       <details class="planner-panel" open>
         <summary class="planner-panel-head">

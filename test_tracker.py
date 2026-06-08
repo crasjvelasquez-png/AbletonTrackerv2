@@ -138,18 +138,18 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertTrue(t.status().idle_paused)
         self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
 
-    def test_unavailable_audio_probe_does_not_idle_pause_open_session(self):
+    def test_unavailable_audio_probe_does_idle_pause_open_session(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
              patch.object(tracker, "is_audio_active", return_value=None), \
              patch.object(tracker, "get_idle_seconds", return_value=31), \
              patch.object(tracker, "get_project_name", return_value="Real Project"):
             t = tracker.Tracker()
+            t._start("Real Project")
             t.poll_once(paused=False)
 
-        self.assertIsNotNone(t.session_id)
-        self.assertFalse(t.status().idle_paused)
-        self.assertFalse(t.status().audio_active)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
+        self.assertIsNone(t.session_id)
+        self.assertTrue(t.status().idle_paused)
+        self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
 
     def test_mouse_movement_resumes_after_idle_pause(self):
         t = tracker.Tracker()
@@ -293,11 +293,13 @@ class AudioQuietSignalTests(unittest.TestCase):
 
     def test_audio_active_uses_level_probe_result(self):
         with patch.object(tracker, "_live_pid", return_value=123), \
+             patch.object(tracker, "is_ableton_playing_osc", return_value=None), \
              patch.object(tracker, "_system_audio_level_active", return_value=False):
             self.assertFalse(tracker.is_audio_active())
 
     def test_audio_active_preserves_unavailable_probe_result(self):
         with patch.object(tracker, "_live_pid", return_value=123), \
+             patch.object(tracker, "is_ableton_playing_osc", return_value=None), \
              patch.object(tracker, "_system_audio_level_active", return_value=None):
             self.assertIsNone(tracker.is_audio_active())
 

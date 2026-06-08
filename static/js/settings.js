@@ -191,9 +191,6 @@
     const meta = $('[data-artists-meta]', root);
     if (meta) meta.textContent = `${count} total`;
 
-    const kpiArtists = $('[data-kpi-artists]', root);
-    if (kpiArtists) kpiArtists.textContent = String(count);
-
     const libMeta = $('[data-artists-library-meta]', root);
     if (libMeta) libMeta.textContent = `${count} total`;
 
@@ -206,28 +203,34 @@
     }
 
     grid.innerHTML = artists.map(artist => {
+      const idEsc = window.escapeHtml(artist.id || '');
       const nameEsc = window.escapeHtml(artist.name || '');
       const emailEsc = window.escapeHtml(artist.email || '');
       const phoneEsc = window.escapeHtml(artist.phone || '');
       const igEsc = window.escapeHtml(artist.instagram || '');
+      const contactItems = [
+        emailEsc ? `<span class="artist-detail-chip">Email: ${emailEsc}</span>` : '',
+        phoneEsc ? `<span class="artist-detail-chip">Phone: ${phoneEsc}</span>` : '',
+        igEsc ? `<span class="artist-detail-chip">IG: ${igEsc}</span>` : '',
+      ].filter(Boolean).join('');
       
       return `
         <div class="artist-item">
-          <div class="artist-display" data-artist-display="${artist.id}">
+          <div class="artist-display" data-artist-display="${idEsc}">
             <div class="artist-header">
-              <span class="artist-name">${nameEsc}</span>
-              <button class="btn icon subtle" type="button" data-artist-edit="${artist.id}">✎ Edit</button>
-            </div>
-            <div class="artist-details">
-              ${emailEsc ? `<div>Email: ${emailEsc}</div>` : ''}
-              ${phoneEsc ? `<div>Phone: ${phoneEsc}</div>` : ''}
-              ${igEsc ? `<div>IG: ${igEsc}</div>` : ''}
+              <div class="artist-title-block">
+                <span class="artist-name">${nameEsc}</span>
+                <div class="artist-details">
+                  ${contactItems || '<span class="artist-detail-chip is-empty">No contact details</span>'}
+                </div>
+              </div>
+              <button class="btn subtle small artist-edit-btn" type="button" data-artist-edit="${idEsc}">Edit</button>
             </div>
           </div>
-          <form class="artist-editor" data-artist-editor="${artist.id}" hidden>
+          <form class="artist-editor" data-artist-editor="${idEsc}" hidden>
             <div class="artist-editor-head">
               <span class="artist-editor-title">Edit artist</span>
-              <button class="btn subtle small" type="button" data-artist-cancel="${artist.id}">Cancel</button>
+              <button class="btn subtle small" type="button" data-artist-cancel="${idEsc}">Cancel</button>
             </div>
             <div class="field-grid">
               <label class="field">
@@ -249,7 +252,7 @@
             </div>
             <div class="artist-editor-actions">
               <button class="btn small" type="submit">Save</button>
-              <button class="btn danger small" type="button" data-artist-delete="${artist.id}" data-artist-name="${nameEsc}">Delete</button>
+              <button class="btn danger small" type="button" data-artist-delete="${idEsc}" data-artist-name="${nameEsc}">Delete</button>
             </div>
           </form>
         </div>

@@ -353,6 +353,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
             hard_deadline TEXT NOT NULL DEFAULT '',
             turn_in_date TEXT NOT NULL DEFAULT '',
             artist_id    TEXT NOT NULL DEFAULT '',
+            progress_percent INTEGER NOT NULL DEFAULT 0,
             updated_at   INTEGER NOT NULL
         )
         """
@@ -367,6 +368,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         "hard_deadline": "TEXT NOT NULL DEFAULT ''",
         "turn_in_date": "TEXT NOT NULL DEFAULT ''",
         "artist_id": "TEXT NOT NULL DEFAULT ''",
+        "progress_percent": "INTEGER NOT NULL DEFAULT 0",
     }
     for column, definition in metadata_columns.items():
         if column not in existing_columns:
@@ -665,7 +667,7 @@ def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id
+        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent
         FROM project_metadata
         """
     ).fetchall()
@@ -690,6 +692,7 @@ def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
             "hard_deadline": hard_deadline,
             "turn_in_date": turn_in_date,
             "artist_id": row["artist_id"] or "",
+            "progress_percent": row["progress_percent"] or 0,
         }
     return metadata
 
@@ -772,9 +775,10 @@ def _normalize_project_metadata_fields(
     hard_deadline: str | None = "",
     turn_in_date: str | None = "",
     artist_id: str | None = "",
+    progress_percent: int | None = 0,
     status_options: dict[str, str] | None = None,
     type_options: dict[str, str] | None = None,
-) -> tuple[str, str, str, str, str, str, str] | dict:
+) -> tuple[str, str, str, str, str, str, str, int] | dict:
     status_options = status_options or PROJECT_STATUS_OPTIONS
     type_options = type_options or PROJECT_TYPE_OPTIONS
 
@@ -785,6 +789,12 @@ def _normalize_project_metadata_fields(
     normalized_hard_deadline = (hard_deadline or "").strip()
     normalized_turn_in_date = (turn_in_date or "").strip()
     normalized_artist_id = (artist_id or "").strip()
+
+    try:
+        normalized_progress = int(progress_percent or 0)
+        normalized_progress = max(0, min(100, normalized_progress))
+    except (ValueError, TypeError):
+        normalized_progress = 0
 
     if normalized_status and normalized_status not in status_options:
         return {"error": "Unknown project status."}
@@ -804,6 +814,7 @@ def _normalize_project_metadata_fields(
         normalized_hard_deadline,
         normalized_turn_in_date,
         normalized_artist_id,
+        normalized_progress,
     )
 
 
@@ -1557,6 +1568,7 @@ def set_project_metadata(
     hard_deadline: str | None = None,
     turn_in_date: str | None = None,
     artist_id: str | None = None,
+    progress_percent: int | None = 0,
 ) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
@@ -1569,7 +1581,7 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id
+            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent
             FROM project_metadata
             WHERE project_name = ?
             """,
@@ -1583,6 +1595,7 @@ def set_project_metadata(
             existing["hard_deadline"] if hard_deadline is None and existing else hard_deadline,
             existing["turn_in_date"] if turn_in_date is None and existing else turn_in_date,
             existing["artist_id"] if artist_id is None and existing else artist_id,
+            existing["progress_percent"] if progress_percent is None and existing else progress_percent,
             get_project_status_options(conn),
             get_project_type_options(conn),
         )
@@ -1596,6 +1609,7 @@ def set_project_metadata(
             normalized_hard_deadline,
             normalized_turn_in_date,
             normalized_artist_id,
+            normalized_progress,
         ) = normalized
 
         if not any(
@@ -1607,6 +1621,7 @@ def set_project_metadata(
                 normalized_hard_deadline,
                 normalized_turn_in_date,
                 normalized_artist_id,
+                normalized_progress,
             )
         ):
             cur = conn.execute(
@@ -1629,15 +1644,16 @@ def set_project_metadata(
                     "hard_deadline": "",
                     "turn_in_date": "",
                     "artist_id": "",
+                    "progress_percent": 0,
                 },
             }
 
         conn.execute(
             """
             INSERT INTO project_metadata (
-                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, updated_at
+                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             ON CONFLICT(project_name) DO UPDATE SET
                 status = excluded.status,
                 type = excluded.type,
@@ -1646,6 +1662,7 @@ def set_project_metadata(
                 hard_deadline = excluded.hard_deadline,
                 turn_in_date = excluded.turn_in_date,
                 artist_id = excluded.artist_id,
+                progress_percent = excluded.progress_percent,
                 updated_at = excluded.updated_at
             """,
             (
@@ -1657,6 +1674,7 @@ def set_project_metadata(
                 normalized_hard_deadline,
                 normalized_turn_in_date,
                 normalized_artist_id,
+                normalized_progress,
             ),
         )
         conn.commit()
@@ -1674,6 +1692,7 @@ def set_project_metadata(
                 "hard_deadline": normalized_hard_deadline,
                 "turn_in_date": normalized_turn_in_date,
                 "artist_id": normalized_artist_id,
+                "progress_percent": normalized_progress,
             },
         }
 
@@ -2458,6 +2477,8 @@ def get_stats(month_value: str = "") -> dict:
                 project["due_date"] = metadata.get("due_date", "")
                 project["hard_deadline"] = metadata.get("hard_deadline", "")
                 project["turn_in_date"] = metadata.get("turn_in_date", "")
+                project["artist_id"] = metadata.get("artist_id", "")
+                project["progress_percent"] = metadata.get("progress_percent", 0)
                 project.update(_project_deadline_summary(metadata, today))
                 project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
@@ -2517,6 +2538,8 @@ def get_stats(month_value: str = "") -> dict:
                         "due_date": metadata.get("due_date", ""),
                         "hard_deadline": metadata.get("hard_deadline", ""),
                         "turn_in_date": metadata.get("turn_in_date", ""),
+                        "artist_id": metadata.get("artist_id", ""),
+                        "progress_percent": metadata.get("progress_percent", 0),
                         "deadline_state": deadline_summary["deadline_state"],
                         "deadline_label": deadline_summary["deadline_label"],
                         "deadline_reasons": deadline_summary["deadline_reasons"],
@@ -6135,6 +6158,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("hard_deadline"),
                 payload.get("turn_in_date"),
                 payload.get("artist_id"),
+                payload.get("progress_percent"),
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/artists":

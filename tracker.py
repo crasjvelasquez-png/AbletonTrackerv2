@@ -718,6 +718,30 @@ def _system_audio_level_active() -> bool | None:
     return parsed
 
 
+def is_ableton_playing_osc() -> bool | None:
+    """Query AbletonOSC to see if the transport is playing."""
+    import socket
+    path = b'/live/song/get/is_playing\0\0\0'
+    typetag = b',\0\0\0'
+    msg = path + typetag
+    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(('127.0.0.1', 11001))
+        sock.settimeout(0.5)
+        sock.sendto(msg, ('127.0.0.1', 11000))
+        data, _ = sock.recvfrom(1024)
+        if b',T' in data:
+            return True
+        if b',F' in data:
+            return False
+    except Exception:
+        pass
+    finally:
+        sock.close()
+    return None
+
+
 def is_audio_active() -> bool | None:
     """True when audible output is present while Ableton Live is open.
 
@@ -727,6 +751,10 @@ def is_audio_active() -> bool | None:
     """
     if _live_pid() is None:
         return False
+
+    osc_playing = is_ableton_playing_osc()
+    if osc_playing is not None:
+        return osc_playing
 
     return _system_audio_level_active()
 
@@ -1068,9 +1096,9 @@ class Tracker:
         self.last_audio_idle = (
             now - self.last_audio_active if self.last_audio_active else float("inf")
         )
-        idle_paused = should_check_audio and audio_known and (
+        idle_paused = should_check_audio and (
             self.last_hid_idle >= IDLE_THRESHOLD
-            and self.last_audio_idle >= IDLE_THRESHOLD
+            and (not audio_known or self.last_audio_idle >= IDLE_THRESHOLD)
         )
         if should_check_audio:
             audio_idle_label = (
@@ -1090,7 +1118,7 @@ class Tracker:
             if self.session_id is not None:
                 print(
                     f"[{_ts()}] ⏸  {self.project_name} "
-                    f"(idle {int(self.last_hid_idle)}s, audio quiet)"
+                    f"(idle {int(self.last_hid_idle)}s, audio quiet/unknown)"
                 )
             self._close(preserve_resume_hint=True)
             self.last_state = (
