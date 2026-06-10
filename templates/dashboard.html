@@ -1106,6 +1106,158 @@ header{
   letter-spacing:-.04em;
   color:var(--ink);
 }
+.pace-card .chart-wrap{
+  min-height:250px;
+}
+.pace-panel{
+  height:100%;
+  display:grid;
+  align-content:space-between;
+  gap:18px;
+}
+.pace-hero{
+  display:grid;
+  gap:8px;
+}
+.pace-kicker{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.pace-value{
+  font-family:var(--font-display);
+  font-size:clamp(34px,4vw,52px);
+  line-height:.95;
+  letter-spacing:-.045em;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.pace-value small{
+  font-family:var(--font-body);
+  font-size:.34em;
+  font-weight:800;
+  color:var(--ink-4);
+  letter-spacing:0;
+}
+.pace-subline{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  color:var(--ink-3);
+  font-size:13px;
+  font-weight:700;
+}
+.pace-status{
+  color:var(--pace-accent,var(--ink-3));
+}
+.pace-bar{
+  height:14px;
+  border-radius:999px;
+  overflow:hidden;
+  background:color-mix(in srgb, var(--ink-4) 16%, transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--border) 76%, transparent);
+}
+.pace-bar-fill{
+  height:100%;
+  width:var(--pace-progress,0%);
+  max-width:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,var(--pace-accent,var(--accent)),color-mix(in srgb,var(--pace-accent,var(--accent)) 68%,white 24%));
+  transition:width .7s var(--ease-spring), background .25s ease;
+}
+.pace-stats{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.pace-stat{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:12px;
+  background:color-mix(in srgb, var(--control-bg) 74%, transparent);
+}
+.pace-stat span{
+  display:block;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+}
+.pace-stat strong{
+  display:block;
+  margin-top:5px;
+  font-family:var(--font-display);
+  font-size:24px;
+  line-height:1;
+  letter-spacing:-.04em;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.pace-goal-edit{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:12px;
+  align-items:end;
+}
+.pace-goal-edit .goal-input-row{
+  justify-items:start;
+  grid-template-columns:1fr auto;
+}
+.pace-goal-edit .goal-presets{
+  justify-content:flex-end;
+}
+.week-strip{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:8px;
+}
+.week-day{
+  display:grid;
+  gap:7px;
+  justify-items:center;
+  min-width:0;
+}
+.week-dot{
+  width:22px;
+  height:22px;
+  border-radius:999px;
+  border:2px solid color-mix(in srgb,var(--ink-4) 36%,transparent);
+  background:transparent;
+  box-shadow:inset 0 0 0 4px color-mix(in srgb,var(--surface-2) 52%,transparent);
+}
+.week-day.is-logged .week-dot{
+  border-color:var(--pace-accent,var(--accent));
+  background:var(--pace-accent,var(--accent));
+  box-shadow:0 0 18px color-mix(in srgb,var(--pace-accent,var(--accent)) 24%,transparent);
+}
+.week-day.is-today .week-dot{
+  border-color:var(--accent);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent),0 0 18px color-mix(in srgb,var(--accent) 22%,transparent);
+}
+.week-day.is-today.is-logged .week-dot{
+  background:linear-gradient(90deg,var(--pace-accent,var(--accent)) 55%,transparent 55%);
+}
+.week-day span{
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  color:var(--ink-4);
+  white-space:nowrap;
+}
+.week-day.is-today span{
+  color:var(--ink-2);
+}
+.required-note{
+  color:var(--ink-3);
+  font-size:13px;
+  font-weight:700;
+  line-height:1.45;
+}
 .daily-chart{
   height:240px;display:grid;grid-template-rows:1fr auto;gap:12px;
 }
@@ -1377,6 +1529,19 @@ header{
 .streak-vinyl-legend-dot.is-ghost{background:rgba(120,120,128,.22);border:1.5px solid rgba(120,120,128,.22)}
 .streak-vinyl-narrative{padding:12px 14px;border-radius:12px;background:var(--control-bg);border:1px solid var(--border);font-size:13px;font-weight:500;color:var(--ink-3);line-height:1.45}
 .streak-vinyl-narrative strong{color:var(--ink);font-weight:700}
+.card--streak{display:flex;flex-direction:column;justify-content:space-between;padding-bottom:20px}
+.streak-card-top{display:flex;justify-content:space-between;width:100%}
+.streak-card-pb{text-align:right;display:flex;flex-direction:column;align-items:flex-end}
+.streak-card-pb .pb-icon{width:28px;height:30px;margin-bottom:6px;border:1.5px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--ink-3);position:relative}
+.streak-card-pb .pb-icon.is-record{border-color:var(--accent);color:var(--accent)}
+.streak-card-pb .pb-label{font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+.streak-card-pb .pb-value{font-size:12px;color:var(--ink-2);margin-top:2px;font-weight:500}
+.streak-mini-track{width:100%;margin-top:24px;display:flex;flex-direction:column;gap:6px}
+.streak-mini-bars{display:flex;gap:4px;width:100%;height:10px}
+.streak-mini-bar{flex:1;background:var(--border);border-radius:2px}
+.streak-mini-bar.is-active{background:var(--accent)}
+.streak-mini-labels{display:flex;gap:4px;width:100%}
+.streak-mini-labels span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:.02em}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
   border:1px dashed var(--border);border-radius:16px;font-size:13px;
@@ -1457,6 +1622,15 @@ header{
   background:var(--surface);color:var(--ink);font:inherit;font-size:12px;
   padding:8px 10px;outline:none;min-width:0;
 }
+select.project-planning-input{
+  appearance:none;-webkit-appearance:none;
+  padding-right:28px;
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
+}
 .project-planning-input:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
@@ -1475,13 +1649,21 @@ header{
   outline:none;
 }
 .task-input{padding:8px 11px;min-width:0}
-.task-priority-select{padding:8px 26px 8px 10px;font-weight:600}
+.task-priority-select{
+  padding:8px 26px 8px 10px;font-weight:600;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
+  cursor:pointer;
+}
 .task-input:focus,
 .task-priority-select:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
 .project-task-pill{
-  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg-strong);
   color:var(--ink-2);padding:7px 11px;display:inline-flex;align-items:center;gap:7px;
   font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;
   transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
@@ -1527,6 +1709,9 @@ header{
 .settings-shell{display:grid;gap:28px}
 .settings-grid{
   display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:18px;
+}
+.artist-create-grid{
+  display:grid;grid-template-columns:1fr;gap:18px;
 }
 .settings-stack{display:grid;gap:18px}
 .settings-card{
@@ -1629,6 +1814,108 @@ header{
   font-size:12px;color:var(--ink-4);
 }
 .settings-actions{display:flex;justify-content:flex-start}
+.artist-form{
+  display:grid;gap:16px;
+}
+.artist-form .field-grid,
+.artist-editor .field-grid{
+  grid-template-columns:repeat(2,minmax(220px,1fr));
+  gap:16px;
+}
+
+/* Project Options Editor */
+.option-columns{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;
+  margin-bottom:14px;align-items:start;
+}
+.option-column{display:grid;gap:12px}
+.option-column-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;font-weight:600;color:var(--ink-3);
+}
+.option-count{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;border-radius:10px;padding:0 6px;
+  font-size:11px;font-weight:700;color:var(--ink-4);
+  background:var(--control-bg-strong);border:1px solid var(--border);
+}
+.option-list{
+  display:flex;flex-wrap:wrap;gap:8px;
+  min-height:34px;align-items:flex-start;
+}
+.option-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--control-bg);border:1px solid var(--border);
+  padding:6px 12px;border-radius:16px;
+  font-size:13px;font-weight:600;color:var(--ink-2);
+  transition:transform .18s var(--ease-spring), box-shadow .18s ease, border-color .18s ease;
+  user-select:none;position:relative;
+}
+.option-chip:hover{
+  border-color:var(--border-strong);
+  box-shadow:0 4px 12px rgba(15,23,42,.06);
+  transform:translateY(-1px);z-index:2;
+}
+.option-chip.is-dragging{
+  opacity:0.6;transform:scale(1.02);
+  box-shadow:0 8px 24px rgba(15,23,42,.12);
+}
+.option-grip{
+  display:inline-flex;align-items:center;
+  color:var(--ink-4);opacity:0.4;cursor:grab;
+  margin-left:-4px;width:12px;
+  transition:opacity .15s ease;
+}
+.option-chip:hover .option-grip{opacity:1}
+.option-grip:active{cursor:grabbing}
+.option-grip svg{width:10px;height:14px;fill:currentColor}
+.option-remove{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:50%;margin-right:-6px;
+  background:transparent;border:none;
+  color:var(--ink-4);cursor:pointer;
+  opacity:0;transition:opacity .15s ease, background .15s ease, color .15s ease;
+}
+.option-chip:hover .option-remove{opacity:0.6}
+.option-remove:hover{
+  opacity:1 !important;background:var(--danger-soft);color:var(--danger);
+}
+.option-remove svg{width:10px;height:10px;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.option-add{
+  position:relative;
+}
+.option-add-input{
+  width:100%;border:1px dashed var(--border-strong);background:transparent;
+  border-radius:16px;padding:8px 12px;font-size:13px;color:var(--ink);
+  transition:border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.option-add-input:focus{
+  outline:none;border-color:var(--accent);border-style:solid;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  background:var(--control-bg-strong);
+}
+.option-drop-indicator{
+  width:2px;height:28px;border-radius:2px;
+  background:var(--accent);
+  margin:0 -5px;z-index:3;
+  pointer-events:none;
+}
+.option-empty{
+  width:100%;padding:14px 12px;
+  border:1px dashed var(--border);border-radius:12px;
+  text-align:center;font-size:12px;color:var(--ink-4);
+}
+.option-feedback-wrap{
+  display:flex;align-items:center;height:24px;
+}
+.option-feedback{
+  font-size:12px;font-weight:600;color:var(--live);
+  opacity:1;transition:opacity .4s ease;
+}
+.option-feedback[hidden]{
+  opacity:0;pointer-events:none;display:block !important;
+}
+
 .category-library{
   display:grid;gap:12px;
 }
@@ -1670,6 +1957,61 @@ header{
 }
 .category-library-actions{
   display:flex;gap:8px;flex-wrap:wrap;
+}
+.artist-library{
+  display:grid;gap:12px;
+}
+.artist-library-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;
+}
+.artist-item{
+  display:grid;gap:14px;padding:16px;border-radius:18px;
+  background:var(--control-bg);border:1px solid var(--border);
+}
+.artist-display{
+  display:grid;gap:12px;
+}
+.artist-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+}
+.artist-title-block{
+  display:grid;gap:10px;min-width:0;
+}
+.artist-name{
+  font-size:16px;font-weight:700;color:var(--ink);line-height:1.2;
+  overflow-wrap:anywhere;
+}
+.artist-details{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.artist-detail-chip{
+  max-width:100%;
+  padding:5px 9px;border-radius:999px;
+  background:var(--surface-hover);border:1px solid var(--border);
+  color:var(--ink-3);font-size:12px;line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.artist-detail-chip.is-empty{
+  color:var(--ink-4);border-style:dashed;
+}
+.artist-edit-btn{
+  flex:0 0 auto;margin-top:1px;
+}
+.artist-editor{
+  display:grid;gap:14px;padding:14px;border-radius:16px;
+  background:var(--surface-hover);border:1px solid var(--border);
+}
+.artist-editor[hidden]{
+  display:none;
+}
+.artist-editor-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.artist-editor-title{
+  font-size:13px;font-weight:700;color:var(--ink);
+}
+.artist-editor-actions{
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;
 }
 .btn.small{
   padding:7px 11px;font-size:12px;
@@ -2095,9 +2437,14 @@ tbody tr:hover .row-note{opacity:1}
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
 }
 .project-meta-select{
-  min-width:118px;border:1px solid var(--border);background:var(--control-bg);
+  min-width:118px;border:1px solid var(--border);background:var(--control-bg-strong);
   color:var(--ink);border-radius:12px;padding:8px 28px 8px 10px;
-  font-size:12px;font-weight:600;appearance:auto;
+  font-size:12px;font-weight:600;appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
+  cursor:pointer;
 }
 .project-meta-select:focus{
   outline:none;border-color:var(--accent);
@@ -2130,6 +2477,19 @@ tbody tr:hover .row-note{opacity:1}
 .planner-panel-head{
   display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;
 }
+details.planner-panel > summary.planner-panel-head{
+  cursor:pointer;list-style:none;user-select:none;
+}
+details.planner-panel > summary.planner-panel-head::marker,
+details.planner-panel > summary.planner-panel-head::-webkit-details-marker{
+  display:none;
+}
+details.planner-panel > summary.planner-panel-head:after{
+  content:"▼";font-size:12px;color:var(--ink-4);align-self:center;margin-left:auto;transition:transform 0.2s ease;
+}
+details.planner-panel[open] > summary.planner-panel-head:after{
+  transform:rotate(-180deg);
+}
 .planner-panel-title{
   font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.02em;
 }
@@ -2157,7 +2517,16 @@ tbody tr:hover .row-note{opacity:1}
 }
 .planner-goal-input{
   width:100%;border:1px solid var(--border);border-radius:12px;background:var(--surface);
-  color:var(--ink);padding:10px 11px;font-size:13px;font-weight:600;appearance:auto;
+  color:var(--ink);padding:10px 11px;font-size:13px;font-weight:600;
+}
+select.planner-goal-input{
+  appearance:none;-webkit-appearance:none;
+  padding-right:28px;
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px;
 }
 .planner-goal-input:focus{
   outline:none;border-color:var(--accent);
@@ -2217,18 +2586,57 @@ tbody tr:hover .row-note{opacity:1}
 .planner-board-column{
   border:1px solid var(--border);border-radius:18px;background:var(--control-bg);
   padding:14px;display:grid;gap:10px;align-content:start;
+  border-top: 4px solid var(--status-color, var(--border)) !important;
+  background-color: var(--status-bg, var(--control-bg)) !important;
+  transition: all 0.2s ease-in-out;
 }
 .planner-board-head{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
-  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+  color: var(--status-color, var(--ink-3)) !important;
 }
 .planner-board-count{
-  font-family:var(--font-mono);font-size:11px;color:var(--ink-4);
-  border:1px solid var(--border);border-radius:999px;padding:3px 7px;background:var(--surface);
+  font-family:var(--font-mono);font-size:11px;
+  border:1px solid var(--border);border-radius:999px;padding:3px 7px;
+  border-color: color-mix(in srgb, var(--status-color, var(--border)) 30%, transparent) !important;
+  background: color-mix(in srgb, var(--status-color, var(--surface)) 10%, var(--surface)) !important;
+  color: var(--status-color, var(--ink-4)) !important;
+}
+
+/* Board Column Color Schemes */
+.planner-board-column[data-planner-status=""] {
+  --status-color: var(--ink-4, #8e8e93);
+  --status-bg: color-mix(in srgb, var(--status-color) 4%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="idea"] {
+  --status-color: #ff9500;
+  --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="in_progress"] {
+  --status-color: #007aff;
+  --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="finishing"] {
+  --status-color: #af52de;
+  --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="finished"] {
+  --status-color: #34c759;
+  --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="paused"] {
+  --status-color: #8e8e93;
+  --status-bg: color-mix(in srgb, var(--status-color) 3%, var(--control-bg));
+}
+.planner-board-column[data-planner-status="abandoned"] {
+  --status-color: #ff3b30;
+  --status-bg: color-mix(in srgb, var(--status-color) 3%, var(--control-bg));
 }
 .planner-board-project{display:grid;gap:10px;background:var(--surface)}
-.planner-board-project .project-meta-controls{gap:6px}
+.planner-board-project .project-meta-controls{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
 .planner-board-project .project-meta-select{min-width:0;width:100%}
+.planner-board-project .project-progress-slider-wrap{grid-column:1 / -1;margin-top:2px}
+.planner-board-project .project-task-pill{width:100%;justify-content:center}
 .planner-project-line{
   display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;
 }
@@ -2239,6 +2647,190 @@ tbody tr:hover .row-note{opacity:1}
 .planner-empty{
   padding:28px 14px;text-align:center;border:1px dashed var(--border-strong);
   border-radius:16px;color:var(--ink-4);font-size:13px;
+}
+
+/* --- Project Map / Portfolio Overview --- */
+.portfolio-map-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;
+}
+.portfolio-lenses{
+  display:inline-flex;align-items:center;gap:3px;padding:3px;
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+}
+.portfolio-lens{
+  border:0;border-radius:999px;background:transparent;color:var(--ink-4);
+  padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;
+}
+.portfolio-lens.is-active{
+  background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.portfolio-map-meta{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink-4);font-size:12px;font-weight:700;
+}
+.portfolio-map{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;
+}
+.portfolio-group{
+  display:grid;gap:9px;align-content:start;min-width:0;
+  border:1px solid var(--border);border-radius:16px;background:var(--control-bg);padding:12px;
+}
+.portfolio-group-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);
+}
+.portfolio-group-count{
+  font-family:var(--font-mono);font-size:11px;color:var(--ink-4);
+  border:1px solid var(--border);border-radius:999px;padding:2px 7px;background:var(--surface);
+}
+.portfolio-tile{
+  position:relative;display:grid;gap:8px;width:100%;min-width:0;text-align:left;
+  border:1px solid var(--border);border-left:4px solid var(--project-accent,var(--accent));
+  border-radius:12px;background:var(--surface);color:var(--ink);padding:10px 11px;
+  cursor:pointer;transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+.portfolio-tile:hover{
+  transform:translateY(-1px);border-color:var(--border-strong);box-shadow:0 5px 14px rgba(0,0,0,.08);
+}
+.portfolio-tile.is-muted{opacity:.58}
+.portfolio-tile.is-overdue{border-color:rgba(255,59,48,.42);border-left-color:var(--danger)}
+.portfolio-tile.is-due-soon{border-color:rgba(255,159,10,.42);border-left-color:#ff9500}
+.portfolio-tile-top{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;
+}
+.portfolio-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13px;font-weight:800;line-height:1.25;
+}
+.portfolio-badges{
+  display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;
+}
+.portfolio-badge{
+  max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+  color:var(--ink-3);padding:2px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;
+}
+.portfolio-badge.is-high{color:var(--danger);background:var(--danger-soft);border-color:rgba(255,59,48,.22)}
+.portfolio-badge.is-attention{color:#b36b00;background:rgba(255,159,10,.10);border-color:rgba(255,159,10,.28)}
+.portfolio-tile-sub{
+  display:flex;align-items:center;gap:6px;min-width:0;color:var(--ink-4);font-size:11px;font-weight:700;
+}
+.portfolio-tile-sub span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.portfolio-dot{width:7px;height:7px;border-radius:999px;background:var(--project-accent,var(--accent));flex:0 0 auto}
+.portfolio-bars{display:grid;gap:5px}
+.portfolio-bar{
+  height:5px;border-radius:999px;background:var(--control-bg);border:1px solid var(--border);overflow:hidden;
+}
+.portfolio-bar span{display:block;height:100%;width:var(--bar-value,0%);background:var(--bar-color,var(--accent))}
+.portfolio-tile-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ink-4);
+  font-size:11px;font-weight:700;line-height:1.25;
+}
+.portfolio-foot-left,
+.portfolio-foot-right{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* --- Project Board Improvements --- */
+.board-toolbar{
+  display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;
+}
+.board-search{
+  flex:1;min-width:200px;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface);
+  color:var(--ink);padding:9px 11px 9px 32px;font-size:13px;font-weight:600;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:10px center;
+}
+.board-search:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.board-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.board-filter-chip{
+  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
+  padding:5px 12px;font-size:12px;font-weight:700;color:var(--ink-3);cursor:pointer;
+  transition:all .15s ease;
+}
+.board-filter-chip:hover{background:var(--surface-hover);color:var(--ink-2)}
+.board-filter-chip.is-active{
+  background:var(--ink);color:var(--surface);border-color:var(--ink);
+}
+.board-sort-control{
+  border:1px solid var(--border);border-radius:12px;background:var(--control-bg);
+  color:var(--ink-2);padding:7px 26px 7px 10px;font-size:12px;font-weight:600;
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+}
+.board-sort-control:focus{outline:none;border-color:var(--accent)}
+
+.planner-board-project{
+  position:relative;
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.planner-board-project:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 12px rgba(0,0,0,0.08);
+}
+.board-card-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:8px;
+}
+.board-card-title-wrap{
+  display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap;
+}
+.board-card-activity{
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+  background:var(--activity-color, var(--ink-4));
+}
+.board-card-tags{
+  display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;
+}
+.board-card-priority{
+  font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 5px;
+  border-radius:4px;background:var(--surface-hover);color:var(--ink-3);
+}
+.board-card-priority.is-high{color:var(--danger);background:var(--danger-soft)}
+.board-card-priority.is-low{color:var(--ink-4)}
+
+/* Drag and Drop */
+.planner-board-project[draggable]{cursor:grab}
+.planner-board-project[draggable]:active{cursor:grabbing}
+.planner-board-project.is-dragging{
+  opacity:0.5;border:1px dashed var(--border-strong);
+}
+.planner-board-column.drag-over{
+  background:var(--surface-hover);
+  border-color:var(--accent);
+}
+.board-drop-indicator{
+  height:4px;background:var(--accent);border-radius:2px;
+  margin:4px 0;pointer-events:none;
+}
+
+/* Collapsible Columns */
+.board-column-toggle{
+  background:none;border:none;color:var(--ink-4);cursor:pointer;
+  padding:4px;display:inline-flex;align-items:center;justify-content:center;
+  transition:transform 0.2s ease;
+}
+.planner-board-column.is-collapsed .board-column-toggle{
+  transform:rotate(-90deg);
+}
+.planner-board-column-content{
+  display:grid;gap:10px;
+  max-height:5000px;overflow:hidden;
+  transition:max-height 0.3s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+.planner-board-column.is-collapsed .planner-board-column-content{
+  max-height:0;opacity:0;margin-top:-10px;
+}
+
+/* Empty States */
+.board-empty-hint{
+  padding:24px 14px;text-align:center;
+  border-radius:12px;background:var(--surface);
+  color:var(--ink-4);font-size:12px;line-height:1.4;
+}
+.board-empty-hint svg{
+  width:24px;height:24px;margin-bottom:8px;opacity:0.5;
 }
 
 .rank{
@@ -2308,6 +2900,11 @@ tbody tr:hover .row-note{opacity:1}
   .target-card .goal-shell{grid-template-columns:1fr;gap:14px}
   .target-card .goal-ring{width:min(200px,100%)}
   .target-card .goal-controls{padding:12px}
+  .pace-goal-edit{grid-template-columns:1fr}
+  .pace-goal-edit .goal-presets{justify-content:start}
+  .pace-stats{grid-template-columns:1fr}
+  .week-strip{gap:5px}
+  .week-dot{width:18px;height:18px}
   .card{min-height:190px;padding:24px 18px 20px}
   .card-value{font-size:32px}
   .card-value--text{font-size:21px}
@@ -2328,6 +2925,10 @@ tbody tr:hover .row-note{opacity:1}
   .heatmap-day-head strong,
   .heatmap-day-chip strong{font-size:11px}
   .field-grid{grid-template-columns:1fr}
+  .artist-form .field-grid,
+  .artist-editor .field-grid{grid-template-columns:1fr}
+  .artist-header{align-items:stretch;flex-direction:column;gap:12px}
+  .artist-edit-btn{align-self:flex-start}
   .color-control{grid-template-columns:auto 1fr}
   .color-picker-button{grid-column:1 / -1}
   .scale-control-panel{grid-template-columns:1fr auto}
@@ -2341,6 +2942,11 @@ tbody tr:hover .row-note{opacity:1}
   .planner-row-name{white-space:normal}
   .planner-goal-form{grid-template-columns:1fr}
   .planner-goal-actions{justify-content:flex-start}
+  .portfolio-map-toolbar{align-items:stretch;flex-direction:column}
+  .portfolio-lenses{width:100%;overflow:auto}
+  .portfolio-lens{flex:1}
+  .portfolio-map{grid-template-columns:1fr}
+  .portfolio-name{white-space:normal;overflow-wrap:anywhere}
   .scale-slider{grid-column:1 / -1}
   .scale-endpoint{display:none}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -2354,6 +2960,11 @@ tbody tr:hover .row-note{opacity:1}
   .detail-modal-body{padding:18px 20px 22px}
   .detail-kpis{grid-template-columns:1fr}
   .detail-heatmap{grid-template-columns:repeat(10,minmax(0,1fr))}
+  
+  .board-toolbar{flex-direction:column;align-items:stretch}
+  .board-search{width:100%}
+  .planner-board{overflow-x:auto;display:flex;flex-wrap:nowrap;scroll-snap-type:x mandatory;padding-bottom:10px}
+  .planner-board-column{min-width:280px;scroll-snap-align:start}
 }
 @media (prefers-reduced-motion: reduce){
   .card,
@@ -2367,6 +2978,42 @@ tbody tr:hover .row-note{opacity:1}
   background:var(--surface-hover);padding:14px;border-radius:10px;
   border:1px solid var(--border);max-height:400px;overflow:auto;
   white-space:pre-wrap;word-break:break-word;
+}
+.project-progress-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.project-meta-slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.project-progress-bar {
+  height: 4px;
+  background: var(--surface-1);
+  border-radius: 2px;
+  margin: 8px 0;
+  overflow: hidden;
+  position: relative;
+}
+.project-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.planner-board-project.is-overdue {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.planner-board-project.is-due-soon {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 </style>
 </head>
@@ -2394,8 +3041,8 @@ tbody tr:hover .row-note{opacity:1}
   </div>
   <div class="header-right">
     <div class="header-nav" role="tablist" aria-label="Pages">
-      <button class="nav-tab is-active" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
-      <button class="nav-tab" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
+      <button class="nav-tab is-active" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
+      <button class="nav-tab" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
       <button class="nav-tab" id="navSettings" type="button" data-view-tab="settings">Settings</button>
     </div>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
@@ -2591,9 +3238,12 @@ const CATEGORY_COLOR_PRESETS = [
 ];
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
+let boardSearchQuery = '';
+let boardTypeFilter = '';
+let portfolioMapLens = localStorage.getItem('portfolioMapLens') || 'status';
 let activeView = window.location.hash === '#settings'
   ? 'settings'
-  : (window.location.hash === '#planner' ? 'planner' : 'dashboard');
+  : (window.location.hash === '#dashboard' ? 'dashboard' : 'planner');
 let CATEGORY_OPTIONS = [];
 let CATEGORY_BY_KEY = {};
 const dashboardMonthState = {
@@ -2610,6 +3260,7 @@ const weeklyTargetState = {
   requestToken: 0,
   historyRequestToken: 0,
   historyRows: [],
+  dailyRows: [],
 };
 
 function activeTheme() {
@@ -2680,6 +3331,18 @@ async function hydrateUiScaleSetting() {
 function syncCategoryOptions(options) {
   CATEGORY_OPTIONS = Array.isArray(options) ? options : [];
   CATEGORY_BY_KEY = Object.fromEntries(CATEGORY_OPTIONS.map(option => [option.key, option]));
+}
+
+function syncProjectOptions(statusOptions, typeOptions) {
+  PROJECT_STATUS_OPTIONS = [['', 'Set status']];
+  if (Array.isArray(statusOptions)) {
+    statusOptions.forEach(([key, label]) => PROJECT_STATUS_OPTIONS.push([key, label]));
+  }
+  
+  PROJECT_TYPE_OPTIONS = [['', 'Set type']];
+  if (Array.isArray(typeOptions)) {
+    typeOptions.forEach(([key, label]) => PROJECT_TYPE_OPTIONS.push([key, label]));
+  }
 }
 
 function normalizeHexColor(value) {
@@ -2979,7 +3642,7 @@ function categoryPill(project) {
   `;
 }
 
-const PROJECT_STATUS_OPTIONS = [
+let PROJECT_STATUS_OPTIONS = [
   ['', 'Set status'],
   ['idea', 'Idea'],
   ['in_progress', 'In Progress'],
@@ -2988,7 +3651,7 @@ const PROJECT_STATUS_OPTIONS = [
   ['paused', 'Paused'],
   ['abandoned', 'Abandoned'],
 ];
-const PROJECT_TYPE_OPTIONS = [
+let PROJECT_TYPE_OPTIONS = [
   ['', 'Set type'],
   ['personal', 'Personal'],
   ['client', 'Client'],
@@ -3032,11 +3695,30 @@ function projectMetaSelect(project, field, options) {
   `;
 }
 
-function projectMetaControls(project) {
+function projectArtistSelect(project) {
+  const encodedProject = encodeURIComponent(project.project_name);
+  const current = String(project?.artist_id || '');
+  const artists = Array.isArray(latestDashboardData?.artists) ? latestDashboardData.artists : [];
+  return `
+    <select class="project-meta-select" data-project-meta="artist_id" data-project-name="${encodedProject}" aria-label="Project artist">
+      <option value="" ${current === '' ? 'selected' : ''}>No artist</option>
+      ${artists.map(artist => `<option value="${escapeHtml(artist.id)}" ${current === artist.id ? 'selected' : ''}>${escapeHtml(artist.name)}</option>`).join('')}
+    </select>
+  `;
+}
+
+function projectMetaControls(project, extraHtml = '') {
   return `
     <div class="project-meta-controls" data-project-meta-scope>
       ${projectMetaSelect(project, 'status', PROJECT_STATUS_OPTIONS)}
       ${projectMetaSelect(project, 'type', PROJECT_TYPE_OPTIONS)}
+      ${projectArtistSelect(project)}
+      ${extraHtml}
+      <div class="project-progress-slider-wrap">
+        <label>Progress</label>
+        <input type="range" class="project-meta-slider" data-project-meta="progress_percent" data-project-name="${encodeURIComponent(project.project_name)}" min="0" max="100" value="${project.progress_percent || 0}">
+        <span class="project-progress-val">${project.progress_percent || 0}%</span>
+      </div>
     </div>
   `;
 }
@@ -3397,6 +4079,21 @@ function buildWeeklyTargetModel(target) {
   const tone = targetTone(progressRatio, hasGoal);
   const shortfallSeconds = hasGoal ? Math.max(0, Math.round(goalHours * 3600 - progressSeconds)) : 0;
   const percent = hasGoal ? Math.round(progressRatio * 100) : 0;
+  const todayKey = localDateKey(new Date());
+  const isCurrentWeek = weekStart === currentWeekStartKey();
+  const isPastWeek = weekEnd < todayKey;
+  const isFutureWeek = weekStart > todayKey;
+  const dayIndex = clamp(Math.floor((dateFromKey(todayKey) - dateFromKey(weekStart)) / 86400000), 0, 6);
+  const elapsedDays = isFutureWeek ? 0 : (isPastWeek ? 7 : dayIndex + 1);
+  const remainingDays = isCurrentWeek ? Math.max(1, 7 - dayIndex) : 0;
+  const elapsedFraction = isFutureWeek ? 0 : (isPastWeek ? 1 : elapsedDays / 7);
+  const idealSeconds = hasGoal ? Math.round(goalHours * 3600 * elapsedFraction) : 0;
+  const paceDeltaSeconds = hasGoal ? Math.round(progressSeconds - idealSeconds) : 0;
+  const projectedSeconds = hasGoal
+    ? (elapsedDays > 0 ? Math.round((progressSeconds / elapsedDays) * 7) : 0)
+    : progressSeconds;
+  const requiredPerDaySeconds = hasGoal && remainingDays > 0 ? Math.ceil(shortfallSeconds / remainingDays) : 0;
+  const status = weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek });
   return {
     weekStart,
     weekEnd,
@@ -3410,7 +4107,69 @@ function buildWeeklyTargetModel(target) {
     progressText: hasGoal ? `${fmt.dur(progressSeconds)} of ${formatHoursNumber(goalHours)}h` : fmt.dur(progressSeconds),
     shortfallText: hasGoal ? (shortfallSeconds > 0 ? `${fmt.dur(shortfallSeconds)} short` : goalRemainingText(goalHours * 3600, progressSeconds)) : 'No weekly goal saved',
     remainingLabel: hasGoal ? goalRemainingText(goalHours * 3600, progressSeconds) : 'No weekly goal saved',
+    shortfallSeconds,
+    todayKey,
+    isCurrentWeek,
+    isPastWeek,
+    isFutureWeek,
+    elapsedDays,
+    remainingDays,
+    idealSeconds,
+    paceDeltaSeconds,
+    projectedSeconds,
+    requiredPerDaySeconds,
+    status,
   };
+}
+
+function weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek }) {
+  if (!hasGoal) return { label: 'Set a weekly goal', accent: '#8e8e93', className: 'is-empty' };
+  const goalSeconds = goalHours * 3600;
+  if (progressSeconds >= goalSeconds) return { label: 'Goal met', accent: '#30a455', className: 'is-met' };
+  if (isFutureWeek) return { label: 'Starts soon', accent: '#8e8e93', className: 'is-empty' };
+  const abs = Math.abs(paceDeltaSeconds);
+  if (isPastWeek) return { label: `${fmt.dur(goalSeconds - progressSeconds)} short`, accent: '#a05050', className: 'is-far' };
+  if (paceDeltaSeconds >= 0) return { label: `Ahead by ${fmt.dur(abs)}`, accent: '#30a455', className: 'is-met' };
+  const amberCutoff = Math.max(30 * 60, goalSeconds * 0.04);
+  return {
+    label: `Behind by ${fmt.dur(abs)}`,
+    accent: abs <= amberCutoff ? '#c89430' : '#a05050',
+    className: abs <= amberCutoff ? 'is-mid' : 'is-far',
+  };
+}
+
+function dailySecondsByKey(rows = []) {
+  const map = new Map();
+  rows.forEach(row => {
+    if (row && row.day) map.set(row.day, Math.max(0, row.total_seconds || 0));
+  });
+  return map;
+}
+
+function renderWeekStrip(model) {
+  const byDay = dailySecondsByKey(weeklyTargetState.dailyRows);
+  const start = dateFromKey(model.weekStart);
+  const todayKey = model.todayKey;
+  return `
+    <div class="week-strip" aria-label="Weekly activity by day">
+      ${Array.from({ length: 7 }, (_, index) => {
+        const dateKey = localDateKey(addDays(start, index));
+        const seconds = byDay.get(dateKey) || 0;
+        const classes = [
+          'week-day',
+          seconds > 0 ? 'is-logged' : '',
+          dateKey === todayKey ? 'is-today' : '',
+        ].filter(Boolean).join(' ');
+        const dayLabel = dateFromKey(dateKey).toLocaleDateString('en-US', { weekday: 'short' });
+        return `
+          <div class="${classes}" title="${dayLabel} · ${fmt.dur(seconds)}">
+            <i class="week-dot" aria-hidden="true"></i>
+            <span>${dayLabel.slice(0, 3)}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 function renderWeeklyTargetDetail() {
@@ -3586,41 +4345,25 @@ function renderStreakDetail({ summary, year_daily }) {
     narrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
   }
 
-  const statusLabel = cur > best ? '🏆 Record' : cur === best && best > 0 ? 'On track' : cur === 0 ? 'Restart' : 'Building';
-
   return `
     <div class="detail-stack">
-      <div class="detail-kpis">
+      <div class="detail-kpis" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
         <div class="detail-kpi"><span>Current streak</span><strong>${cur} day${cur !== 1 ? 's' : ''}</strong></div>
         <div class="detail-kpi"><span>Personal best</span><strong>${best} day${best !== 1 ? 's' : ''}</strong></div>
-        <div class="detail-kpi"><span>Status</span><strong>${statusLabel}</strong></div>
       </div>
       <div class="streak-vinyl-section">
-        <div class="streak-vinyl-label">Streak progress</div>
         <div class="streak-vinyl-track">
           <div class="streak-vinyl-labels">
-            ${markers.map(m => `<div class="streak-vinyl-day">D${m.dayNum}</div>`).join('')}
+            ${markers.map(m => `<div class="streak-vinyl-day">${m.dayNum}</div>`).join('')}
           </div>
           <div class="streak-vinyl-markers">
             ${markers.map(m => {
               const cls = m.isRecord ? 'is-record' : m.isActive ? 'is-active' : '';
-              const tip = m.isActive ? `Day ${m.dayNum} · current streak` : `Day ${m.dayNum} · personal best`;
-              return `<div class="streak-vinyl-marker ${cls}" title="${escapeHtml(tip)}"></div>`;
+              return `<div class="streak-vinyl-marker ${cls}"></div>`;
             }).join('')}
           </div>
         </div>
-        <div class="streak-vinyl-legend">
-          <div class="streak-vinyl-legend-item">
-            <div class="streak-vinyl-legend-dot is-active"></div>
-            <span>Current streak</span>
-          </div>
-          <div class="streak-vinyl-legend-item">
-            <div class="streak-vinyl-legend-dot is-ghost"></div>
-            <span>Personal best</span>
-          </div>
-        </div>
       </div>
-      <div class="streak-vinyl-narrative">${narrative}</div>
     </div>
   `;
 }
@@ -3643,7 +4386,7 @@ function renderDetail(kind, data) {
     return { title: 'Month', subtitle: `${monthName} total, pace, and category mix`, body: renderThisMonthDetail(data) };
   }
   if (kind === 'streak') {
-    return { title: 'Streak', subtitle: 'Personal best and current run', body: renderStreakDetail(data) };
+    return { title: 'Streak', subtitle: '', body: renderStreakDetail(data) };
   }
   return null;
 }
@@ -4112,34 +4855,57 @@ function bindCategoryTriggers() {
 }
 
 function bindProjectMetaControls() {
-  document.querySelectorAll('[data-project-meta]').forEach(select => {
-    select.addEventListener('change', async () => {
-      const projectName = decodeURIComponent(select.dataset.projectName || '');
-      const scope = select.closest('[data-project-meta-scope]') || select.closest('tr');
+  document.querySelectorAll('[data-project-meta]').forEach(input => {
+    if (input.dataset.projectMeta === 'progress_percent') {
+      input.addEventListener('input', () => {
+        const wrap = input.closest('.project-progress-slider-wrap');
+        if (wrap) {
+          const valEl = wrap.querySelector('.project-progress-val');
+          if (valEl) valEl.textContent = `${input.value}%`;
+        }
+      });
+    }
+
+    input.addEventListener('change', async () => {
+      const projectName = decodeURIComponent(input.dataset.projectName || '');
+      const scope = input.closest('[data-project-meta-scope]') || input.closest('tr');
       const statusSelect = scope?.querySelector('[data-project-meta="status"]');
       const typeSelect = scope?.querySelector('[data-project-meta="type"]');
+      const artistSelect = scope?.querySelector('[data-project-meta="artist_id"]');
+      const progressInput = scope?.querySelector('[data-project-meta="progress_percent"]');
       if (!projectName || !statusSelect || !typeSelect) return;
 
-      const previous = select.dataset.previousValue || '';
-      select.disabled = true;
+      const previous = input.dataset.previousValue || '';
+      input.disabled = true;
       try {
         const result = await postJson('/api/project-metadata', {
           project_name: projectName,
           status: statusSelect.value,
           type: typeSelect.value,
+          artist_id: artistSelect ? artistSelect.value : '',
+          progress_percent: progressInput ? parseInt(progressInput.value, 10) : 0,
         });
         statusSelect.dataset.previousValue = result.metadata?.status || '';
         typeSelect.dataset.previousValue = result.metadata?.type || '';
+        if (artistSelect) artistSelect.dataset.previousValue = result.metadata?.artist_id || '';
+        if (progressInput) progressInput.dataset.previousValue = result.metadata?.progress_percent || '0';
         toast(`Updated ${projectName}`);
         load();
       } catch (error) {
-        select.value = previous;
+        input.value = previous;
+        if (input.dataset.projectMeta === 'progress_percent') {
+          const wrap = input.closest('.project-progress-slider-wrap');
+          if (wrap) {
+            const valEl = wrap.querySelector('.project-progress-val');
+            if (valEl) valEl.textContent = `${previous}%`;
+          }
+        }
         toast(error.message || 'Failed to save project metadata');
       } finally {
-        select.disabled = false;
+        input.disabled = false;
       }
     });
-    select.dataset.previousValue = select.value || '';
+    input.dataset.previousValue = input.value || '';
   });
 }
 
@@ -5235,6 +6001,164 @@ function compactDateLabel(value) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function portfolioDueDays(project) {
+  const value = project?.hard_deadline || project?.due_date || '';
+  if (!value) return null;
+  const parts = String(value).split('-').map(Number);
+  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return null;
+  const due = new Date(parts[0], parts[1] - 1, parts[2]);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((due - today) / 86400000);
+}
+
+function portfolioAttentionScore(project) {
+  const days = daysSinceTimestamp(project?.last_seen);
+  const dueDays = portfolioDueDays(project);
+  const tasks = projectTaskSummary(project);
+  let score = 0;
+  if (project?.deadline_state === 'overdue') score += 80;
+  else if (project?.deadline_state === 'due_soon') score += 60;
+  else if (dueDays != null && dueDays <= 14) score += 38;
+  if (project?.priority === 'high') score += 34;
+  if (project?.status === 'finishing') score += 18;
+  if (project?.type === 'client') score += 16;
+  if (!['finished', 'abandoned'].includes(project?.status || '') && (days == null || days >= 14)) score += 24;
+  else if (days != null && days <= 2) score += 10;
+  score += Math.min(tasks.openCount * 5, 20);
+  return score;
+}
+
+function portfolioAttentionLabel(project) {
+  const score = portfolioAttentionScore(project);
+  if (project?.deadline_state === 'overdue') return 'Overdue';
+  if (project?.deadline_state === 'due_soon') return 'Due soon';
+  if (score >= 58) return 'Needs attention';
+  if (score >= 28) return 'Watch';
+  if (['finished', 'abandoned'].includes(project?.status || '')) return 'Closed';
+  return 'Steady';
+}
+
+function portfolioRecentLabel(project) {
+  const days = daysSinceTimestamp(project?.last_seen);
+  if (days == null) return 'No sessions';
+  if (days <= 1) return 'Today / Yesterday';
+  if (days <= 7) return 'This week';
+  if (days <= 30) return 'This month';
+  return 'Older';
+}
+
+function portfolioProjectSort(a, b) {
+  return portfolioAttentionScore(b) - portfolioAttentionScore(a)
+    || (b.month_seconds || 0) - (a.month_seconds || 0)
+    || (b.total_seconds || 0) - (a.total_seconds || 0)
+    || String(a.project_name || '').localeCompare(String(b.project_name || ''));
+}
+
+function portfolioMapGroups(projects, lens) {
+  const addGroups = (defs, resolve) => defs.map(([value, label]) => ({
+    value,
+    label: value === '' ? (lens === 'type' ? 'No type' : 'Unsorted') : label,
+    projects: projects.filter(project => resolve(project) === value).sort(portfolioProjectSort),
+  })).filter(group => group.projects.length);
+
+  if (lens === 'type') {
+    return addGroups(PROJECT_TYPE_OPTIONS, project => project.type || '');
+  }
+  if (lens === 'attention') {
+    const order = ['Overdue', 'Due soon', 'Needs attention', 'Watch', 'Steady', 'Closed'];
+    return order.map(label => ({
+      value: label.toLowerCase().replace(/\s+/g, '_'),
+      label,
+      projects: projects.filter(project => portfolioAttentionLabel(project) === label).sort(portfolioProjectSort),
+    })).filter(group => group.projects.length);
+  }
+  if (lens === 'recent') {
+    const order = ['Today / Yesterday', 'This week', 'This month', 'Older', 'No sessions'];
+    return order.map(label => ({
+      value: label.toLowerCase().replace(/\W+/g, '_'),
+      label,
+      projects: projects.filter(project => portfolioRecentLabel(project) === label).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0) || portfolioProjectSort(a, b)),
+    })).filter(group => group.projects.length);
+  }
+  return addGroups(PROJECT_STATUS_OPTIONS, project => project.status || '');
+}
+
+function renderPortfolioTile(project, index, maxMonthSeconds) {
+  const attention = portfolioAttentionLabel(project);
+  const dueLabel = projectDeadlineLabel(project);
+  const taskSummary = projectTaskSummary(project);
+  const monthPct = maxMonthSeconds > 0 ? Math.max(0, Math.min(100, Math.round(((project.month_seconds || 0) / maxMonthSeconds) * 100))) : 0;
+  const progressPct = Math.max(0, Math.min(100, Number(project.progress_percent || 0)));
+  const muted = ['finished', 'abandoned'].includes(project.status || '') || (project.status === 'paused' && (project.month_seconds || 0) <= 0);
+  const badgeClass = project.priority === 'high' ? 'is-high' : (['Overdue', 'Due soon', 'Needs attention'].includes(attention) ? 'is-attention' : '');
+  return `
+    <button class="portfolio-tile ${muted ? 'is-muted' : ''} ${project.deadline_state === 'overdue' ? 'is-overdue' : project.deadline_state === 'due_soon' ? 'is-due-soon' : ''}" type="button" data-portfolio-project="${encodeURIComponent(project.project_name || '')}" style="--project-accent:${projectColor(project, index)}">
+      <div class="portfolio-tile-top">
+        <div class="portfolio-name" title="${escapeHtml(project.project_name || 'Untitled')}">${escapeHtml(project.project_name || 'Untitled')}</div>
+        <div class="portfolio-badges">
+          ${project.priority ? `<span class="portfolio-badge ${project.priority === 'high' ? 'is-high' : ''}">${escapeHtml(projectPriorityLabel(project.priority))}</span>` : ''}
+          <span class="portfolio-badge ${badgeClass}">${escapeHtml(attention)}</span>
+        </div>
+      </div>
+      <div class="portfolio-tile-sub">
+        <span class="portfolio-dot"></span>
+        <span>${escapeHtml(project.category_label || getCategoryMeta(project.category_key)?.label || 'No category')}</span>
+        <span>·</span>
+        <span>${escapeHtml(projectTypeLabel(project.type) || 'No type')}</span>
+      </div>
+      <div class="portfolio-bars" aria-label="${escapeHtml(project.project_name || 'Project')} activity and progress">
+        <div class="portfolio-bar" title="Month activity: ${escapeHtml(fmt.dur(project.month_seconds || 0))}"><span style="--bar-value:${monthPct}%;--bar-color:var(--project-accent,var(--accent))"></span></div>
+        <div class="portfolio-bar" title="Progress: ${progressPct}%"><span style="--bar-value:${progressPct}%;--bar-color:var(--accent)"></span></div>
+      </div>
+      <div class="portfolio-tile-foot">
+        <span class="portfolio-foot-left">${escapeHtml(fmt.dur(project.total_seconds || 0))} total · ${escapeHtml(lastWorkedLabel(project))}</span>
+        <span class="portfolio-foot-right">${escapeHtml(dueLabel || taskSummary.label)}</span>
+      </div>
+    </button>
+  `;
+}
+
+function renderPortfolioMap(projects) {
+  if (!Array.isArray(projects) || projects.length === 0) {
+    return '<div class="planner-empty">No projects tracked yet.</div>';
+  }
+  const lens = ['status', 'type', 'attention', 'recent'].includes(portfolioMapLens) ? portfolioMapLens : 'status';
+  const maxMonthSeconds = Math.max(...projects.map(project => Number(project.month_seconds || 0)), 0);
+  const groups = portfolioMapGroups(projects, lens);
+  const attentionCount = projects.filter(project => ['Overdue', 'Due soon', 'Needs attention'].includes(portfolioAttentionLabel(project))).length;
+  const lenses = [
+    ['status', 'Status'],
+    ['type', 'Type'],
+    ['attention', 'Attention'],
+    ['recent', 'Recent'],
+  ];
+  return `
+    <div class="portfolio-map-toolbar">
+      <div class="portfolio-lenses" role="tablist" aria-label="Portfolio lenses">
+        ${lenses.map(([value, label]) => `<button class="portfolio-lens ${lens === value ? 'is-active' : ''}" type="button" data-portfolio-lens="${value}">${escapeHtml(label)}</button>`).join('')}
+      </div>
+      <div class="portfolio-map-meta">
+        <span>${projects.length} projects</span>
+        <span>·</span>
+        <span>${attentionCount} attention</span>
+      </div>
+    </div>
+    <div class="portfolio-map">
+      ${groups.map(group => `
+        <section class="portfolio-group">
+          <div class="portfolio-group-head">
+            <span>${escapeHtml(group.label)}</span>
+            <span class="portfolio-group-count">${group.projects.length}</span>
+          </div>
+          ${group.projects.map((project, index) => renderPortfolioTile(project, index, maxMonthSeconds)).join('')}
+        </section>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderPlannerGoalForm() {
   return `
     <form class="planner-goal-form" id="plannerGoalCreateForm" data-planner-goal-form>
@@ -5329,14 +6253,14 @@ function renderPlanner(data) {
       return days == null || days >= 7;
     })
     .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
-  const statusGroups = PROJECT_STATUS_OPTIONS
+  const statusGroupsOld = PROJECT_STATUS_OPTIONS
     .filter(([value]) => value)
     .map(([value, label]) => ({
       value,
       label,
       projects: projects.filter(project => (project.status || '') === value),
     }));
-  const unsortedProjects = projects.filter(project => !(project.status || ''));
+  const unsortedProjectsOld = projects.filter(project => !(project.status || ''));
   const focusItems = plannerFocusItems(projects, plannerGoals);
   const topSuggestion = focusItems[0] || null;
   const deadlineProjects = plannerDeadlineProjects(projects);
@@ -5392,68 +6316,126 @@ function renderPlanner(data) {
     }).join('')}</div>`;
   };
 
-  const renderBoardProject = (project, index) => `
-    <div class="planner-board-project">
-      <div class="planner-project-line">
-        ${projectBadge(project, index)}
-        <span class="planner-project-stats">${fmt.dur(project.total_seconds || 0)}</span>
-      </div>
-      <div class="planner-row-meta">${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(lastWorkedLabel(project))}</div>
-      ${projectMetaControls(project)}
-      ${projectTaskButton(project)}
-    </div>
-  `;
+  const renderBoardProject = (project, index) => {
+    const encodedProject = encodeURIComponent(project.project_name || '');
+    const priority = project.priority || '';
+    const openCount = projectTaskSummary(project).openCount;
+    const days = daysSinceTimestamp(project.last_seen);
+    let activityColor = 'var(--ink-4)';
+    if (days === 0) activityColor = 'var(--live)';
+    else if (days != null && days <= 7) activityColor = 'var(--accent)';
+    
+    let priorityClass = '';
+    if (priority === 'high') priorityClass = 'is-high';
+    if (priority === 'low') priorityClass = 'is-low';
+    
+    let accentColor = projectColor(project, index);
+    if (priority === 'high') accentColor = 'var(--danger)';
 
-  const renderBoardColumn = ({ value, label, projects: groupProjects }) => `
-    <div class="planner-board-column" data-planner-status="${value}">
-      <div class="planner-board-head">
-        <span>${escapeHtml(label)}</span>
-        <span class="planner-board-count">${groupProjects.length}</span>
+    const deadlineReasons = projectDeadlineReasons(project);
+    const deadlineTags = [
+      (project.type ? { label: projectTypeLabel(project.type), className: '' } : null),
+      ...deadlineReasons
+    ].filter(Boolean);
+    
+    return `
+      <div class="planner-board-project ${project.deadline_state === 'overdue' ? 'is-overdue' : project.deadline_state === 'due_soon' ? 'is-due-soon' : ''}" draggable="true" data-project-name="${encodedProject}" data-current-status="${project.status || ''}" style="--card-accent:${accentColor}">
+        <div class="board-card-header">
+          <div class="board-card-title-wrap">
+            <span class="board-card-activity" style="--activity-color:${activityColor}" title="${escapeHtml(lastWorkedLabel(project))}"></span>
+            ${projectBadge(project, index)}
+          </div>
+          <span class="planner-project-stats">${fmt.dur(project.total_seconds || 0)}</span>
+        </div>
+
+        <div class="board-card-tags">
+          ${priority ? `<span class="board-card-priority ${priorityClass}">${projectPriorityLabel(priority)}</span>` : ''}
+          ${deadlineTags.map(t => `<span class="planner-pill ${t.className}" style="padding:2px 6px;font-size:10px">${escapeHtml(t.label)}</span>`).join('')}
+        </div>
+
+        <div class="project-progress-bar" style="--progress: ${project.progress_percent || 0}%" title="Progress: ${project.progress_percent || 0}%"></div>
+
+        ${projectMetaControls(project, projectTaskButton(project))}
       </div>
-      ${groupProjects.length
-        ? groupProjects.map(renderBoardProject).join('')
-        : '<div class="planner-empty">No projects</div>'}
-    </div>
-  `;
+    `;
+  };
+
+  const collapsedColumns = (() => {
+    try {
+      const stored = localStorage.getItem('boardCollapsedColumns');
+      return stored ? JSON.parse(stored) : PROJECT_STATUS_OPTIONS.map(([val]) => val);
+    } catch(e) {
+      return PROJECT_STATUS_OPTIONS.map(([val]) => val);
+    }
+  })();
+
+  const renderBoardColumn = ({ value, label, projects: groupProjects }) => {
+    const isCollapsed = collapsedColumns.includes(value);
+    
+    let emptyHtml = '';
+    if (value === '') {
+      emptyHtml = '<div class="board-empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>Drag projects here or set status</div>';
+    } else if (value === 'finishing') {
+      emptyHtml = '<div class="board-empty-hint">Move projects here when they are close to done</div>';
+    } else {
+      emptyHtml = '<div class="board-empty-hint">No projects</div>';
+    }
+
+    return `
+      <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}">
+        <div class="planner-board-head">
+          <span>${escapeHtml(label)}</span>
+          <div>
+            <span class="planner-board-count">${groupProjects.length}</span>
+            <button type="button" class="board-column-toggle" data-toggle-column="${value}" aria-label="Toggle column">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="planner-board-column-content">
+          ${groupProjects.length ? groupProjects.map(renderBoardProject).join('') : emptyHtml}
+        </div>
+      </div>
+    `;
+  };
+
+  let boardSort = localStorage.getItem('boardSortKey') || 'recent';
+
+  let boardProjects = projects.filter(p => {
+    if (boardSearchQuery && !(p.project_name || '').toLowerCase().includes(boardSearchQuery.toLowerCase())) return false;
+    if (boardTypeFilter && p.type !== boardTypeFilter) return false;
+    return true;
+  });
+
+  boardProjects.sort((a, b) => {
+    if (boardSort === 'name') return String(a.project_name).localeCompare(String(b.project_name));
+    if (boardSort === 'time') return (b.total_seconds || 0) - (a.total_seconds || 0);
+    if (boardSort === 'priority') {
+      const weights = { high: 3, normal: 2, low: 1, '': 0 };
+      const wa = weights[a.priority || ''] || 0;
+      const wb = weights[b.priority || ''] || 0;
+      if (wa !== wb) return wb - wa;
+    }
+    // Default to recent
+    return (b.last_seen || 0) - (a.last_seen || 0);
+  });
+
+  const statusGroups = PROJECT_STATUS_OPTIONS
+    .filter(([value]) => value)
+    .map(([value, label]) => ({
+      value,
+      label,
+      projects: boardProjects.filter(project => (project.status || '') === value),
+    }));
+  const unsortedProjects = boardProjects.filter(project => !(project.status || ''));
 
   plannerEl.innerHTML = `
     <div class="planner-shell">
-      <div class="planner-summary">
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${focusItems.length}</div>
-          <div>
-            <div class="planner-kpi-label">Next Actions</div>
-            <div class="planner-kpi-note">${topSuggestion ? escapeHtml(topSuggestion.action) : 'Add tasks or metadata'}</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${clientCount}</div>
-          <div>
-            <div class="planner-kpi-label">Client Projects</div>
-            <div class="planner-kpi-note">Active client work only</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${finishingCount}</div>
-          <div>
-            <div class="planner-kpi-label">Finishing</div>
-            <div class="planner-kpi-note">Songs closest to done</div>
-          </div>
-        </div>
-        <div class="planner-summary-tile">
-          <div class="planner-kpi">${staleActive.length}</div>
-          <div>
-            <div class="planner-kpi-label">Stale Active</div>
-            <div class="planner-kpi-note">No tracked work in 7+ days</div>
-          </div>
-        </div>
-      </div>
-
       <section class="planner-panel">
         <div class="planner-panel-head">
           <div>
-            <div class="planner-panel-title">Deadline Radar</div>
-            <div class="planner-panel-meta">Client projects and dated work ordered by urgency, with visible reasons from tracked activity and task state</div>
+            <div class="planner-panel-title">Today's Focus</div>
+            <div class="planner-panel-meta">Projects requiring your immediate attention.</div>
           </div>
         </div>
         ${renderDeadlineRadar()}
@@ -5462,63 +6444,181 @@ function renderPlanner(data) {
       <section class="planner-panel">
         <div class="planner-panel-head">
           <div>
-            <div class="planner-panel-title">Goals</div>
-            <div class="planner-panel-meta">Flexible session, hour, finish, and project-touch goals measured from tracked activity</div>
+            <div class="planner-panel-title">Project Map</div>
+            <div class="planner-panel-meta">Portfolio overview grouped by lens, activity, freshness, priority, progress, tasks, and deadlines.</div>
           </div>
         </div>
-        ${renderPlannerGoalForm()}
-        ${renderPlannerGoalRows(plannerGoals)}
+        ${renderPortfolioMap(projects)}
       </section>
 
-      <div class="planner-grid">
-        <section class="planner-panel">
-          <div class="planner-panel-head">
-            <div>
-              <div class="planner-panel-title">Suggested Next Actions</div>
-              <div class="planner-panel-meta">Task, deadline, goal, and momentum-aware recommendations with visible reasons</div>
-            </div>
-          </div>
-          ${renderFocus()}
-        </section>
-
-        <section class="planner-panel">
-          <div class="planner-panel-head">
-            <div>
-              <div class="planner-panel-title">Recent Active</div>
-              <div class="planner-panel-meta">Active projects touched in the last 7 days</div>
-            </div>
-          </div>
-          ${recentActive.length
-            ? `<div class="planner-recent-list">${recentActive.slice(0, 8).map((project, index) => `
-                <div class="planner-recent-row">
-                  <div class="planner-row-main">
-                    <div class="planner-row-title">${projectBadge(project, index)}</div>
-                    <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status))} · ${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(lastWorkedLabel(project))}</div>
-                  </div>
-                  ${projectTaskButton(project)}
-                </div>
-              `).join('')}</div>`
-            : '<div class="planner-empty">No recently active projects.</div>'}
-        </section>
-      </div>
-
-      <section class="planner-panel">
-        <div class="planner-panel-head">
+      <details class="planner-panel" open>
+        <summary class="planner-panel-head">
           <div>
             <div class="planner-panel-title">Project Board</div>
             <div class="planner-panel-meta">Grouped by project status. Use the controls to keep planning metadata current.</div>
           </div>
+        </summary>
+        <div class="board-toolbar">
+          <input type="text" class="board-search" id="boardSearchInput" placeholder="Search projects…" value="${escapeHtml(boardSearchQuery)}">
+          <div class="board-filters">
+            ${PROJECT_TYPE_OPTIONS.filter(([val]) => val).map(([val, label]) => `
+              <button type="button" class="board-filter-chip ${boardTypeFilter === val ? 'is-active' : ''}" data-filter-type="${val}">
+                ${escapeHtml(label)}
+              </button>
+            `).join('')}
+            ${boardTypeFilter ? `<button type="button" class="board-filter-chip" data-filter-type="">Clear</button>` : ''}
+          </div>
+          <select class="board-sort-control" id="boardSortControl">
+            <option value="recent" ${boardSort === 'recent' ? 'selected' : ''}>Recent first</option>
+            <option value="name" ${boardSort === 'name' ? 'selected' : ''}>Name A&rarr;Z</option>
+            <option value="time" ${boardSort === 'time' ? 'selected' : ''}>Most time</option>
+            <option value="priority" ${boardSort === 'priority' ? 'selected' : ''}>Priority</option>
+          </select>
         </div>
         <div class="planner-board">
           ${unsortedProjects.length ? renderBoardColumn({ value: '', label: 'Unsorted', projects: unsortedProjects }) : ''}
           ${statusGroups.map(renderBoardColumn).join('')}
         </div>
-      </section>
+      </details>
     </div>
   `;
   bindProjectMetaControls();
   bindProjectTaskTriggers();
+  bindPortfolioMap(data);
   bindPlannerGoals();
+  bindProjectBoard(data);
+}
+
+function bindPortfolioMap(data) {
+  document.querySelectorAll('[data-portfolio-lens]').forEach(button => {
+    button.addEventListener('click', () => {
+      portfolioMapLens = button.dataset.portfolioLens || 'status';
+      localStorage.setItem('portfolioMapLens', portfolioMapLens);
+      renderPlanner(data);
+    });
+  });
+  document.querySelectorAll('[data-portfolio-project]').forEach(tile => {
+    tile.addEventListener('click', () => {
+      const projectName = decodeURIComponent(tile.dataset.portfolioProject || '');
+      if (projectName) openProjectTasks(projectName);
+    });
+  });
+}
+
+function bindProjectBoard(data) {
+  const searchInput = document.getElementById('boardSearchInput');
+  const filterChips = document.querySelectorAll('[data-filter-type]');
+  const sortControl = document.getElementById('boardSortControl');
+  
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      boardSearchQuery = searchInput.value;
+      renderPlanner(data);
+      // Re-focus the input after re-render so typing isn't interrupted
+      const newSearchInput = document.getElementById('boardSearchInput');
+      if (newSearchInput) {
+        newSearchInput.focus();
+        const len = newSearchInput.value.length;
+        newSearchInput.setSelectionRange(len, len);
+      }
+    });
+  }
+  
+  filterChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      boardTypeFilter = chip.dataset.filterType;
+      renderPlanner(data);
+    });
+  });
+
+  if (sortControl) {
+    sortControl.addEventListener('change', () => {
+      localStorage.setItem('boardSortKey', sortControl.value);
+      renderPlanner(data);
+    });
+  }
+
+  document.querySelectorAll('[data-toggle-column]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const col = btn.dataset.toggleColumn;
+      let collapsed;
+      try {
+        const stored = localStorage.getItem('boardCollapsedColumns');
+        collapsed = stored ? JSON.parse(stored) : PROJECT_STATUS_OPTIONS.map(([val]) => val);
+      } catch(err) {
+        collapsed = PROJECT_STATUS_OPTIONS.map(([val]) => val);
+      }
+      if (collapsed.includes(col)) {
+        collapsed = collapsed.filter(c => c !== col);
+      } else {
+        collapsed.push(col);
+      }
+      localStorage.setItem('boardCollapsedColumns', JSON.stringify(collapsed));
+      renderPlanner(data);
+    });
+  });
+
+  let dragSrcEl = null;
+  document.querySelectorAll('.planner-board-project[draggable]').forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      dragSrcEl = card;
+      card.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.projectName);
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      document.querySelectorAll('.planner-board-column').forEach(col => {
+        col.classList.remove('drag-over');
+      });
+    });
+  });
+
+  document.querySelectorAll('.planner-board-column').forEach(col => {
+    col.addEventListener('dragover', (e) => {
+      if (e.preventDefault) { e.preventDefault(); }
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('drag-over');
+      return false;
+    });
+    col.addEventListener('dragenter', (e) => {
+      col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', (e) => {
+      if (!col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+      }
+    });
+    col.addEventListener('drop', async (e) => {
+      if (e.stopPropagation) e.stopPropagation();
+      col.classList.remove('drag-over');
+      
+      const projectName = e.dataTransfer.getData('text/plain');
+      const newStatus = col.dataset.plannerStatus;
+      
+      if (dragSrcEl && projectName) {
+        const currentStatus = dragSrcEl.dataset.currentStatus || '';
+        if (currentStatus !== newStatus) {
+          const project = (data.projects || []).find(p => p.project_name === decodeURIComponent(projectName));
+          if (project) {
+            try {
+              toast(`Moving ${decodeURIComponent(projectName)}...`);
+              await postJson('/api/project-metadata', {
+                project_name: decodeURIComponent(projectName),
+                status: newStatus,
+                type: project.type || '',
+              });
+              load();
+            } catch (error) {
+              toast(error.message || 'Failed to move project');
+            }
+          }
+        }
+      }
+      return false;
+    });
+  });
 }
 
 function render(data) {
@@ -5537,6 +6637,7 @@ function render(data) {
     return;
   }
   syncCategoryOptions(data.category_options);
+  syncProjectOptions(data.project_status_options, data.project_type_options);
   const { summary, projects, year_daily = [], year_hourly = [], recent } = data;
   if (summary.week_start_weekday != null) {
     WEEK_START_BACKEND_DAY = summary.week_start_weekday;
@@ -5597,30 +6698,48 @@ function render(data) {
     : 0;
 
   // ── Streak ──
-  let streakNarrative;
-  if (best === 0 && cur === 0) {
-    streakNarrative = `<strong>Start your first streak.</strong> Open Ableton and log a session to begin.`;
-  } else if (cur === 0 && best > 0) {
-    streakNarrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
-  } else if (cur > best) {
-    streakNarrative = `<strong>New record!</strong> Surpassed your previous best.`;
-  } else if (cur === best && best > 0) {
-    streakNarrative = `<strong>Tied for your personal best.</strong>`;
-  } else {
-    const daysLeft = best - cur;
-    streakNarrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
+  const isRecord = cur > 0 && cur >= best;
+  const pbIconClass = isRecord ? 'pb-icon is-record' : 'pb-icon';
+  const pbIconLabel = isRecord ? 'NEW' : 'PB';
+  
+  const streakTrackDays = [];
+  const todayDate = new Date();
+  todayDate.setHours(12, 0, 0, 0);
+  const startTrack = addDays(todayDate, -6);
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(startTrack, i);
+    const key = localDateKey(d);
+    const hasActivity = year_daily.some(x => x.day === key && (x.total_seconds || 0) > 0);
+    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    streakTrackDays.push({ dayName, hasActivity });
   }
 
-  const streakBadgeHTML = cur > best
-    ? '<span class="card-chip card-chip--record">RECORD</span>'
-    : (cur > 0 && cur === best ? '<span class="card-chip card-chip--record">BEST</span>' : '');
+  const streakTrackHTML = `
+    <div class="streak-mini-track">
+      <div class="streak-mini-bars">
+        ${streakTrackDays.map(d => `<div class="streak-mini-bar ${d.hasActivity ? 'is-active' : ''}"></div>`).join('')}
+      </div>
+      <div class="streak-mini-labels">
+        ${streakTrackDays.map(d => `<span>${d.dayName}</span>`).join('')}
+      </div>
+    </div>
+  `;
 
   document.getElementById('appDashboard').innerHTML = `
     <div class="cards">
-      <div class="card" role="button" tabindex="0" data-detail="streak">
-        <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
-        <div class="card-sub">${streakNarrative}</div>
-        <div class="card-label">Streak ${streakBadgeHTML}</div>
+      <div class="card card--streak" role="button" tabindex="0" data-detail="streak">
+        <div class="streak-card-top">
+          <div class="streak-card-main">
+            <div class="card-label" style="padding-top: 0; margin-bottom: 4px;">Current Streak</div>
+            <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
+          </div>
+          <div class="streak-card-pb">
+            <div class="${pbIconClass}">${pbIconLabel}</div>
+            <div class="pb-label">Personal Best</div>
+            <div class="pb-value">${best} Day${best !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        ${streakTrackHTML}
       </div>
       <div class="card" role="button" tabindex="0" data-detail="top-project">
         ${topProject
@@ -5641,33 +6760,20 @@ function render(data) {
     </div>
 
     <div class="rings-row">
-      <div class="chart-card target-card" role="button" tabindex="0" data-detail="daily-target" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
         <div class="section-head daily-target-head">
-          <h3 class="section-title">Daily <em>Target</em></h3>
+          <h3 class="section-title">Weekly <em>Pace</em></h3>
           <div class="daily-target-head-side">
-            <div class="daily-target-nav" aria-label="Daily target date navigation">
-              <button class="btn small daily-target-today-btn" id="dailyTargetTodayBtn" type="button" hidden>Today</button>
-              <button class="daily-target-nav-btn" id="dailyTargetPrev" type="button" aria-label="Show previous date">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
-                </svg>
-              </button>
-              <button class="daily-target-nav-btn" id="dailyTargetNext" type="button" aria-label="Show next date">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
-                </svg>
-              </button>
-            </div>
             <div class="section-meta">
-              <span id="dailyTargetViewedLabel">Today</span>
+              <span id="weeklyTargetRangeLabel">Current Week</span>
             </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
+        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
       </div>
-      <div class="chart-card target-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
         <div class="section-head daily-target-head">
-          <h3 class="section-title">Weekly <em>Target</em></h3>
+          <h3 class="section-title">Today's <em>Required</em></h3>
           <div class="daily-target-head-side">
             <div class="daily-target-nav" aria-label="Weekly target date navigation">
               <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
@@ -5683,11 +6789,11 @@ function render(data) {
               </button>
             </div>
             <div class="section-meta">
-              <span id="weeklyTargetRangeLabel">Current Week</span>
+              <span id="weeklyRequiredContext">This week</span>
             </div>
           </div>
         </div>
-        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
+        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
       </div>
     </div>
 
@@ -5841,8 +6947,7 @@ function render(data) {
   bindDetailCards({ summary, projects, year_daily });
 
   renderWeeklyRhythm(year_daily, year_hourly);
-  renderDailyGoal(summary);
-  renderWeeklyGoal(summary);
+  renderWeeklyGoal(summary, year_daily);
   renderCategoryChart(projects, summary);
 }
 
@@ -6240,52 +7345,112 @@ function updateWeeklyTargetMeta({ weekStart }) {
 
 function renderWeeklyTargetCard(target) {
   const mount = document.getElementById('weeklyGoalCard');
+  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
 
   const model = buildWeeklyTargetModel(target);
-  const progress = model.progressRatio;
-  const percent = model.percent;
-  const tone = model.tone;
-  const remainingLabel = model.remainingLabel;
+  const progressPct = model.hasGoal ? clamp(Math.round(model.progressRatio * 100), 0, 100) : 0;
+  const progressLabel = model.hasGoal ? `${Math.min(model.percent, 999)}%` : 'No goal';
+  const goalLabel = model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : 'Goal';
+  const editGoalHours = model.hasGoal ? model.goalHours : 20;
+  const projectedLabel = model.hasGoal ? fmt.dur(model.projectedSeconds) : '--';
+  const remainingLabel = model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--';
+  const requiredLabel = model.hasGoal ? fmt.dur(model.requiredPerDaySeconds) : '--';
+  const requiredContext = document.getElementById('weeklyRequiredContext');
+  const requiredHeadline = !model.hasGoal
+    ? 'Set a weekly goal'
+    : model.isPastWeek
+      ? 'Final result'
+      : model.isFutureWeek
+        ? 'Starts soon'
+        : model.isMet
+          ? '0m'
+          : requiredLabel;
+  const requiredCopy = !model.hasGoal
+    ? 'Add a weekly target to turn progress into a daily pace.'
+    : model.isPastWeek
+      ? `${model.progressText} logged.`
+      : model.isFutureWeek
+        ? `Week starts ${shortDate(model.weekStart)}.`
+        : model.isMet
+          ? 'Weekly goal met. Extra time is optional.'
+          : `needed per remaining day · ${model.remainingDays} day${model.remainingDays === 1 ? '' : 's'} left`;
 
   updateWeeklyTargetMeta({
     weekStart: model.weekStart,
     weekEnd: model.weekEnd,
   });
+  if (requiredContext) {
+    requiredContext.textContent = model.isCurrentWeek ? 'This week' : humanWeeklyTargetLabel(model.weekStart);
+  }
 
   mount.innerHTML = `
-    <div class="goal-shell">
-      <div class="goal-ring-wrap">
-        ${renderGoalRing({
-          progressRatio: progress,
-          hasGoal: model.hasGoal,
-          label: `${Math.min(percent, 999)}% complete`,
-        })}
-      </div>
-      <div class="goal-controls" style="--target-accent:${tone.accent}">
-        <div class="goal-progress-copy">
-          <span>Time spent: <strong>${fmt.dur(model.progressSeconds)}</strong></span>
-          <span class="goal-left">Time left: ${remainingLabel}</span>
+    <div class="pace-panel" style="--pace-accent:${model.status.accent};--target-accent:${model.status.accent};--pace-progress:${progressPct}%">
+      <div class="pace-hero">
+        <div class="pace-kicker">${model.hasGoal ? 'Logged / goal' : 'Logged this week'}</div>
+        <div class="pace-value">${fmt.dur(model.progressSeconds)} <small>/ ${goalLabel}</small></div>
+        <div class="pace-bar" aria-label="${escapeHtml(progressLabel)} complete">
+          <div class="pace-bar-fill"></div>
         </div>
+        <div class="pace-subline">
+          <span class="pace-status">${escapeHtml(model.status.label)}</span>
+          <span>${progressLabel}</span>
+        </div>
+      </div>
+      <div class="pace-stats">
+        <div class="pace-stat">
+          <span>Projected</span>
+          <strong>${projectedLabel}</strong>
+        </div>
+        <div class="pace-stat">
+          <span>Remaining</span>
+          <strong>${remainingLabel}</strong>
+        </div>
+      </div>
+      <div class="pace-goal-edit">
         <div class="goal-input-row">
           <label class="goal-label" for="weeklyGoalCardInput">
             <strong>Weekly goal</strong>
           </label>
           <div class="goal-input-wrap">
-            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${model.goalHours}">
+            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${editGoalHours}">
             <span class="goal-unit">hours</span>
           </div>
         </div>
         <div class="goal-presets">
           ${[10, 20, 30, 40].map(hours => `
-            <button class="goal-chip ${Math.abs(model.goalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
+            <button class="goal-chip ${Math.abs(editGoalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
           `).join('')}
         </div>
       </div>
     </div>
   `;
 
-  animateGoalRings(mount);
+  if (requiredMount) {
+    requiredMount.innerHTML = `
+      <div class="pace-panel" style="--pace-accent:${model.status.accent};--target-accent:${model.status.accent}">
+        <div class="pace-hero">
+          <div class="pace-kicker">${model.isCurrentWeek ? 'Today' : 'Selected week'}</div>
+          <div class="pace-value">${requiredHeadline}</div>
+          <div class="required-note">${requiredCopy}</div>
+        </div>
+        ${renderWeekStrip(model)}
+        <div class="pace-stats">
+          <div class="pace-stat">
+            <span>Goal</span>
+            <strong>${model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : '--'}</strong>
+          </div>
+          <div class="pace-stat">
+            <span>${model.isPastWeek ? 'Shortfall' : 'Left'}</span>
+            <strong>${model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--'}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+    requiredMount.classList.remove('is-fresh');
+    void requiredMount.offsetWidth;
+    requiredMount.classList.add('is-fresh');
+  }
 
   mount.classList.remove('is-fresh');
   void mount.offsetWidth;
@@ -6293,7 +7458,7 @@ function renderWeeklyTargetCard(target) {
 
   const input = mount.querySelector('#weeklyGoalCardInput');
   const repaint = async nextValue => {
-    const normalized = clamp(Math.round((Number(nextValue) || model.goalHours) * 10) / 10, 1, 100);
+    const normalized = clamp(Math.round((Number(nextValue) || editGoalHours) * 10) / 10, 1, 100);
     mount.classList.add('is-loading');
     try {
       await postJson('/api/weekly-target', { goal_hours: normalized });
@@ -6316,9 +7481,11 @@ function renderWeeklyTargetCard(target) {
   });
 }
 
-async function loadWeeklyTarget(summary = {}) {
+async function loadWeeklyTarget(summary = {}, yearDaily = []) {
   const mount = document.getElementById('weeklyGoalCard');
+  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
+  weeklyTargetState.dailyRows = Array.isArray(yearDaily) ? yearDaily : [];
   if (!weeklyTargetState.currentWeekStartDate) {
     weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
   }
@@ -6331,6 +7498,7 @@ async function loadWeeklyTarget(summary = {}) {
     note: 'Loading target…',
   });
   mount.classList.add('is-loading');
+  if (requiredMount) requiredMount.classList.add('is-loading');
   mount.setAttribute('aria-busy', 'true');
   const token = ++weeklyTargetState.requestToken;
   try {
@@ -6349,20 +7517,23 @@ async function loadWeeklyTarget(summary = {}) {
       note: 'Could not load target',
     });
     mount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
+    if (requiredMount) requiredMount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
     toast(error.message || 'Failed to load weekly target');
   } finally {
     if (token === weeklyTargetState.requestToken) {
       mount.classList.remove('is-loading');
+      if (requiredMount) requiredMount.classList.remove('is-loading');
       mount.removeAttribute('aria-busy');
     }
   }
 }
 
-function renderWeeklyGoal(summary) {
+function renderWeeklyGoal(summary, yearDaily = []) {
   const prevBtn = document.getElementById('weeklyTargetPrev');
   const nextBtn = document.getElementById('weeklyTargetNext');
   const currentBtn = document.getElementById('weeklyTargetCurrentBtn');
   if (!prevBtn || !nextBtn || !currentBtn) return;
+  weeklyTargetState.dailyRows = Array.isArray(yearDaily) ? yearDaily : [];
 
   if (!weeklyTargetState.currentWeekStartDate) {
     weeklyTargetState.currentWeekStartDate = summary.goal_week_start || currentWeekStartKey();
@@ -6370,17 +7541,17 @@ function renderWeeklyGoal(summary) {
 
   const moveByWeeks = amount => {
     weeklyTargetState.currentWeekStartDate = localDateKey(addDays(dateFromKey(weeklyTargetState.currentWeekStartDate), amount * 7));
-    loadWeeklyTarget(summary);
+    loadWeeklyTarget(summary, yearDaily);
   };
 
-  prevBtn.addEventListener('click', () => moveByWeeks(-1));
-  nextBtn.addEventListener('click', () => moveByWeeks(1));
-  currentBtn.addEventListener('click', () => {
+  prevBtn.onclick = () => moveByWeeks(-1);
+  nextBtn.onclick = () => moveByWeeks(1);
+  currentBtn.onclick = () => {
     weeklyTargetState.currentWeekStartDate = currentWeekStartKey();
-    loadWeeklyTarget(summary);
-  });
+    loadWeeklyTarget(summary, yearDaily);
+  };
 
-  loadWeeklyTarget(summary);
+  loadWeeklyTarget(summary, yearDaily);
 }
 
 function updateDailyTargetMeta({ dateKey }) {

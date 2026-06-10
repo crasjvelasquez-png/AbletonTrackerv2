@@ -9,6 +9,8 @@ import sys
 import re
 import tempfile
 import threading
+import ctypes
+import ctypes.util
 from collections import defaultdict
 from contextlib import closing, suppress
 from dataclasses import dataclass
@@ -407,6 +409,7 @@ def is_ableton_running() -> bool:
 
 _error_state: dict[str, str | None] = {}
 _ERROR_STATE_LOCK = threading.Lock()
+_CG_EVENT_SECONDS_SINCE_LAST_EVENT = None
 
 
 def _log_transient_error(
@@ -437,8 +440,49 @@ def _set_idle_error(message: str | None):
     )
 
 
+def _core_graphics_idle_seconds() -> float | None:
+    global _CG_EVENT_SECONDS_SINCE_LAST_EVENT
+
+    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is False:
+        return None
+
+    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is None:
+        try:
+            core_graphics_path = ctypes.util.find_library("CoreGraphics")
+            if not core_graphics_path:
+                _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
+                return None
+            core_graphics = ctypes.CDLL(core_graphics_path)
+            fn = core_graphics.CGEventSourceSecondsSinceLastEventType
+            fn.argtypes = [ctypes.c_int, ctypes.c_uint32]
+            fn.restype = ctypes.c_double
+            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = fn
+        except Exception as e:
+            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
+            _set_idle_error(f"CoreGraphics unavailable: {e}")
+            return None
+
+    try:
+        # kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = 0xffffffff.
+        idle_seconds = _CG_EVENT_SECONDS_SINCE_LAST_EVENT(0, 0xFFFFFFFF)
+    except Exception as e:
+        _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
+        _set_idle_error(f"CoreGraphics read failed: {e}")
+        return None
+
+    if idle_seconds < 0:
+        _set_idle_error(f"CoreGraphics returned {idle_seconds}")
+        return None
+    _set_idle_error(None)
+    return idle_seconds
+
+
 def get_idle_seconds() -> float:
     """Seconds since last mouse/keyboard activity (macOS HIDIdleTime)."""
+    core_graphics_idle = _core_graphics_idle_seconds()
+    if core_graphics_idle is not None:
+        return core_graphics_idle
+
     try:
         r = subprocess.run(
             ["/usr/sbin/ioreg", "-c", "IOHIDSystem"],
@@ -674,6 +718,30 @@ def _system_audio_level_active() -> bool | None:
     return parsed
 
 
+def is_ableton_playing_osc() -> bool | None:
+    """Query AbletonOSC to see if the transport is playing."""
+    import socket
+    path = b'/live/song/get/is_playing\0\0\0'
+    typetag = b',\0\0\0'
+    msg = path + typetag
+    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(('127.0.0.1', 11001))
+        sock.settimeout(0.5)
+        sock.sendto(msg, ('127.0.0.1', 11000))
+        data, _ = sock.recvfrom(1024)
+        if b',T' in data:
+            return True
+        if b',F' in data:
+            return False
+    except Exception:
+        pass
+    finally:
+        sock.close()
+    return None
+
+
 def is_audio_active() -> bool | None:
     """True when audible output is present while Ableton Live is open.
 
@@ -683,6 +751,10 @@ def is_audio_active() -> bool | None:
     """
     if _live_pid() is None:
         return False
+
+    osc_playing = is_ableton_playing_osc()
+    if osc_playing is not None:
+        return osc_playing
 
     return _system_audio_level_active()
 
@@ -828,6 +900,7 @@ class Tracker:
         self.session_id = None
         self.project_name = None
         self.last_tick = None
+        self.last_tick_mono = None
         self.resume_hint_project = None
         self.next_cleanup_at = 0.0
         self.last_audio_active = 0.0
@@ -888,6 +961,7 @@ class Tracker:
             conn.commit()
         self.project_name = project
         self.last_tick = now
+        self.last_tick_mono = time.monotonic()
         self.resume_hint_project = None
         if resumed_row:
             print(f"[{_ts()}] ↺  {project}")
@@ -898,9 +972,13 @@ class Tracker:
         if self.session_id is None:
             return
         now = time.time()
-        # Cap elapsed to 2× poll interval so computer sleep isn't counted
-        elapsed = min(now - self.last_tick, POLL_INTERVAL * 2) if self.last_tick else POLL_INTERVAL
+        now_mono = time.monotonic()
+        # Use monotonic elapsed so system sleep is not counted as active time.
+        elapsed = min(now_mono - self.last_tick_mono, POLL_INTERVAL * 2) if self.last_tick_mono else POLL_INTERVAL
         self.last_tick = now
+        self.last_tick_mono = now_mono
+        if elapsed <= 0:
+            return
         with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
             cur = conn.execute(
                 """
@@ -915,6 +993,7 @@ class Tracker:
             self.session_id = None
             self.project_name = None
             self.last_tick = None
+            self.last_tick_mono = None
 
     def _close(self, preserve_resume_hint: bool = False):
         if self.session_id is None:
@@ -951,6 +1030,7 @@ class Tracker:
         self.session_id = None
         self.project_name = None
         self.last_tick = None
+        self.last_tick_mono = None
 
     def status(self) -> TrackerStatus:
         state = self.last_state
@@ -1016,9 +1096,9 @@ class Tracker:
         self.last_audio_idle = (
             now - self.last_audio_active if self.last_audio_active else float("inf")
         )
-        idle_paused = should_check_audio and audio_known and (
+        idle_paused = should_check_audio and (
             self.last_hid_idle >= IDLE_THRESHOLD
-            and self.last_audio_idle >= IDLE_THRESHOLD
+            and (not audio_known or self.last_audio_idle >= IDLE_THRESHOLD)
         )
         if should_check_audio:
             audio_idle_label = (
@@ -1038,12 +1118,22 @@ class Tracker:
             if self.session_id is not None:
                 print(
                     f"[{_ts()}] ⏸  {self.project_name} "
-                    f"(idle {int(self.last_hid_idle)}s, audio quiet)"
+                    f"(idle {int(self.last_hid_idle)}s, audio quiet/unknown)"
                 )
             self._close(preserve_resume_hint=True)
             self.last_state = (
                 STATE_IDLE_PAUSED if self.resume_hint_project else STATE_ABLETON_OPEN
             )
+            return
+
+        if (
+            self.last_state == STATE_IDLE_PAUSED
+            and self.session_id is None
+            and self.resume_hint_project
+        ):
+            self._start(self.resume_hint_project)
+            self._tick()
+            self.last_state = STATE_TRACKING
             return
 
         project = get_project_name(self.project_name or self.resume_hint_project)

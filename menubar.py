@@ -187,6 +187,7 @@ class AbletonTrackerApp(rumps.App):
         self.pause_item = rumps.MenuItem(
             "Pause tracking" if not PAUSE_FILE.exists() else "Resume tracking",
             callback=self.toggle_pause,
+            key="p",
         )
 
         self.menu = [
@@ -198,10 +199,10 @@ class AbletonTrackerApp(rumps.App):
             self.week_item,
             self.streak_item,
             None,
-            rumps.MenuItem("Open Dashboard", callback=self.open_dashboard),
+            rumps.MenuItem("Open Dashboard", callback=self.open_dashboard, key="d"),
             self.pause_item,
             None,
-            rumps.MenuItem("Quit", callback=self.quit_app),
+            rumps.MenuItem("Quit", callback=self.quit_app, key="q"),
         ]
 
         self.tracker_thread.start()
@@ -227,7 +228,7 @@ class AbletonTrackerApp(rumps.App):
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error
         if failures > 0:
-            self.title = "⚠"
+            self.title = self._build_title("⚠", today, daily_goal, streak, active=False)
             trunc = (last_error or "unknown")[:60]
             self.status_item.title = f"Error ({failures}): {trunc}"
             self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
@@ -253,7 +254,7 @@ class AbletonTrackerApp(rumps.App):
             project = status.resume_hint_project or "last project"
             self.status_item.title = f"Idle {idle_label} — {project}"
         elif status.state == STATE_TRACKING and status.project_name:
-            self.title = self._build_title("●", today, daily_goal, 0, active=True)
+            self.title = self._build_title("●", today, daily_goal, streak, active=True)
             self.status_item.title = f"Working on: {status.project_name}"
         elif status.state == STATE_ABLETON_OPEN:
             self.title = self._build_title("◐", today, daily_goal, streak, active=False)
@@ -274,12 +275,13 @@ class AbletonTrackerApp(rumps.App):
     def _build_title(
         self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
     ) -> str:
-        parts = icon
         time_str = fmt_goal_time(seconds, goal)
-        parts = f"{icon} {time_str}"
-        if streak > 0 and not active:
-            parts = f"{icon} {time_str} 💿{streak}"
-        return parts
+        parts = [icon, time_str]
+        if goal is not None and goal > 0 and (seconds or 0) >= goal * 3600:
+            parts.append("✓")
+        if streak > 0:
+            parts.append(f"💿{streak}")
+        return " ".join(parts)
 
     def _update_streak(self, streak: int):
         if streak > 0:
