@@ -2649,85 +2649,6 @@ select.planner-goal-input{
   border-radius:16px;color:var(--ink-4);font-size:13px;
 }
 
-/* --- Project Map / Portfolio Overview --- */
-.portfolio-map-toolbar{
-  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;
-}
-.portfolio-lenses{
-  display:inline-flex;align-items:center;gap:3px;padding:3px;
-  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
-}
-.portfolio-lens{
-  border:0;border-radius:999px;background:transparent;color:var(--ink-4);
-  padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer;
-}
-.portfolio-lens.is-active{
-  background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08);
-}
-.portfolio-map-meta{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink-4);font-size:12px;font-weight:700;
-}
-.portfolio-map{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;
-}
-.portfolio-group{
-  display:grid;gap:9px;align-content:start;min-width:0;
-  border:1px solid var(--border);border-radius:16px;background:var(--control-bg);padding:12px;
-}
-.portfolio-group-head{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);
-}
-.portfolio-group-count{
-  font-family:var(--font-mono);font-size:11px;color:var(--ink-4);
-  border:1px solid var(--border);border-radius:999px;padding:2px 7px;background:var(--surface);
-}
-.portfolio-tile{
-  position:relative;display:grid;gap:8px;width:100%;min-width:0;text-align:left;
-  border:1px solid var(--border);border-left:4px solid var(--project-accent,var(--accent));
-  border-radius:12px;background:var(--surface);color:var(--ink);padding:10px 11px;
-  cursor:pointer;transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
-}
-.portfolio-tile:hover{
-  transform:translateY(-1px);border-color:var(--border-strong);box-shadow:0 5px 14px rgba(0,0,0,.08);
-}
-.portfolio-tile.is-muted{opacity:.58}
-.portfolio-tile.is-overdue{border-color:rgba(255,59,48,.42);border-left-color:var(--danger)}
-.portfolio-tile.is-due-soon{border-color:rgba(255,159,10,.42);border-left-color:#ff9500}
-.portfolio-tile-top{
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;
-}
-.portfolio-name{
-  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font-size:13px;font-weight:800;line-height:1.25;
-}
-.portfolio-badges{
-  display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;
-}
-.portfolio-badge{
-  max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  border:1px solid var(--border);border-radius:999px;background:var(--control-bg);
-  color:var(--ink-3);padding:2px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;
-}
-.portfolio-badge.is-high{color:var(--danger);background:var(--danger-soft);border-color:rgba(255,59,48,.22)}
-.portfolio-badge.is-attention{color:#b36b00;background:rgba(255,159,10,.10);border-color:rgba(255,159,10,.28)}
-.portfolio-tile-sub{
-  display:flex;align-items:center;gap:6px;min-width:0;color:var(--ink-4);font-size:11px;font-weight:700;
-}
-.portfolio-tile-sub span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.portfolio-dot{width:7px;height:7px;border-radius:999px;background:var(--project-accent,var(--accent));flex:0 0 auto}
-.portfolio-bars{display:grid;gap:5px}
-.portfolio-bar{
-  height:5px;border-radius:999px;background:var(--control-bg);border:1px solid var(--border);overflow:hidden;
-}
-.portfolio-bar span{display:block;height:100%;width:var(--bar-value,0%);background:var(--bar-color,var(--accent))}
-.portfolio-tile-foot{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ink-4);
-  font-size:11px;font-weight:700;line-height:1.25;
-}
-.portfolio-foot-left,
-.portfolio-foot-right{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
 /* --- Project Board Improvements --- */
 .board-toolbar{
   display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;
@@ -2942,11 +2863,6 @@ select.planner-goal-input{
   .planner-row-name{white-space:normal}
   .planner-goal-form{grid-template-columns:1fr}
   .planner-goal-actions{justify-content:flex-start}
-  .portfolio-map-toolbar{align-items:stretch;flex-direction:column}
-  .portfolio-lenses{width:100%;overflow:auto}
-  .portfolio-lens{flex:1}
-  .portfolio-map{grid-template-columns:1fr}
-  .portfolio-name{white-space:normal;overflow-wrap:anywhere}
   .scale-slider{grid-column:1 / -1}
   .scale-endpoint{display:none}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -3240,7 +3156,6 @@ const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
 let boardSearchQuery = '';
 let boardTypeFilter = '';
-let portfolioMapLens = localStorage.getItem('portfolioMapLens') || 'status';
 let activeView = window.location.hash === '#settings'
   ? 'settings'
   : (window.location.hash === '#dashboard' ? 'dashboard' : 'planner');
@@ -6001,164 +5916,6 @@ function compactDateLabel(value) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function portfolioDueDays(project) {
-  const value = project?.hard_deadline || project?.due_date || '';
-  if (!value) return null;
-  const parts = String(value).split('-').map(Number);
-  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return null;
-  const due = new Date(parts[0], parts[1] - 1, parts[2]);
-  due.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((due - today) / 86400000);
-}
-
-function portfolioAttentionScore(project) {
-  const days = daysSinceTimestamp(project?.last_seen);
-  const dueDays = portfolioDueDays(project);
-  const tasks = projectTaskSummary(project);
-  let score = 0;
-  if (project?.deadline_state === 'overdue') score += 80;
-  else if (project?.deadline_state === 'due_soon') score += 60;
-  else if (dueDays != null && dueDays <= 14) score += 38;
-  if (project?.priority === 'high') score += 34;
-  if (project?.status === 'finishing') score += 18;
-  if (project?.type === 'client') score += 16;
-  if (!['finished', 'abandoned'].includes(project?.status || '') && (days == null || days >= 14)) score += 24;
-  else if (days != null && days <= 2) score += 10;
-  score += Math.min(tasks.openCount * 5, 20);
-  return score;
-}
-
-function portfolioAttentionLabel(project) {
-  const score = portfolioAttentionScore(project);
-  if (project?.deadline_state === 'overdue') return 'Overdue';
-  if (project?.deadline_state === 'due_soon') return 'Due soon';
-  if (score >= 58) return 'Needs attention';
-  if (score >= 28) return 'Watch';
-  if (['finished', 'abandoned'].includes(project?.status || '')) return 'Closed';
-  return 'Steady';
-}
-
-function portfolioRecentLabel(project) {
-  const days = daysSinceTimestamp(project?.last_seen);
-  if (days == null) return 'No sessions';
-  if (days <= 1) return 'Today / Yesterday';
-  if (days <= 7) return 'This week';
-  if (days <= 30) return 'This month';
-  return 'Older';
-}
-
-function portfolioProjectSort(a, b) {
-  return portfolioAttentionScore(b) - portfolioAttentionScore(a)
-    || (b.month_seconds || 0) - (a.month_seconds || 0)
-    || (b.total_seconds || 0) - (a.total_seconds || 0)
-    || String(a.project_name || '').localeCompare(String(b.project_name || ''));
-}
-
-function portfolioMapGroups(projects, lens) {
-  const addGroups = (defs, resolve) => defs.map(([value, label]) => ({
-    value,
-    label: value === '' ? (lens === 'type' ? 'No type' : 'Unsorted') : label,
-    projects: projects.filter(project => resolve(project) === value).sort(portfolioProjectSort),
-  })).filter(group => group.projects.length);
-
-  if (lens === 'type') {
-    return addGroups(PROJECT_TYPE_OPTIONS, project => project.type || '');
-  }
-  if (lens === 'attention') {
-    const order = ['Overdue', 'Due soon', 'Needs attention', 'Watch', 'Steady', 'Closed'];
-    return order.map(label => ({
-      value: label.toLowerCase().replace(/\s+/g, '_'),
-      label,
-      projects: projects.filter(project => portfolioAttentionLabel(project) === label).sort(portfolioProjectSort),
-    })).filter(group => group.projects.length);
-  }
-  if (lens === 'recent') {
-    const order = ['Today / Yesterday', 'This week', 'This month', 'Older', 'No sessions'];
-    return order.map(label => ({
-      value: label.toLowerCase().replace(/\W+/g, '_'),
-      label,
-      projects: projects.filter(project => portfolioRecentLabel(project) === label).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0) || portfolioProjectSort(a, b)),
-    })).filter(group => group.projects.length);
-  }
-  return addGroups(PROJECT_STATUS_OPTIONS, project => project.status || '');
-}
-
-function renderPortfolioTile(project, index, maxMonthSeconds) {
-  const attention = portfolioAttentionLabel(project);
-  const dueLabel = projectDeadlineLabel(project);
-  const taskSummary = projectTaskSummary(project);
-  const monthPct = maxMonthSeconds > 0 ? Math.max(0, Math.min(100, Math.round(((project.month_seconds || 0) / maxMonthSeconds) * 100))) : 0;
-  const progressPct = Math.max(0, Math.min(100, Number(project.progress_percent || 0)));
-  const muted = ['finished', 'abandoned'].includes(project.status || '') || (project.status === 'paused' && (project.month_seconds || 0) <= 0);
-  const badgeClass = project.priority === 'high' ? 'is-high' : (['Overdue', 'Due soon', 'Needs attention'].includes(attention) ? 'is-attention' : '');
-  return `
-    <button class="portfolio-tile ${muted ? 'is-muted' : ''} ${project.deadline_state === 'overdue' ? 'is-overdue' : project.deadline_state === 'due_soon' ? 'is-due-soon' : ''}" type="button" data-portfolio-project="${encodeURIComponent(project.project_name || '')}" style="--project-accent:${projectColor(project, index)}">
-      <div class="portfolio-tile-top">
-        <div class="portfolio-name" title="${escapeHtml(project.project_name || 'Untitled')}">${escapeHtml(project.project_name || 'Untitled')}</div>
-        <div class="portfolio-badges">
-          ${project.priority ? `<span class="portfolio-badge ${project.priority === 'high' ? 'is-high' : ''}">${escapeHtml(projectPriorityLabel(project.priority))}</span>` : ''}
-          <span class="portfolio-badge ${badgeClass}">${escapeHtml(attention)}</span>
-        </div>
-      </div>
-      <div class="portfolio-tile-sub">
-        <span class="portfolio-dot"></span>
-        <span>${escapeHtml(project.category_label || getCategoryMeta(project.category_key)?.label || 'No category')}</span>
-        <span>·</span>
-        <span>${escapeHtml(projectTypeLabel(project.type) || 'No type')}</span>
-      </div>
-      <div class="portfolio-bars" aria-label="${escapeHtml(project.project_name || 'Project')} activity and progress">
-        <div class="portfolio-bar" title="Month activity: ${escapeHtml(fmt.dur(project.month_seconds || 0))}"><span style="--bar-value:${monthPct}%;--bar-color:var(--project-accent,var(--accent))"></span></div>
-        <div class="portfolio-bar" title="Progress: ${progressPct}%"><span style="--bar-value:${progressPct}%;--bar-color:var(--accent)"></span></div>
-      </div>
-      <div class="portfolio-tile-foot">
-        <span class="portfolio-foot-left">${escapeHtml(fmt.dur(project.total_seconds || 0))} total · ${escapeHtml(lastWorkedLabel(project))}</span>
-        <span class="portfolio-foot-right">${escapeHtml(dueLabel || taskSummary.label)}</span>
-      </div>
-    </button>
-  `;
-}
-
-function renderPortfolioMap(projects) {
-  if (!Array.isArray(projects) || projects.length === 0) {
-    return '<div class="planner-empty">No projects tracked yet.</div>';
-  }
-  const lens = ['status', 'type', 'attention', 'recent'].includes(portfolioMapLens) ? portfolioMapLens : 'status';
-  const maxMonthSeconds = Math.max(...projects.map(project => Number(project.month_seconds || 0)), 0);
-  const groups = portfolioMapGroups(projects, lens);
-  const attentionCount = projects.filter(project => ['Overdue', 'Due soon', 'Needs attention'].includes(portfolioAttentionLabel(project))).length;
-  const lenses = [
-    ['status', 'Status'],
-    ['type', 'Type'],
-    ['attention', 'Attention'],
-    ['recent', 'Recent'],
-  ];
-  return `
-    <div class="portfolio-map-toolbar">
-      <div class="portfolio-lenses" role="tablist" aria-label="Portfolio lenses">
-        ${lenses.map(([value, label]) => `<button class="portfolio-lens ${lens === value ? 'is-active' : ''}" type="button" data-portfolio-lens="${value}">${escapeHtml(label)}</button>`).join('')}
-      </div>
-      <div class="portfolio-map-meta">
-        <span>${projects.length} projects</span>
-        <span>·</span>
-        <span>${attentionCount} attention</span>
-      </div>
-    </div>
-    <div class="portfolio-map">
-      ${groups.map(group => `
-        <section class="portfolio-group">
-          <div class="portfolio-group-head">
-            <span>${escapeHtml(group.label)}</span>
-            <span class="portfolio-group-count">${group.projects.length}</span>
-          </div>
-          ${group.projects.map((project, index) => renderPortfolioTile(project, index, maxMonthSeconds)).join('')}
-        </section>
-      `).join('')}
-    </div>
-  `;
-}
-
 function renderPlannerGoalForm() {
   return `
     <form class="planner-goal-form" id="plannerGoalCreateForm" data-planner-goal-form>
@@ -6441,16 +6198,6 @@ function renderPlanner(data) {
         ${renderDeadlineRadar()}
       </section>
 
-      <section class="planner-panel">
-        <div class="planner-panel-head">
-          <div>
-            <div class="planner-panel-title">Project Map</div>
-            <div class="planner-panel-meta">Portfolio overview grouped by lens, activity, freshness, priority, progress, tasks, and deadlines.</div>
-          </div>
-        </div>
-        ${renderPortfolioMap(projects)}
-      </section>
-
       <details class="planner-panel" open>
         <summary class="planner-panel-head">
           <div>
@@ -6484,25 +6231,8 @@ function renderPlanner(data) {
   `;
   bindProjectMetaControls();
   bindProjectTaskTriggers();
-  bindPortfolioMap(data);
   bindPlannerGoals();
   bindProjectBoard(data);
-}
-
-function bindPortfolioMap(data) {
-  document.querySelectorAll('[data-portfolio-lens]').forEach(button => {
-    button.addEventListener('click', () => {
-      portfolioMapLens = button.dataset.portfolioLens || 'status';
-      localStorage.setItem('portfolioMapLens', portfolioMapLens);
-      renderPlanner(data);
-    });
-  });
-  document.querySelectorAll('[data-portfolio-project]').forEach(tile => {
-    tile.addEventListener('click', () => {
-      const projectName = decodeURIComponent(tile.dataset.portfolioProject || '');
-      if (projectName) openProjectTasks(projectName);
-    });
-  });
 }
 
 function bindProjectBoard(data) {
