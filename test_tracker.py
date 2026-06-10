@@ -178,6 +178,43 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertFalse(t.status().idle_paused)
         self.assertEqual(t.status().state, tracker.STATE_TRACKING)
 
+    def test_idle_resume_on_mouse_activity_does_not_discard_short_row(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0):
+            t._start("Real Project")
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=31), \
+             patch.object(tracker.time, "time", return_value=1100.0):
+            t.last_audio_active = 1000.0
+            t.poll_once(paused=False)
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "get_project_name", return_value="Real Project") as get_project_name, \
+             patch.object(tracker.time, "time", return_value=1110.0):
+            t.poll_once(paused=False)
+
+        get_project_name.assert_not_called()
+        self.assertIsNotNone(t.session_id)
+        self.assertEqual(t.project_name, "Real Project")
+        self.assertIsNone(t.resume_hint_project)
+        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                """
+                SELECT end_time IS NULL, active_seconds
+                FROM sessions
+                WHERE id=?
+                """,
+                (t.session_id,),
+            ).fetchone()
+        self.assertEqual(row[0], 1)
+        self.assertGreater(row[1], 0)
+
     def test_audio_resumes_after_idle_pause_without_mouse_activity(self):
         t = tracker.Tracker()
         with patch.object(tracker.time, "time", return_value=1000.0):
@@ -205,6 +242,29 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertTrue(t.status().audio_active)
         self.assertFalse(t.status().idle_paused)
         self.assertEqual(t.status().state, tracker.STATE_TRACKING)
+
+    def test_repeated_idle_paused_polls_preserve_resume_hint(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0):
+            t._start("Real Project")
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=31), \
+             patch.object(tracker.time, "time", return_value=1100.0):
+            t.last_audio_active = 1000.0
+            t.poll_once(paused=False)
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=45), \
+             patch.object(tracker.time, "time", return_value=1115.0):
+            t.poll_once(paused=False)
+
+        self.assertIsNone(t.session_id)
+        self.assertEqual(t.resume_hint_project, "Real Project")
+        self.assertTrue(t.status().idle_paused)
+        self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
 
     def test_manual_pause_preserves_resume_hint_and_resume_clears_it(self):
         t = tracker.Tracker()

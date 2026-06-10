@@ -1126,6 +1126,16 @@ class Tracker:
             )
             return
 
+        if (
+            self.last_state == STATE_IDLE_PAUSED
+            and self.session_id is None
+            and self.resume_hint_project
+        ):
+            self._start(self.resume_hint_project)
+            self._tick()
+            self.last_state = STATE_TRACKING
+            return
+
         project = get_project_name(self.project_name or self.resume_hint_project)
         if project is None:
             # Title lookup failed transiently — keep ticking the
