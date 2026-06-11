@@ -42,6 +42,7 @@ UNTITLED_NAMES = {"untitled", "untitled project"}
 MAX_CUSTOM_CATEGORIES = 12
 PROJECT_STATUS_OPTIONS = {
     "idea": "Idea",
+    "needs_work": "Needs Work",
     "in_progress": "In Progress",
     "finishing": "Finishing",
     "finished": "Finished",
@@ -354,6 +355,8 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
             turn_in_date TEXT NOT NULL DEFAULT '',
             artist_id    TEXT NOT NULL DEFAULT '',
             progress_percent INTEGER NOT NULL DEFAULT 0,
+            pinned       INTEGER NOT NULL DEFAULT 0,
+            project_note TEXT NOT NULL DEFAULT '',
             updated_at   INTEGER NOT NULL
         )
         """
@@ -369,6 +372,8 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         "turn_in_date": "TEXT NOT NULL DEFAULT ''",
         "artist_id": "TEXT NOT NULL DEFAULT ''",
         "progress_percent": "INTEGER NOT NULL DEFAULT 0",
+        "pinned": "INTEGER NOT NULL DEFAULT 0",
+        "project_note": "TEXT NOT NULL DEFAULT ''",
     }
     for column, definition in metadata_columns.items():
         if column not in existing_columns:
@@ -667,7 +672,7 @@ def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent
+        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note
         FROM project_metadata
         """
     ).fetchall()
@@ -693,6 +698,8 @@ def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
             "turn_in_date": turn_in_date,
             "artist_id": row["artist_id"] or "",
             "progress_percent": row["progress_percent"] or 0,
+            "pinned": bool(row["pinned"]),
+            "project_note": row["project_note"] or "",
         }
     return metadata
 
@@ -776,9 +783,11 @@ def _normalize_project_metadata_fields(
     turn_in_date: str | None = "",
     artist_id: str | None = "",
     progress_percent: int | None = 0,
+    pinned: bool | int | str | None = False,
+    project_note: str | None = "",
     status_options: dict[str, str] | None = None,
     type_options: dict[str, str] | None = None,
-) -> tuple[str, str, str, str, str, str, str, int] | dict:
+) -> tuple[str, str, str, str, str, str, str, int, bool, str] | dict:
     status_options = status_options or PROJECT_STATUS_OPTIONS
     type_options = type_options or PROJECT_TYPE_OPTIONS
 
@@ -789,6 +798,11 @@ def _normalize_project_metadata_fields(
     normalized_hard_deadline = (hard_deadline or "").strip()
     normalized_turn_in_date = (turn_in_date or "").strip()
     normalized_artist_id = (artist_id or "").strip()
+    normalized_project_note = (project_note or "").strip()
+    if isinstance(pinned, str):
+        normalized_pinned = pinned.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        normalized_pinned = bool(pinned)
 
     try:
         normalized_progress = int(progress_percent or 0)
@@ -815,6 +829,8 @@ def _normalize_project_metadata_fields(
         normalized_turn_in_date,
         normalized_artist_id,
         normalized_progress,
+        normalized_pinned,
+        normalized_project_note,
     )
 
 
@@ -1569,6 +1585,8 @@ def set_project_metadata(
     turn_in_date: str | None = None,
     artist_id: str | None = None,
     progress_percent: int | None = 0,
+    pinned: bool | int | str | None = None,
+    project_note: str | None = None,
 ) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
@@ -1581,7 +1599,7 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent
+            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note
             FROM project_metadata
             WHERE project_name = ?
             """,
@@ -1596,6 +1614,8 @@ def set_project_metadata(
             existing["turn_in_date"] if turn_in_date is None and existing else turn_in_date,
             existing["artist_id"] if artist_id is None and existing else artist_id,
             existing["progress_percent"] if progress_percent is None and existing else progress_percent,
+            existing["pinned"] if pinned is None and existing else pinned,
+            existing["project_note"] if project_note is None and existing else project_note,
             get_project_status_options(conn),
             get_project_type_options(conn),
         )
@@ -1610,7 +1630,21 @@ def set_project_metadata(
             normalized_turn_in_date,
             normalized_artist_id,
             normalized_progress,
+            normalized_pinned,
+            normalized_project_note,
         ) = normalized
+
+        if normalized_pinned:
+            pinned_count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM project_metadata
+                WHERE pinned = 1 AND project_name != ?
+                """,
+                (normalized_name,),
+            ).fetchone()[0]
+            if pinned_count >= 3:
+                return {"error": "You can pin up to 3 projects."}
 
         if not any(
             (
@@ -1622,6 +1656,8 @@ def set_project_metadata(
                 normalized_turn_in_date,
                 normalized_artist_id,
                 normalized_progress,
+                normalized_pinned,
+                normalized_project_note,
             )
         ):
             cur = conn.execute(
@@ -1645,15 +1681,17 @@ def set_project_metadata(
                     "turn_in_date": "",
                     "artist_id": "",
                     "progress_percent": 0,
+                    "pinned": False,
+                    "project_note": "",
                 },
             }
 
         conn.execute(
             """
             INSERT INTO project_metadata (
-                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, updated_at
+                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             ON CONFLICT(project_name) DO UPDATE SET
                 status = excluded.status,
                 type = excluded.type,
@@ -1663,6 +1701,8 @@ def set_project_metadata(
                 turn_in_date = excluded.turn_in_date,
                 artist_id = excluded.artist_id,
                 progress_percent = excluded.progress_percent,
+                pinned = excluded.pinned,
+                project_note = excluded.project_note,
                 updated_at = excluded.updated_at
             """,
             (
@@ -1675,6 +1715,8 @@ def set_project_metadata(
                 normalized_turn_in_date,
                 normalized_artist_id,
                 normalized_progress,
+                1 if normalized_pinned else 0,
+                normalized_project_note,
             ),
         )
         conn.commit()
@@ -1693,6 +1735,8 @@ def set_project_metadata(
                 "turn_in_date": normalized_turn_in_date,
                 "artist_id": normalized_artist_id,
                 "progress_percent": normalized_progress,
+                "pinned": normalized_pinned,
+                "project_note": normalized_project_note,
             },
         }
 
@@ -2141,9 +2185,9 @@ def _compute_data_etag(month_value: str = "") -> str:
         pm = conn.execute(
             """
             SELECT COUNT(*), MAX(rowid), MAX(updated_at),
-                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date, '|')
+                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note, '|')
             FROM (
-                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, updated_at
+                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, updated_at
                 FROM project_metadata
                 ORDER BY project_name
             )
@@ -2479,6 +2523,8 @@ def get_stats(month_value: str = "") -> dict:
                 project["turn_in_date"] = metadata.get("turn_in_date", "")
                 project["artist_id"] = metadata.get("artist_id", "")
                 project["progress_percent"] = metadata.get("progress_percent", 0)
+                project["pinned"] = metadata.get("pinned", False)
+                project["project_note"] = metadata.get("project_note", "")
                 project.update(_project_deadline_summary(metadata, today))
                 project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
@@ -2540,6 +2586,8 @@ def get_stats(month_value: str = "") -> dict:
                         "turn_in_date": metadata.get("turn_in_date", ""),
                         "artist_id": metadata.get("artist_id", ""),
                         "progress_percent": metadata.get("progress_percent", 0),
+                        "pinned": metadata.get("pinned", False),
+                        "project_note": metadata.get("project_note", ""),
                         "deadline_state": deadline_summary["deadline_state"],
                         "deadline_label": deadline_summary["deadline_label"],
                         "deadline_reasons": deadline_summary["deadline_reasons"],
@@ -6159,6 +6207,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("turn_in_date"),
                 payload.get("artist_id"),
                 payload.get("progress_percent"),
+                payload.get("pinned"),
+                payload.get("project_note"),
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/artists":

@@ -264,6 +264,8 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(result["metadata"]["due_date"], "2026-06-10")
         self.assertEqual(result["metadata"]["hard_deadline"], "2026-06-12")
         self.assertEqual(result["metadata"]["turn_in_date"], "")
+        self.assertEqual(result["metadata"]["pinned"], False)
+        self.assertEqual(result["metadata"]["project_note"], "")
 
         stats = dashboard.get_stats()
         self.assertEqual(stats["projects"][0]["status"], "in_progress")
@@ -275,13 +277,17 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(stats["projects"][0]["due_date"], "2026-06-10")
         self.assertEqual(stats["projects"][0]["hard_deadline"], "2026-06-12")
         self.assertEqual(stats["projects"][0]["turn_in_date"], "")
+        self.assertEqual(stats["projects"][0]["pinned"], False)
+        self.assertEqual(stats["projects"][0]["project_note"], "")
         self.assertEqual(stats["recent"][0]["status"], "in_progress")
         self.assertEqual(stats["recent"][0]["type"], "personal")
         self.assertEqual(stats["recent"][0]["priority"], "high")
         self.assertEqual(stats["recent"][0]["due_date"], "2026-06-10")
+        self.assertEqual(stats["recent"][0]["pinned"], False)
+        self.assertEqual(stats["recent"][0]["project_note"], "")
 
     def test_set_project_metadata_accepts_all_planner_statuses_and_types(self):
-        statuses = {"idea", "in_progress", "finishing", "finished", "paused", "abandoned"}
+        statuses = {"idea", "needs_work", "in_progress", "finishing", "finished", "paused", "abandoned"}
         types = {"personal", "client", "other"}
 
         self.assertEqual(set(dashboard.PROJECT_STATUS_OPTIONS), statuses)
@@ -333,6 +339,8 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(stats["projects"][0]["due_date"], "")
         self.assertEqual(stats["projects"][0]["hard_deadline"], "")
         self.assertEqual(stats["projects"][0]["turn_in_date"], "")
+        self.assertEqual(stats["projects"][0]["pinned"], False)
+        self.assertEqual(stats["projects"][0]["project_note"], "")
         self.assertEqual(stats["recent"][0]["status"], "")
         self.assertEqual(stats["recent"][0]["type"], "")
 
@@ -382,7 +390,7 @@ class DashboardProjectMetadataTests(unittest.TestCase):
             }
             row = conn.execute(
                 """
-                SELECT priority, due_date, hard_deadline, turn_in_date
+                SELECT priority, due_date, hard_deadline, turn_in_date, pinned, project_note
                 FROM project_metadata
                 WHERE project_name = ?
                 """,
@@ -393,7 +401,9 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertIn("due_date", columns)
         self.assertIn("hard_deadline", columns)
         self.assertIn("turn_in_date", columns)
-        self.assertEqual(row, ("", "", "", ""))
+        self.assertIn("pinned", columns)
+        self.assertIn("project_note", columns)
+        self.assertEqual(row, ("", "", "", "", 0, ""))
 
     def test_project_deadline_states_are_exposed_in_stats(self):
         today = date.today()
@@ -436,6 +446,30 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertNotEqual(before, after_due_date)
         self.assertNotEqual(after_due_date, after_changed_due_date)
 
+    def test_project_metadata_pin_and_note_invalidate_data_etag(self):
+        self._insert_session("Planner Song")
+        before = dashboard._compute_data_etag()
+
+        dashboard.set_project_metadata(
+            "Planner Song",
+            "in_progress",
+            "client",
+            pinned=True,
+            project_note="Needs a second arrangement pass.",
+        )
+        after_pin_note = dashboard._compute_data_etag()
+        dashboard.set_project_metadata(
+            "Planner Song",
+            "in_progress",
+            "client",
+            pinned=True,
+            project_note="Ready for bounce notes.",
+        )
+        after_note_change = dashboard._compute_data_etag()
+
+        self.assertNotEqual(before, after_pin_note)
+        self.assertNotEqual(after_pin_note, after_note_change)
+
     def test_project_metadata_omitted_fields_preserve_existing_deadlines(self):
         self._insert_session("Planner Song")
         dashboard.set_project_metadata(
@@ -449,6 +483,47 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(updated["metadata"]["priority"], "high")
         self.assertEqual(updated["metadata"]["due_date"], "2026-06-10")
         self.assertEqual(updated["metadata"]["hard_deadline"], "2026-06-12")
+
+    def test_project_metadata_supports_pinned_and_project_note(self):
+        self._insert_session("Pinned Song")
+
+        result = dashboard.set_project_metadata(
+            "Pinned Song",
+            "needs_work",
+            "personal",
+            due_date="2026-06-10",
+            pinned=True,
+            project_note="Revise the hook before arranging.",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["metadata"]["status"], "needs_work")
+        self.assertEqual(result["metadata"]["status_label"], "Needs Work")
+        self.assertEqual(result["metadata"]["pinned"], True)
+        self.assertEqual(result["metadata"]["project_note"], "Revise the hook before arranging.")
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["projects"][0]["pinned"], True)
+        self.assertEqual(stats["projects"][0]["project_note"], "Revise the hook before arranging.")
+        self.assertEqual(stats["recent"][0]["pinned"], True)
+        self.assertEqual(stats["recent"][0]["project_note"], "Revise the hook before arranging.")
+
+    def test_project_metadata_enforces_three_pinned_projects(self):
+        for name in ("Project 1", "Project 2", "Project 3", "Project 4"):
+            self._insert_session(name)
+
+        for name in ("Project 1", "Project 2", "Project 3"):
+            result = dashboard.set_project_metadata(name, "in_progress", "personal", pinned=True)
+            self.assertTrue(result["ok"])
+
+        blocked = dashboard.set_project_metadata("Project 4", "in_progress", "personal", pinned=True)
+        updated_existing = dashboard.set_project_metadata(
+            "Project 1", "finishing", "personal", due_date="2026-06-10", pinned=True
+        )
+
+        self.assertEqual(blocked["error"], "You can pin up to 3 projects.")
+        self.assertTrue(updated_existing["ok"])
+        self.assertEqual(updated_existing["metadata"]["status"], "finishing")
+        self.assertEqual(updated_existing["metadata"]["pinned"], True)
 
     def test_project_metadata_supports_artist_id(self):
         self._insert_session("Collaboration Song")

@@ -2612,6 +2612,10 @@ select.planner-goal-input{
   --status-color: #ff9500;
   --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
 }
+.planner-board-column[data-planner-status="needs_work"] {
+  --status-color: #ffcc00;
+  --status-bg: color-mix(in srgb, var(--status-color) 6%, var(--control-bg));
+}
 .planner-board-column[data-planner-status="in_progress"] {
   --status-color: #007aff;
   --status-bg: color-mix(in srgb, var(--status-color) 5%, var(--control-bg));
@@ -2682,6 +2686,22 @@ select.planner-goal-input{
   background-repeat:no-repeat;background-position:right 8px center;
 }
 .board-sort-control:focus{outline:none;border-color:var(--accent)}
+.hidden-lanes-control{position:relative}
+.hidden-lanes-control summary{
+  list-style:none;border:1px solid var(--border);border-radius:12px;background:var(--control-bg);
+  color:var(--ink-2);padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;
+}
+.hidden-lanes-control summary::-webkit-details-marker{display:none}
+.hidden-lanes-menu{
+  position:absolute;right:0;top:calc(100% + 6px);z-index:10;min-width:150px;
+  display:grid;gap:6px;padding:8px;border:1px solid var(--border);border-radius:12px;
+  background:var(--surface);box-shadow:0 14px 30px rgba(0,0,0,.16);
+}
+.hidden-lane-chip{
+  border:1px solid var(--border);border-radius:10px;background:var(--control-bg);
+  color:var(--ink);padding:7px 9px;font-size:12px;font-weight:700;text-align:left;cursor:pointer;
+}
+.hidden-lane-chip:hover{background:var(--surface-hover)}
 
 .planner-board-project{
   position:relative;
@@ -2692,24 +2712,26 @@ select.planner-goal-input{
   box-shadow:0 6px 12px rgba(0,0,0,0.08);
 }
 .board-card-header{
-  display:flex;align-items:flex-start;justify-content:space-between;gap:8px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
 }
 .board-card-title-wrap{
-  display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap;
+  display:flex;align-items:center;gap:6px;min-width:0;
 }
-.board-card-activity{
-  width:8px;height:8px;border-radius:50%;flex-shrink:0;
-  background:var(--activity-color, var(--ink-4));
+.board-card-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:800;color:var(--ink)}
+.board-card-date{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--ink-4)}
+.board-card-date strong{color:var(--ink-2);font-weight:800}
+.board-pin{
+  width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:10px;background:var(--control-bg);
+  color:var(--ink-4);cursor:pointer;flex:0 0 auto;
 }
-.board-card-tags{
-  display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;
-}
-.board-card-priority{
-  font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 5px;
-  border-radius:4px;background:var(--surface-hover);color:var(--ink-3);
-}
-.board-card-priority.is-high{color:var(--danger);background:var(--danger-soft)}
-.board-card-priority.is-low{color:var(--ink-4)}
+.board-pin:hover{background:var(--surface-hover);color:var(--ink)}
+.board-pin.is-pinned{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
+.focus-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.focus-slot{min-height:88px}
+.focus-slot.is-empty{border-style:dashed;color:var(--ink-4);align-content:center}
+.focus-rank{font-family:var(--font-mono);font-size:11px;color:var(--ink-4)}
+.project-note-input{min-height:96px;resize:vertical}
 
 /* Drag and Drop */
 .planner-board-project[draggable]{cursor:grab}
@@ -2862,6 +2884,7 @@ select.planner-goal-input{
   .planner-deadline-date{justify-items:start}
   .planner-row-name{white-space:normal}
   .planner-goal-form{grid-template-columns:1fr}
+  .focus-slots{grid-template-columns:1fr}
   .planner-goal-actions{justify-content:flex-start}
   .scale-slider{grid-column:1 / -1}
   .scale-endpoint{display:none}
@@ -3049,7 +3072,7 @@ select.planner-goal-input{
   <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
     <div class="category-modal-head">
       <div>
-        <h3 id="taskModalTitle">Project tasks</h3>
+        <h3 id="taskModalTitle">Project</h3>
         <div class="category-modal-kicker" id="taskModalProject"></div>
       </div>
       <button class="category-close" id="taskModalClose" type="button" aria-label="Close project tasks">×</button>
@@ -3058,19 +3081,16 @@ select.planner-goal-input{
       <form class="project-planning-form" id="projectPlanningForm">
         <div class="project-planning-head">
           <div>
-            <div class="project-planning-title">Planning</div>
+            <div class="project-planning-title">Details</div>
             <div class="category-modal-kicker" id="projectPlanningSummary"></div>
           </div>
           <button class="btn small" id="projectPlanningSave" type="submit">Save</button>
         </div>
         <div class="project-planning-grid">
           <div class="project-planning-field">
-            <label for="projectPriorityInput">Priority</label>
-            <select class="project-planning-input" id="projectPriorityInput">
-              <option value="">None</option>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
+            <label for="projectStatusInput">Status</label>
+            <select class="project-planning-input" id="projectStatusInput">
+              <option value="">Set status</option>
             </select>
           </div>
           <div class="project-planning-field">
@@ -3078,12 +3098,14 @@ select.planner-goal-input{
             <input class="project-planning-input" id="projectDueDateInput" type="date">
           </div>
           <div class="project-planning-field">
-            <label for="projectHardDeadlineInput">Hard Deadline</label>
-            <input class="project-planning-input" id="projectHardDeadlineInput" type="date">
+            <label for="projectPinnedInput">Pinned</label>
+            <label class="project-planning-input" style="display:flex;align-items:center;gap:8px">
+              <input id="projectPinnedInput" type="checkbox"> Today's Focus
+            </label>
           </div>
-          <div class="project-planning-field">
-            <label for="projectTurnInDateInput">Turn-In Date</label>
-            <input class="project-planning-input" id="projectTurnInDateInput" type="date">
+          <div class="project-planning-field" style="grid-column:1 / -1">
+            <label for="projectNoteInput">Note</label>
+            <textarea class="project-planning-input project-note-input" id="projectNoteInput" maxlength="1000" placeholder="Project note"></textarea>
           </div>
         </div>
         <div class="project-planning-status" id="projectPlanningReasons"></div>
@@ -3560,6 +3582,7 @@ function categoryPill(project) {
 let PROJECT_STATUS_OPTIONS = [
   ['', 'Set status'],
   ['idea', 'Idea'],
+  ['needs_work', 'Needs Work'],
   ['in_progress', 'In Progress'],
   ['finishing', 'Finishing'],
   ['finished', 'Finished'],
@@ -4997,47 +5020,58 @@ async function refreshProjectTaskModal(projectName) {
 
 function refreshProjectPlanningForm(projectName) {
   const project = findProjectByName(projectName) || { project_name: projectName };
-  const priorityInput = document.getElementById('projectPriorityInput');
+  const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
-  const hardInput = document.getElementById('projectHardDeadlineInput');
-  const turnInInput = document.getElementById('projectTurnInDateInput');
+  const pinnedInput = document.getElementById('projectPinnedInput');
+  const noteInput = document.getElementById('projectNoteInput');
   const summary = document.getElementById('projectPlanningSummary');
   const reasonsEl = document.getElementById('projectPlanningReasons');
-  if (!priorityInput || !dueInput || !hardInput || !turnInInput) return;
+  if (!statusInput || !dueInput || !pinnedInput || !noteInput) return;
 
-  priorityInput.value = project.priority || '';
+  statusInput.innerHTML = PROJECT_STATUS_OPTIONS
+    .map(([value, label]) => `<option value="${value}" ${(project.status || '') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
   dueInput.value = project.due_date || '';
-  hardInput.value = project.hard_deadline || '';
-  turnInInput.value = project.turn_in_date || '';
+  pinnedInput.checked = !!project.pinned;
+  noteInput.value = project.project_note || '';
   if (summary) {
     const bits = [
-      projectDeadlineLabel(project),
-      project.priority ? `${projectPriorityLabel(project.priority)} priority` : '',
+      projectUrgencyLabel(project),
+      project.pinned ? 'Pinned' : '',
     ].filter(Boolean);
-    summary.textContent = bits.length ? bits.join(' · ') : 'Set deadline, delivery, and priority details';
+    summary.textContent = bits.length ? bits.join(' · ') : 'Set status and due date';
   }
   if (reasonsEl) {
-    const reasons = projectDeadlineReasons(project);
-    reasonsEl.innerHTML = reasons.length
-      ? plannerReasonPills(reasons)
-      : '<span class="planner-pill">No deadline signals</span>';
+    const reasons = [
+      project.status ? { label: projectStatusLabel(project.status) } : { label: 'No status' },
+      { label: projectDueDateText(project), className: projectDuePillClass(project) },
+    ];
+    reasonsEl.innerHTML = plannerReasonPills(reasons);
   }
 }
 
 async function saveProjectPlanning(projectName) {
   const project = findProjectByName(projectName) || {};
-  const priorityInput = document.getElementById('projectPriorityInput');
+  const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
-  const hardInput = document.getElementById('projectHardDeadlineInput');
-  const turnInInput = document.getElementById('projectTurnInDateInput');
+  const pinnedInput = document.getElementById('projectPinnedInput');
+  const noteInput = document.getElementById('projectNoteInput');
+  const nextStatus = statusInput?.value || '';
+  if (isTerminalProjectStatus(nextStatus) && nextStatus !== (project.status || '')) {
+    const ok = await confirmTerminalProjectMove(projectName, nextStatus);
+    if (!ok) {
+      if (statusInput) statusInput.value = project.status || '';
+      return null;
+    }
+  }
   const result = await postJson('/api/project-metadata', {
     project_name: projectName,
-    status: project.status || '',
+    status: nextStatus,
     type: project.type || '',
-    priority: priorityInput?.value || '',
+    priority: project.priority || '',
     due_date: dueInput?.value || '',
-    hard_deadline: hardInput?.value || '',
-    turn_in_date: turnInInput?.value || '',
+    pinned: !!pinnedInput?.checked,
+    project_note: noteInput?.value || '',
   });
   return result.metadata || null;
 }
@@ -5916,6 +5950,115 @@ function compactDateLabel(value) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function projectDueDate(project) {
+  const value = project?.due_date || '';
+  const parts = String(value).split('-').map(Number);
+  if (parts.length !== 3 || parts.some(part => !Number.isFinite(part))) return null;
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function projectDueDelta(project) {
+  const date = projectDueDate(project);
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((date - today) / 86400000);
+}
+
+function projectUrgencyLabel(project) {
+  const delta = projectDueDelta(project);
+  if (delta == null) return '';
+  if (delta < 0) return 'Overdue';
+  if (delta === 0) return 'Today';
+  if (delta === 1) return 'Tomorrow';
+  if (delta <= 7) return 'This week';
+  return 'Upcoming';
+}
+
+function projectDueDateText(project) {
+  if (!project?.due_date) return 'No due date';
+  const urgency = projectUrgencyLabel(project);
+  const date = compactDateLabel(project.due_date);
+  return urgency ? `${urgency} · ${date}` : date;
+}
+
+function projectDuePillClass(project) {
+  const delta = projectDueDelta(project);
+  if (delta == null) return '';
+  if (delta < 0) return 'is-overdue';
+  if (delta <= 7) return 'is-due-soon';
+  return '';
+}
+
+function isTerminalProjectStatus(status) {
+  return ['finished', 'paused', 'abandoned'].includes(status || '');
+}
+
+async function confirmTerminalProjectMove(projectName, status) {
+  return confirmDialog({
+    title: `Move to <em>${escapeHtml(projectStatusLabel(status))}</em>?`,
+    body: `This removes <code>${escapeHtml(projectName)}</code> from Today's Focus until you move it back to an active status.`,
+    confirmLabel: 'Move project',
+  });
+}
+
+async function updateProjectPinned(project, pinned) {
+  return postJson('/api/project-metadata', {
+    project_name: project.project_name,
+    status: project.status || '',
+    type: project.type || '',
+    priority: project.priority || '',
+    due_date: project.due_date || '',
+    pinned,
+    project_note: project.project_note || '',
+  });
+}
+
+function todayFocusProjects(projects) {
+  const activeStatuses = new Set(['idea', 'needs_work', 'in_progress', 'finishing']);
+  const candidates = (projects || [])
+    .filter(project => activeStatuses.has(project.status || ''))
+    .filter(project => !!project.due_date);
+  const sortFocusGroup = group => group.slice().sort((a, b) => {
+    const aDelta = projectDueDelta(a);
+    const bDelta = projectDueDelta(b);
+    if ((aDelta ?? 99999) !== (bDelta ?? 99999)) return (aDelta ?? 99999) - (bDelta ?? 99999);
+    const aRecent = daysSinceTimestamp(a.last_seen);
+    const bRecent = daysSinceTimestamp(b.last_seen);
+    if ((aRecent ?? 99999) !== (bRecent ?? 99999)) return (aRecent ?? 99999) - (bRecent ?? 99999);
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    const statusWeight = { finishing: 0, in_progress: 1, needs_work: 2, idea: 3 };
+    const aStatus = statusWeight[a.status || ''] ?? 9;
+    const bStatus = statusWeight[b.status || ''] ?? 9;
+    if (aStatus !== bStatus) return aStatus - bStatus;
+    const aTasks = projectTaskSummary(a).openCount;
+    const bTasks = projectTaskSummary(b).openCount;
+    if (aTasks !== bTasks) return bTasks - aTasks;
+    return String(a.project_name || '').localeCompare(String(b.project_name || ''));
+  });
+  const overdue = sortFocusGroup(candidates.filter(project => {
+    const delta = projectDueDelta(project);
+    return delta != null && delta < 0;
+  }));
+  if (overdue.length >= 3) return overdue.slice(0, 3);
+  const selected = [...overdue];
+  const selectedNames = new Set(selected.map(project => project.project_name));
+  const pinned = sortFocusGroup(candidates.filter(project => project.pinned && !selectedNames.has(project.project_name)));
+  pinned.forEach(project => {
+    if (selected.length < 3) {
+      selected.push(project);
+      selectedNames.add(project.project_name);
+    }
+  });
+  const remaining = sortFocusGroup(candidates.filter(project => !selectedNames.has(project.project_name)));
+  remaining.forEach(project => {
+    if (selected.length < 3) selected.push(project);
+  });
+  return selected;
+}
+
 function renderPlannerGoalForm() {
   return `
     <form class="planner-goal-form" id="plannerGoalCreateForm" data-planner-goal-form>
@@ -6010,38 +6153,44 @@ function renderPlanner(data) {
       return days == null || days >= 7;
     })
     .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
-  const statusGroupsOld = PROJECT_STATUS_OPTIONS
-    .filter(([value]) => value)
-    .map(([value, label]) => ({
-      value,
-      label,
-      projects: projects.filter(project => (project.status || '') === value),
-    }));
-  const unsortedProjectsOld = projects.filter(project => !(project.status || ''));
-  const focusItems = plannerFocusItems(projects, plannerGoals);
-  const topSuggestion = focusItems[0] || null;
+  const focusProjects = todayFocusProjects(projects);
   const deadlineProjects = plannerDeadlineProjects(projects);
-  const clientCount = activeProjects.filter(project => project.type === 'client').length;
-  const finishingCount = projects.filter(project => project.status === 'finishing').length;
 
   const renderFocus = () => {
-    if (focusItems.length === 0) {
-      return '<div class="planner-empty">No focus items yet. Add project tasks or set project status/type to build direction here.</div>';
-    }
-    return `<div class="planner-focus-list">${focusItems.map(item => `
-      <div class="planner-focus-row">
-        <div class="planner-row-main">
-          <div class="planner-action-label">${escapeHtml(item.action || 'Suggested action')}</div>
-          <div class="planner-row-title">
-            <span class="proj-dot" style="background:${projectColor(item.project, 0)}"></span>
-            <span class="planner-row-name" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
+    const slots = [0, 1, 2].map(index => {
+      const project = focusProjects[index];
+      if (!project) {
+        return `
+          <div class="planner-focus-row focus-slot is-empty">
+            <div class="planner-row-main">
+              <div class="focus-rank">#${index + 1}</div>
+              <div class="planner-row-title"><span class="planner-row-name">No project</span></div>
+              <div class="planner-row-meta">Add a due date or pin a project</div>
+            </div>
           </div>
-          <div class="planner-row-meta">${escapeHtml(item.meta)}</div>
-          ${plannerReasonPills(item.reasons)}
+        `;
+      }
+      const reasons = [
+        { label: projectDueDateText(project), className: projectDuePillClass(project) },
+        ...(project.pinned ? [{ label: 'Pinned', className: 'is-goal' }] : []),
+        ...(projectTaskSummary(project).openCount ? [{ label: `${projectTaskSummary(project).openCount} open task${projectTaskSummary(project).openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
+      ];
+      return `
+      <div class="planner-focus-row focus-slot" data-open-project="${encodeURIComponent(project.project_name || '')}">
+        <div class="planner-row-main">
+          <div class="focus-rank">#${index + 1}</div>
+          <div class="planner-row-title">
+            <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
+            <span class="planner-row-name" title="${escapeHtml(project.project_name)}">${escapeHtml(project.project_name)}</span>
+          </div>
+          <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status) || 'No status')} · ${escapeHtml(lastWorkedLabel(project))}</div>
+          ${plannerReasonPills(reasons)}
         </div>
-        ${projectTaskButton(item.project)}
+        <button class="btn small" type="button">Open</button>
       </div>
-    `).join('')}</div>`;
+      `;
+    });
+    return `<div class="focus-slots">${slots.join('')}</div>`;
   };
 
   const renderDeadlineRadar = () => {
@@ -6075,44 +6224,25 @@ function renderPlanner(data) {
 
   const renderBoardProject = (project, index) => {
     const encodedProject = encodeURIComponent(project.project_name || '');
-    const priority = project.priority || '';
-    const openCount = projectTaskSummary(project).openCount;
-    const days = daysSinceTimestamp(project.last_seen);
-    let activityColor = 'var(--ink-4)';
-    if (days === 0) activityColor = 'var(--live)';
-    else if (days != null && days <= 7) activityColor = 'var(--accent)';
-    
-    let priorityClass = '';
-    if (priority === 'high') priorityClass = 'is-high';
-    if (priority === 'low') priorityClass = 'is-low';
-    
-    let accentColor = projectColor(project, index);
-    if (priority === 'high') accentColor = 'var(--danger)';
-
-    const deadlineReasons = projectDeadlineReasons(project);
-    const deadlineTags = [
-      (project.type ? { label: projectTypeLabel(project.type), className: '' } : null),
-      ...deadlineReasons
-    ].filter(Boolean);
+    const dueClass = projectDuePillClass(project);
+    const terminalClass = project.deadline_state === 'overdue' || projectDueDelta(project) < 0
+      ? 'is-overdue'
+      : dueClass === 'is-due-soon' ? 'is-due-soon' : '';
     
     return `
-      <div class="planner-board-project ${project.deadline_state === 'overdue' ? 'is-overdue' : project.deadline_state === 'due_soon' ? 'is-due-soon' : ''}" draggable="true" data-project-name="${encodedProject}" data-current-status="${project.status || ''}" style="--card-accent:${accentColor}">
+      <div class="planner-board-project ${terminalClass}" draggable="true" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
         <div class="board-card-header">
           <div class="board-card-title-wrap">
-            <span class="board-card-activity" style="--activity-color:${activityColor}" title="${escapeHtml(lastWorkedLabel(project))}"></span>
-            ${projectBadge(project, index)}
+            <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
+            <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(project.project_name || 'Untitled')}</span>
           </div>
-          <span class="planner-project-stats">${fmt.dur(project.total_seconds || 0)}</span>
+          <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
+          </button>
         </div>
-
-        <div class="board-card-tags">
-          ${priority ? `<span class="board-card-priority ${priorityClass}">${projectPriorityLabel(priority)}</span>` : ''}
-          ${deadlineTags.map(t => `<span class="planner-pill ${t.className}" style="padding:2px 6px;font-size:10px">${escapeHtml(t.label)}</span>`).join('')}
+        <div class="board-card-date">
+          <strong>${escapeHtml(projectDueDateText(project))}</strong>
         </div>
-
-        <div class="project-progress-bar" style="--progress: ${project.progress_percent || 0}%" title="Progress: ${project.progress_percent || 0}%"></div>
-
-        ${projectMetaControls(project, projectTaskButton(project))}
       </div>
     `;
   };
@@ -6120,14 +6250,23 @@ function renderPlanner(data) {
   const collapsedColumns = (() => {
     try {
       const stored = localStorage.getItem('boardCollapsedColumns');
-      return stored ? JSON.parse(stored) : PROJECT_STATUS_OPTIONS.map(([val]) => val);
+      return stored ? JSON.parse(stored) : [];
     } catch(e) {
-      return PROJECT_STATUS_OPTIONS.map(([val]) => val);
+      return [];
+    }
+  })();
+  const hiddenColumns = (() => {
+    try {
+      const stored = localStorage.getItem('boardHiddenColumns');
+      return stored ? JSON.parse(stored) : ['finished', 'paused', 'abandoned'];
+    } catch(e) {
+      return ['finished', 'paused', 'abandoned'];
     }
   })();
 
   const renderBoardColumn = ({ value, label, projects: groupProjects }) => {
     const isCollapsed = collapsedColumns.includes(value);
+    const canHide = isTerminalProjectStatus(value);
     
     let emptyHtml = '';
     if (value === '') {
@@ -6144,6 +6283,11 @@ function renderPlanner(data) {
           <span>${escapeHtml(label)}</span>
           <div>
             <span class="planner-board-count">${groupProjects.length}</span>
+            ${canHide ? `
+              <button type="button" class="board-column-toggle" data-hide-column="${value}" aria-label="Hide ${escapeHtml(label)} lane">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.6 10.6A2 2 0 0 0 13.4 13.4"/><path d="M9.9 4.2A11.3 11.3 0 0 1 12 4c5 0 9 4.5 10 8a12.8 12.8 0 0 1-2.1 3.7"/><path d="M6.2 6.2A12.9 12.9 0 0 0 2 12c1 3.5 5 8 10 8 1.5 0 2.9-.4 4.1-1"/></svg>
+              </button>
+            ` : ''}
             <button type="button" class="board-column-toggle" data-toggle-column="${value}" aria-label="Toggle column">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
@@ -6179,12 +6323,14 @@ function renderPlanner(data) {
 
   const statusGroups = PROJECT_STATUS_OPTIONS
     .filter(([value]) => value)
+    .filter(([value]) => !hiddenColumns.includes(value))
     .map(([value, label]) => ({
       value,
       label,
       projects: boardProjects.filter(project => (project.status || '') === value),
     }));
   const unsortedProjects = boardProjects.filter(project => !(project.status || ''));
+  const hiddenStatusOptions = PROJECT_STATUS_OPTIONS.filter(([value]) => hiddenColumns.includes(value));
 
   plannerEl.innerHTML = `
     <div class="planner-shell">
@@ -6192,17 +6338,15 @@ function renderPlanner(data) {
         <div class="planner-panel-head">
           <div>
             <div class="planner-panel-title">Today's Focus</div>
-            <div class="planner-panel-meta">Projects requiring your immediate attention.</div>
           </div>
         </div>
-        ${renderDeadlineRadar()}
+        ${renderFocus()}
       </section>
 
       <details class="planner-panel" open>
         <summary class="planner-panel-head">
           <div>
             <div class="planner-panel-title">Project Board</div>
-            <div class="planner-panel-meta">Grouped by project status. Use the controls to keep planning metadata current.</div>
           </div>
         </summary>
         <div class="board-toolbar">
@@ -6221,6 +6365,14 @@ function renderPlanner(data) {
             <option value="time" ${boardSort === 'time' ? 'selected' : ''}>Most time</option>
             <option value="priority" ${boardSort === 'priority' ? 'selected' : ''}>Priority</option>
           </select>
+          ${hiddenStatusOptions.length ? `
+            <details class="hidden-lanes-control">
+              <summary>Hidden lanes</summary>
+              <div class="hidden-lanes-menu">
+                ${hiddenStatusOptions.map(([value, label]) => `<button class="hidden-lane-chip" type="button" data-show-hidden-lane="${value}">Show ${escapeHtml(label)}</button>`).join('')}
+              </div>
+            </details>
+          ` : ''}
         </div>
         <div class="planner-board">
           ${unsortedProjects.length ? renderBoardColumn({ value: '', label: 'Unsorted', projects: unsortedProjects }) : ''}
@@ -6268,6 +6420,65 @@ function bindProjectBoard(data) {
     });
   }
 
+  document.querySelectorAll('[data-open-project]').forEach(trigger => {
+    trigger.addEventListener('click', event => {
+      const pinButton = event.target.closest('[data-pin-project]');
+      if (pinButton) return;
+      const projectName = decodeURIComponent(trigger.dataset.openProject || '');
+      if (projectName) openProjectTasks(projectName);
+    });
+  });
+
+  document.querySelectorAll('[data-pin-project]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.stopPropagation();
+      const projectName = decodeURIComponent(button.dataset.pinProject || '');
+      const project = (data.projects || []).find(p => p.project_name === projectName);
+      if (!project) return;
+      button.disabled = true;
+      try {
+        await updateProjectPinned(project, !project.pinned);
+        toast(project.pinned ? `Unpinned ${projectName}` : `Pinned ${projectName}`);
+        load();
+      } catch (error) {
+        toast(error.message || 'Failed to update pin');
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-show-hidden-lane]').forEach(button => {
+    button.addEventListener('click', () => {
+      const status = button.dataset.showHiddenLane;
+      let hidden;
+      try {
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+      } catch(err) {
+        hidden = ['finished', 'paused', 'abandoned'];
+      }
+      hidden = hidden.filter(value => value !== status);
+      localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
+      renderPlanner(data);
+    });
+  });
+
+  document.querySelectorAll('[data-hide-column]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      const status = button.dataset.hideColumn;
+      let hidden;
+      try {
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+      } catch(err) {
+        hidden = ['finished', 'paused', 'abandoned'];
+      }
+      if (!hidden.includes(status)) hidden.push(status);
+      localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
+      renderPlanner(data);
+    });
+  });
+
   document.querySelectorAll('[data-toggle-column]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -6275,9 +6486,9 @@ function bindProjectBoard(data) {
       let collapsed;
       try {
         const stored = localStorage.getItem('boardCollapsedColumns');
-        collapsed = stored ? JSON.parse(stored) : PROJECT_STATUS_OPTIONS.map(([val]) => val);
+        collapsed = stored ? JSON.parse(stored) : [];
       } catch(err) {
-        collapsed = PROJECT_STATUS_OPTIONS.map(([val]) => val);
+        collapsed = [];
       }
       if (collapsed.includes(col)) {
         collapsed = collapsed.filter(c => c !== col);
@@ -6333,11 +6544,19 @@ function bindProjectBoard(data) {
           const project = (data.projects || []).find(p => p.project_name === decodeURIComponent(projectName));
           if (project) {
             try {
+              if (isTerminalProjectStatus(newStatus)) {
+                const ok = await confirmTerminalProjectMove(decodeURIComponent(projectName), newStatus);
+                if (!ok) return false;
+              }
               toast(`Moving ${decodeURIComponent(projectName)}...`);
               await postJson('/api/project-metadata', {
                 project_name: decodeURIComponent(projectName),
                 status: newStatus,
                 type: project.type || '',
+                priority: project.priority || '',
+                due_date: project.due_date || '',
+                pinned: !!project.pinned,
+                project_note: project.project_note || '',
               });
               load();
             } catch (error) {
