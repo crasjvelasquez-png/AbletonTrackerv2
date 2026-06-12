@@ -25,9 +25,13 @@ env/
 # Logs
 *.log
 
+# Editor history
+.history/
+
 # Claude tool settings
 .claude/
 .claude/worktrees/
+.antigravitycli/
 
 # Local git temp artifacts
 .git/tSSa*

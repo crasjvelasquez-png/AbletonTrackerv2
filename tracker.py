@@ -75,6 +75,12 @@ def setup_db():
                 active_seconds REAL    DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_aliases (
+                alias_name     TEXT PRIMARY KEY,
+                canonical_name TEXT NOT NULL
+            )
+        """)
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
         }

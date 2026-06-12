@@ -39,6 +39,10 @@ Start here. This is the repo-specific, compact source of truth for future coding
 - For tracking bugs, start at `Tracker.poll_once`, state constants, `_start`, `_tick`, `_close`, and the detector helpers in `tracker.py`.
 - For menu bar bugs, start in `menubar.py`; it wraps tracker state and lazily starts `dashboard.py` as a subprocess.
 - Do not verify existence by rereading files you just edited; trust tool results and run the targeted syntax/test command instead.
+- **Prefer `grep` over `read` for code lookup** — locate functions/classes by pattern search rather than reading files incrementally.
+- **Batch parallel tool calls** — send independent reads, greps, and glob searches in a single message instead of sequentially.
+- **Delegate multi-file exploration** — use the `task` tool with `subagent_type="explore"` for broad codebase research rather than chaining individual grep/read calls.
+- **Test file discipline** — grep test files for the specific test name/class first, then read only the relevant 30-60 line window. Never read entire test files.
 
 ## Live Tracking Triage
 - If the user says tracking is not logging or the menu bar shows no minutes, verify the installed runtime before editing code. Check `launchctl list | rg -i "ableton|tracker|c4milo"`, `ps aux | rg -i "menubar.py|tracker.py|dashboard.py" | rg -v rg`, and whether `~/.ableton_tracker/paused` exists.

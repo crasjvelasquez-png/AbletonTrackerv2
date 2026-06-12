@@ -61,6 +61,7 @@ PROJECT_PRIORITY_OPTIONS = {
 }
 PROJECT_TASK_STATUS_OPTIONS = {"open", "done"}
 PROJECT_TASK_PRIORITY_OPTIONS = {"low", "normal", "high"}
+PROJECT_TASK_PRIORITY_ORDER_SQL = "CASE pt.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 WHEN 'low' THEN 2 ELSE 1 END"
 PLANNER_GOAL_TYPE_OPTIONS = {
     "sessions_per_week",
     "hours_per_week",
@@ -239,15 +240,23 @@ def get_last_session_todos(project_name: str) -> dict:
     with db_connection() as conn:
         ensure_sessions_notes_column(conn)
         conn.row_factory = sqlite3.Row
+        
+        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project,)).fetchone()
+        canonical_project = canonical_row[0] if canonical_row else project
+        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
+        names = [canonical_project] + [r[0] for r in aliases]
+        placeholders = ",".join("?" * len(names))
+        
         row = conn.execute(
-            """
-            SELECT project_name, todos_json
-            FROM sessions
-            WHERE project_name = ?
-            ORDER BY start_time DESC, id DESC
+            f"""
+            SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name, s.todos_json
+            FROM sessions s
+            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+            WHERE s.project_name IN ({placeholders})
+            ORDER BY s.start_time DESC, s.id DESC
             LIMIT 1
             """,
-            (project,),
+            names,
         ).fetchone()
     if not row:
         return {"project_name": project, "todos": []}
@@ -280,14 +289,21 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
         if not project:
             project = current["project_name"]
 
+        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project,)).fetchone()
+        canonical_project = canonical_row[0] if canonical_row else project
+        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
+        names = [canonical_project] + [r[0] for r in aliases]
+        placeholders = ",".join("?" * len(names))
+        
         rows = conn.execute(
-            """
-            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
-            FROM sessions
-            WHERE project_name = ?
-            ORDER BY start_time DESC, id DESC
+            f"""
+            SELECT s.id, COALESCE(pa.canonical_name, s.project_name) AS project_name, s.start_time, s.last_seen_time, s.end_time, s.active_seconds, s.notes, s.todos_json
+            FROM sessions s
+            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+            WHERE s.project_name IN ({placeholders})
+            ORDER BY s.start_time DESC, s.id DESC
             """,
-            (project,),
+            names,
         ).fetchall()
 
     index = next((i for i, row in enumerate(rows) if int(row["id"]) == sid), None)
@@ -554,6 +570,17 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_project_aliases_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_aliases (
+            alias_name     TEXT PRIMARY KEY,
+            canonical_name TEXT NOT NULL
+        )
+        """
+    )
+
+
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_artists_table(conn)
     ensure_category_definitions_table(conn)
@@ -563,6 +590,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_planner_goals_table(conn)
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
+    ensure_project_aliases_table(conn)
     ensure_sessions_notes_column(conn)
     ensure_indexes(conn)
     purge_legacy_categories(conn)
@@ -941,23 +969,37 @@ def _normalize_project_task_fields(
 def get_project_tasks(conn: sqlite3.Connection, project_name: str | None = None) -> list[dict]:
     if project_name is None:
         rows = conn.execute(
-            """
-            SELECT id, project_name, title, status, priority, due_date,
-                   completed_at, sort_order, created_at, updated_at
-            FROM project_tasks
-            ORDER BY LOWER(project_name) ASC, status ASC, sort_order ASC, created_at ASC, id ASC
+            f"""
+            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date,
+                   pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
+            FROM project_tasks pt
+            LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
+            ORDER BY LOWER(COALESCE(pa.canonical_name, pt.project_name)) ASC,
+                     CASE pt.status WHEN 'open' THEN 0 ELSE 1 END ASC,
+                     {PROJECT_TASK_PRIORITY_ORDER_SQL} ASC,
+                     pt.sort_order ASC, pt.created_at ASC, pt.id ASC
             """
         ).fetchall()
     else:
+        project_name = (project_name or "").strip()
+        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project_name,)).fetchone()
+        canonical_project = canonical_row[0] if canonical_row else project_name
+        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
+        names = [canonical_project] + [r[0] for r in aliases]
+        placeholders = ",".join("?" * len(names))
+
         rows = conn.execute(
-            """
-            SELECT id, project_name, title, status, priority, due_date,
-                   completed_at, sort_order, created_at, updated_at
-            FROM project_tasks
-            WHERE project_name = ?
-            ORDER BY status ASC, sort_order ASC, created_at ASC, id ASC
+            f"""
+            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date,
+                   pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
+            FROM project_tasks pt
+            LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
+            WHERE pt.project_name IN ({placeholders})
+            ORDER BY CASE pt.status WHEN 'open' THEN 0 ELSE 1 END ASC,
+                     {PROJECT_TASK_PRIORITY_ORDER_SQL} ASC,
+                     pt.sort_order ASC, pt.created_at ASC, pt.id ASC
             """,
-            ((project_name or "").strip(),),
+            names,
         ).fetchall()
     return [_format_project_task(row) for row in rows]
 
@@ -2225,7 +2267,7 @@ def get_project_list() -> list[str]:
         return []
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT DISTINCT project_name FROM sessions WHERE project_name IS NOT NULL ORDER BY LOWER(project_name) ASC").fetchall()
+        rows = conn.execute("SELECT DISTINCT COALESCE(pa.canonical_name, s.project_name) AS project_name FROM sessions s LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name WHERE s.project_name IS NOT NULL ORDER BY LOWER(COALESCE(pa.canonical_name, s.project_name)) ASC").fetchall()
         return [row["project_name"] for row in rows if row["project_name"]]
 
 
@@ -2234,12 +2276,17 @@ def get_project_report(project_name: str) -> dict:
         return {"error": "No data"}
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("""
-            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes
-            FROM sessions
-            WHERE project_name = ? AND active_seconds > 0
-            ORDER BY start_time DESC
-        """, (project_name,)).fetchall()
+        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (project_name,)).fetchall()
+        names = [project_name] + [row[0] for row in aliases]
+        placeholders = ",".join("?" * len(names))
+        
+        rows = conn.execute(f"""
+            SELECT id, COALESCE(pa.canonical_name, s.project_name) AS project_name, start_time, last_seen_time, end_time, active_seconds, notes
+            FROM sessions s
+            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+            WHERE s.project_name IN ({placeholders}) AND s.active_seconds > 0
+            ORDER BY s.start_time DESC
+        """, names).fetchall()
         
         if not rows:
             return {
@@ -2347,15 +2394,16 @@ def get_stats(month_value: str = "") -> dict:
             daily_totals, hourly_totals = build_activity_rollups(activity_rows)
 
             projects = conn.execute("""
-                SELECT project_name,
-                       SUM(active_seconds)  AS total_seconds,
+                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
+                       SUM(s.active_seconds)  AS total_seconds,
                        COUNT(*)             AS session_count,
-                       MIN(start_time)      AS first_seen,
-                       MAX(COALESCE(end_time, last_seen_time, start_time)) AS last_seen,
-                       AVG(active_seconds)  AS avg_seconds
-                FROM   sessions
-                WHERE  active_seconds > 0
-                GROUP  BY project_name
+                       MIN(s.start_time)      AS first_seen,
+                       MAX(COALESCE(s.end_time, s.last_seen_time, s.start_time)) AS last_seen,
+                       AVG(s.active_seconds)  AS avg_seconds
+                FROM   sessions s
+                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+                WHERE  s.active_seconds > 0
+                GROUP  BY COALESCE(pa.canonical_name, s.project_name)
                 ORDER  BY total_seconds DESC
             """).fetchall()
 
@@ -5968,6 +6016,36 @@ setInterval(tickSessionTimer, 1_000);
 #  HTTP server
 # ─────────────────────────────────────────────────────────────
 
+def merge_projects(canonical_name: str, aliases: list) -> dict:
+    canonical_name = (canonical_name or "").strip()
+    if not canonical_name or not aliases:
+        return {"error": "Target project and at least one project to merge are required."}
+    if not DB_PATH.exists():
+        return {"error": "No data."}
+    
+    with db_connection() as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn.execute("BEGIN")
+            for alias in aliases:
+                alias = (alias or "").strip()
+                if not alias or alias == canonical_name:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO project_aliases (alias_name, canonical_name)
+                    VALUES (?, ?)
+                    ON CONFLICT(alias_name) DO UPDATE SET
+                        canonical_name = excluded.canonical_name
+                    """,
+                    (alias, canonical_name)
+                )
+            conn.commit()
+            return {"ok": True}
+        except Exception as e:
+            conn.rollback()
+            return {"error": str(e)}
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # silence access logs
@@ -6147,6 +6225,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(clear_unsaved_projects())
         elif self.path == "/api/clear-phantoms":
             self._json(clear_phantom_sessions())
+        elif self.path == "/api/merge-projects":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = merge_projects(
+                payload.get("canonical_name", ""),
+                payload.get("aliases", [])
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/delete-session":
             try:
                 payload = self._request_json()

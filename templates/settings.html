@@ -1,354 +1,411 @@
 <div class="settings-shell" data-settings-root>
-  <!-- ─────────────────────────────  GOALS  ───────────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="goals">
-    <div class="section-head">
-      <h3 class="section-title">Goals</h3>
-      <span class="section-meta" data-goals-meta>—</span>
-    </div>
-    <p class="settings-copy">
-      Set daily and weekly targets. Weekly progress resets Friday.
-    </p>
+  <div class="settings-layout">
+    <nav class="settings-sidebar" data-settings-sidebar>
+      <button class="settings-nav-tab is-active" type="button" data-tab-target="general">General</button>
+      <button class="settings-nav-tab" type="button" data-tab-target="appearance">Appearance</button>
+      <button class="settings-nav-tab" type="button" data-tab-target="projects">Projects &amp; Categories</button>
+      <button class="settings-nav-tab" type="button" data-tab-target="advanced">Advanced</button>
+    </nav>
+    <div class="settings-content">
 
-    <div class="goals-grid">
-      <form class="goal-form" data-goal-form="daily" novalidate>
-        <div class="goal-form-head">
-          <span class="goal-form-label">Daily target</span>
-          <span class="goal-form-progress" data-daily-progress>—</span>
-        </div>
-        <div class="goal-form-row">
-          <label class="field" style="flex:1;">
-            <span class="field-label">Hours/day</span>
-            <input
-              class="text-input"
-              data-daily-input
-              type="number"
-              min="0.1"
-              max="100"
-              step="0.1"
-              placeholder="e.g. 2"
-              required
-            >
-          </label>
-          <button class="btn" type="submit">Save</button>
-        </div>
-        <div class="goal-form-feedback" data-daily-feedback hidden></div>
-      </form>
-
-      <form class="goal-form" data-goal-form="weekly" novalidate>
-        <div class="goal-form-head">
-          <span class="goal-form-label">Weekly target</span>
-          <span class="goal-form-progress" data-weekly-progress>—</span>
-        </div>
-        <div class="goal-form-row">
-          <label class="field" style="flex:1;">
-            <span class="field-label">Hours/week</span>
-            <input
-              class="text-input"
-              data-weekly-input
-              type="number"
-              min="0.5"
-              max="168"
-              step="0.5"
-              placeholder="e.g. 12"
-              required
-            >
-          </label>
-          <button class="btn" type="submit">Save</button>
-        </div>
-        <div class="goal-form-feedback" data-weekly-feedback hidden></div>
-      </form>
-    </div>
-  </section>
-
-  <!-- ───────────────────────  WEEKLY REFRESH  ──────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="week-refresh">
-    <div class="section-head">
-      <h3 class="section-title">Week Start</h3>
-      <span class="section-meta" data-week-refresh-meta>—</span>
-    </div>
-    <p class="settings-copy">
-      Weekly progress and the heatmap align to this day.
-    </p>
-    <div class="weekday-picker" role="radiogroup" aria-label="Week start day" data-weekday-picker>
-    </div>
-  </section>
-
-  <!-- ───────────────────────────  CATEGORIES  ─────────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="categories-intro">
-    <div class="section-head">
-      <h3 class="section-title">Categories</h3>
-      <span class="section-meta" data-categories-meta>—</span>
-    </div>
-    <p class="settings-copy" data-categories-copy>
-      Create categories with your own colors.
-    </p>
-  </section>
-
-  <div class="settings-grid">
-    <div class="chart-card settings-card" data-settings-section="categories-create">
-      <div class="section-head">
-        <h3 class="section-title">New Category</h3>
-        <span class="section-meta" data-create-meta>—</span>
-      </div>
-      <form class="category-form" data-category-create-form>
-        <div class="field-grid">
-          <label class="field">
-            <span class="field-label">Category Name</span>
-            <input
-              class="text-input"
-              data-category-name-input
-              name="label"
-              type="text"
-              maxlength="32"
-              placeholder="Ex. Sound Design"
-              required
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Color</span>
-            <span data-category-color-mount></span>
-          </label>
-        </div>
-        <div class="field-note">Pick a palette color or choose your own.</div>
-        <div class="settings-actions">
-          <button class="btn" type="submit" data-category-submit>Save category</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="settings-stack">
-      <div class="chart-card settings-card" data-settings-section="categories-glance">
-        <div class="section-head">
-          <h3 class="section-title">Summary</h3>
-        </div>
-        <div class="settings-kpis">
-          <div class="settings-kpi">
-            <div class="settings-kpi-label">Categories</div>
-            <div class="settings-kpi-value" data-kpi-categories>0</div>
+      <!-- ─────────────────────────────  GENERAL TAB  ───────────────────────────── -->
+      <div class="settings-pane is-active" data-tab-pane="general">
+        <!-- GOALS -->
+        <section class="chart-card settings-card" data-settings-section="goals">
+          <div class="section-head">
+            <h3 class="section-title">Goals</h3>
+            <span class="section-meta" data-goals-meta>—</span>
           </div>
-          <div class="settings-kpi">
-            <div class="settings-kpi-label">Available</div>
-            <div class="settings-kpi-value" data-kpi-available>0</div>
+          <p class="settings-copy">
+            Set daily and weekly targets. Weekly progress resets Friday.
+          </p>
+
+          <div class="goals-grid">
+            <form class="goal-form" data-goal-form="daily" novalidate>
+              <div class="goal-form-head">
+                <span class="goal-form-label">Daily target</span>
+                <span class="goal-form-progress" data-daily-progress>—</span>
+              </div>
+              <div class="goal-form-row">
+                <label class="field" style="flex:1;">
+                  <span class="field-label">Hours/day</span>
+                  <input class="text-input" data-daily-input type="number" min="0.1" max="100" step="0.1" placeholder="e.g. 2" required>
+                </label>
+                <button class="btn" type="submit">Save</button>
+              </div>
+              <div class="goal-form-feedback" data-daily-feedback hidden></div>
+            </form>
+
+            <form class="goal-form" data-goal-form="weekly" novalidate>
+              <div class="goal-form-head">
+                <span class="goal-form-label">Weekly target</span>
+                <span class="goal-form-progress" data-weekly-progress>—</span>
+              </div>
+              <div class="goal-form-row">
+                <label class="field" style="flex:1;">
+                  <span class="field-label">Hours/week</span>
+                  <input class="text-input" data-weekly-input type="number" min="0.5" max="168" step="0.5" placeholder="e.g. 12" required>
+                </label>
+                <button class="btn" type="submit">Save</button>
+              </div>
+              <div class="goal-form-feedback" data-weekly-feedback hidden></div>
+            </form>
           </div>
-          <div class="settings-kpi">
-            <div class="settings-kpi-label">Limit</div>
-            <div class="settings-kpi-value" data-kpi-limit>0</div>
+        </section>
+
+        <!-- WEEKLY REFRESH -->
+        <section class="chart-card settings-card" data-settings-section="week-refresh">
+          <div class="section-head">
+            <h3 class="section-title">Week Start</h3>
+            <span class="section-meta" data-week-refresh-meta>—</span>
+          </div>
+          <p class="settings-copy">
+            Weekly progress and the heatmap align to this day.
+          </p>
+          <div class="weekday-picker" role="radiogroup" aria-label="Week start day" data-weekday-picker>
+          </div>
+        </section>
+
+        <!-- DASHBOARD WIDGETS -->
+        <section class="chart-card settings-card" data-settings-section="dashboard-prefs">
+          <div class="section-head">
+            <h3 class="section-title">Dashboard Widgets</h3>
+            <span class="section-meta">visibility</span>
+          </div>
+          <p class="settings-copy">
+            Toggle which widgets are visible on the main dashboard.
+          </p>
+          <div class="action-list" style="margin-top: 16px;">
+            <div class="action-row">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Show Heatmap</h4>
+              </div>
+              <input type="checkbox" class="toggle-switch" data-widget-toggle="heatmap" checked>
+            </div>
+            <div class="action-row" style="margin-top: 10px;">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Show Daily Rhythm</h4>
+              </div>
+              <input type="checkbox" class="toggle-switch" data-widget-toggle="rhythm" checked>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ───────────────────────────  APPEARANCE TAB  ────────────────────────── -->
+      <div class="settings-pane" data-tab-pane="appearance">
+        <section class="chart-card settings-card" data-settings-section="appearance">
+          <div class="section-head">
+            <h3 class="section-title">Theme</h3>
+            <span class="section-meta" data-theme-meta>system</span>
+          </div>
+          <p class="settings-copy">
+            <strong>System</strong> follows your macOS appearance.
+          </p>
+          <div class="theme-picker" role="radiogroup" aria-label="Theme">
+            <button class="theme-option" type="button" role="radio" data-theme-option="light">
+              <span class="theme-option-swatch theme-option-swatch--light" aria-hidden="true"></span>
+              <span class="theme-option-label">Light</span>
+            </button>
+            <button class="theme-option" type="button" role="radio" data-theme-option="dark">
+              <span class="theme-option-swatch theme-option-swatch--dark" aria-hidden="true"></span>
+              <span class="theme-option-label">Dark</span>
+            </button>
+            <button class="theme-option" type="button" role="radio" data-theme-option="system">
+              <span class="theme-option-swatch theme-option-swatch--system" aria-hidden="true"></span>
+              <span class="theme-option-label">System</span>
+            </button>
+          </div>
+
+          <div class="scale-control" style="margin-top: 32px;">
+            <div>
+              <label class="field-label">Accent Color</label>
+              <p class="settings-copy scale-copy">Choose your primary UI color.</p>
+            </div>
+            <div class="color-presets" style="margin-top: 12px; gap: 12px;" data-accent-picker>
+               <button type="button" class="color-preset" style="--color-value:#4f46e5" data-accent-value="#4f46e5" aria-label="Indigo"></button>
+               <button type="button" class="color-preset" style="--color-value:#0ea5e9" data-accent-value="#0ea5e9" aria-label="Sky Blue"></button>
+               <button type="button" class="color-preset" style="--color-value:#10b981" data-accent-value="#10b981" aria-label="Emerald"></button>
+               <button type="button" class="color-preset" style="--color-value:#f59e0b" data-accent-value="#f59e0b" aria-label="Amber"></button>
+               <button type="button" class="color-preset" style="--color-value:#ef4444" data-accent-value="#ef4444" aria-label="Red"></button>
+               <button type="button" class="color-preset" style="--color-value:#8b5cf6" data-accent-value="#8b5cf6" aria-label="Violet"></button>
+            </div>
+          </div>
+
+          <div class="scale-control" style="margin-top: 32px;">
+            <div>
+              <label class="field-label">Typography</label>
+              <p class="settings-copy scale-copy">Choose your interface font.</p>
+            </div>
+            <div style="margin-top: 12px; display: flex; gap: 10px;" data-typography-picker>
+              <button class="btn subtle small" type="button" data-font-value="Inter" style="font-family: 'Inter', sans-serif;">Inter</button>
+              <button class="btn subtle small" type="button" data-font-value="System" style="font-family: -apple-system, sans-serif;">System</button>
+              <button class="btn subtle small" type="button" data-font-value="Mono" style="font-family: 'SF Mono', monospace;">Mono</button>
+            </div>
+          </div>
+
+          <div class="scale-control" data-scale-control style="margin-top: 32px;">
+            <div>
+              <label class="field-label" for="ui-scale-input">Zoom / Scale</label>
+              <p class="settings-copy scale-copy">Adjusts dashboard type size, card spacing, and layout density.</p>
+            </div>
+            <div class="scale-control-panel">
+              <span class="scale-endpoint">Compact</span>
+              <input id="ui-scale-input" class="scale-slider" type="range" min="85" max="120" step="5" value="100" data-ui-scale-input>
+              <span class="scale-endpoint">Large</span>
+              <output class="scale-output" for="ui-scale-input" data-ui-scale-output>100%</output>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ───────────────────────  PROJECTS & CATEGORIES TAB  ───────────────────── -->
+      <div class="settings-pane" data-tab-pane="projects">
+        <!-- CATEGORIES -->
+        <section class="chart-card settings-card" data-settings-section="categories-intro">
+          <div class="section-head">
+            <h3 class="section-title">Categories</h3>
+            <span class="section-meta" data-categories-meta>—</span>
+          </div>
+          <p class="settings-copy" data-categories-copy>
+            Create categories with your own colors.
+          </p>
+        </section>
+
+        <div class="settings-grid">
+          <div class="chart-card settings-card" data-settings-section="categories-create">
+            <div class="section-head">
+              <h3 class="section-title">New Category</h3>
+              <span class="section-meta" data-create-meta>—</span>
+            </div>
+            <form class="category-form" data-category-create-form>
+              <div class="field-grid">
+                <label class="field">
+                  <span class="field-label">Category Name</span>
+                  <input class="text-input" data-category-name-input name="label" type="text" maxlength="32" placeholder="Ex. Sound Design" required>
+                </label>
+                <label class="field">
+                  <span class="field-label">Color</span>
+                  <span data-category-color-mount></span>
+                </label>
+              </div>
+              <div class="field-note">Pick a palette color or choose your own.</div>
+              <div class="settings-actions">
+                <button class="btn" type="submit" data-category-submit>Save category</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-stack">
+            <div class="chart-card settings-card" data-settings-section="categories-glance">
+              <div class="section-head">
+                <h3 class="section-title">Summary</h3>
+              </div>
+              <div class="settings-kpis">
+                <div class="settings-kpi">
+                  <div class="settings-kpi-label">Categories</div>
+                  <div class="settings-kpi-value" data-kpi-categories>0</div>
+                </div>
+                <div class="settings-kpi">
+                  <div class="settings-kpi-label">Available</div>
+                  <div class="settings-kpi-value" data-kpi-available>0</div>
+                </div>
+                <div class="settings-kpi">
+                  <div class="settings-kpi-label">Limit</div>
+                  <div class="settings-kpi-value" data-kpi-limit>0</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+
+        <div class="table-card" data-settings-section="categories-library">
+          <div class="section-head">
+            <h3 class="section-title">Library</h3>
+            <span class="section-meta" data-library-meta>0 total</span>
+          </div>
+          <div class="category-library">
+            <div class="category-library-grid" data-category-library-grid></div>
+          </div>
+        </div>
+
+        <!-- ARTISTS -->
+        <section class="chart-card settings-card" data-settings-section="artists-intro">
+          <div class="section-head">
+            <h3 class="section-title">Artists</h3>
+            <span class="section-meta" data-artists-meta>—</span>
+          </div>
+          <p class="settings-copy">
+            Manage artists you collaborate with.
+          </p>
+        </section>
+
+        <div class="artist-create-grid">
+          <div class="chart-card settings-card" data-settings-section="artists-create">
+            <div class="section-head">
+              <h3 class="section-title">New Artist</h3>
+            </div>
+            <form class="artist-form" data-artist-create-form>
+              <div class="field-grid">
+                <label class="field">
+                  <span class="field-label">Name</span>
+                  <input class="text-input" data-artist-name-input name="name" type="text" maxlength="64" placeholder="Ex. Daft Punk" required>
+                </label>
+                <label class="field">
+                  <span class="field-label">Email</span>
+                  <input class="text-input" data-artist-email-input name="email" type="email" placeholder="Ex. info@daftpunk.com">
+                </label>
+                <label class="field">
+                  <span class="field-label">Phone</span>
+                  <input class="text-input" data-artist-phone-input name="phone" type="text" placeholder="Ex. +1 555-0100">
+                </label>
+                <label class="field">
+                  <span class="field-label">Instagram</span>
+                  <input class="text-input" data-artist-ig-input name="instagram" type="text" placeholder="Ex. @daftpunk">
+                </label>
+              </div>
+              <div class="settings-actions">
+                <button class="btn" type="submit" data-artist-submit>Save artist</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="table-card" data-settings-section="artists-library">
+          <div class="section-head">
+            <h3 class="section-title">Library</h3>
+            <span class="section-meta" data-artists-library-meta>0 total</span>
+          </div>
+          <div class="artist-library">
+            <div class="artist-library-grid" data-artist-library-grid></div>
+          </div>
+        </div>
+
+        <!-- MERGE PROJECTS -->
+        <section class="chart-card settings-card" data-settings-section="merge-projects">
+          <div class="section-head">
+            <h3 class="section-title">Merge Projects</h3>
+            <span class="section-meta">combine variations</span>
+          </div>
+          <p class="settings-copy">
+            Group alternate versions or exports (e.g. "Song - Mix") into a single project.
+          </p>
+
+          <form class="merge-form" data-merge-form>
+            <label class="field merge-search-field">
+              <span class="field-label">Find projects</span>
+              <input class="text-input" type="search" autocomplete="off" placeholder="Search project names..." data-merge-search>
+            </label>
+            <div class="merge-workspace">
+              <div class="merge-panel">
+                <div class="merge-panel-head">
+                  <span class="field-label">Projects to Merge</span>
+                  <span class="merge-count" data-merge-alias-count>0 selected</span>
+                </div>
+                <div class="merge-project-list" data-merge-source-list></div>
+              </div>
+              <div class="merge-panel">
+                <div class="merge-panel-head">
+                  <span class="field-label">Canonical Target</span>
+                  <span class="merge-count" data-merge-target-count>Choose one</span>
+                </div>
+                <div class="merge-project-list" data-merge-target-list></div>
+              </div>
+            </div>
+            <div class="merge-review" data-merge-summary>
+              <span>Select projects and a canonical target.</span>
+            </div>
+            <div class="settings-actions">
+              <button class="btn danger" type="submit" data-merge-submit disabled>Merge Projects</button>
+            </div>
+            <div class="option-feedback-wrap" style="margin-top: 8px;">
+              <span class="option-feedback" data-merge-feedback hidden>Merged ✓</span>
+            </div>
+          </form>
+        </section>
+
+        <!-- PROJECT METADATA -->
+        <section class="chart-card settings-card" data-settings-section="project-options">
+          <div class="section-head">
+            <h3 class="section-title">Project Options</h3>
+            <span class="section-meta">status &amp; type</span>
+          </div>
+          <p class="settings-copy">
+            Manage the statuses and types available for projects.
+          </p>
+
+          <div class="option-columns">
+            <div class="option-column">
+              <div class="option-column-label">
+                Statuses
+                <span class="option-count" data-option-count="statuses">0</span>
+              </div>
+              <div class="option-list" data-option-list="statuses"></div>
+              <div class="option-add">
+                <input type="text" class="text-input option-add-input" placeholder="Add status..." data-option-add-input="statuses" maxlength="32">
+              </div>
+            </div>
+            <div class="option-column">
+              <div class="option-column-label">
+                Types
+                <span class="option-count" data-option-count="types">0</span>
+              </div>
+              <div class="option-list" data-option-list="types"></div>
+              <div class="option-add">
+                <input type="text" class="text-input option-add-input" placeholder="Add type..." data-option-add-input="types" maxlength="32">
+              </div>
+            </div>
+          </div>
+          <div class="option-feedback-wrap">
+            <span class="option-feedback" data-project-options-feedback hidden>Saved ✓</span>
+          </div>
+        </section>
       </div>
+
+      <!-- ─────────────────────────  ADVANCED TAB  ──────────────────────── -->
+      <div class="settings-pane" data-tab-pane="advanced">
+        <section class="chart-card settings-card" data-settings-section="data">
+          <div class="section-head">
+            <h3 class="section-title">Data</h3>
+            <span class="section-meta">cleanup &amp; maintenance</span>
+          </div>
+          <p class="settings-copy">
+            Tidy your tracking history. Active sessions are preserved.
+          </p>
+
+          <div class="action-list">
+            <div class="action-row" data-action-row="clear-recent">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Clear All Logs</h4>
+                <p class="action-row-desc">Permanently deletes every closed session from your history.</p>
+              </div>
+              <button class="btn danger" type="button" data-action="clear-recent">Clear logs</button>
+            </div>
+            <div class="action-row" data-action-row="clear-unsaved">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Remove Drafts</h4>
+                <p class="action-row-desc">Drops closed sessions logged against <code>Untitled</code> or <code>Untitled Project</code>.</p>
+              </div>
+              <button class="btn danger" type="button" data-action="clear-unsaved">Remove drafts</button>
+            </div>
+            <div class="action-row" data-action-row="clear-phantoms">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Clear Phantoms</h4>
+                <p class="action-row-desc">Removes rows that came from export dialogs or plugin windows instead of real Live sets.</p>
+              </div>
+              <button class="btn danger" type="button" data-action="clear-phantoms">Clean phantoms</button>
+            </div>
+            <div class="action-row" data-action-row="clear-notes">
+              <div class="action-row-text">
+                <h4 class="action-row-title">Clear Notes &amp; To-dos</h4>
+                <p class="action-row-desc">Permanently deletes all written notes and to-dos from your history without deleting the tracking sessions themselves.</p>
+              </div>
+              <button class="btn danger" type="button" data-action="clear-notes">Clear notes</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
     </div>
   </div>
-
-  <div class="table-card" data-settings-section="categories-library">
-    <div class="section-head">
-      <h3 class="section-title">Library</h3>
-      <span class="section-meta" data-library-meta>0 total</span>
-    </div>
-    <div class="category-library">
-      <div class="category-library-grid" data-category-library-grid></div>
-    </div>
-  </div>
-
-  <!-- ─────────────────────────────  ARTISTS  ───────────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="artists-intro">
-    <div class="section-head">
-      <h3 class="section-title">Artists</h3>
-      <span class="section-meta" data-artists-meta>—</span>
-    </div>
-    <p class="settings-copy">
-      Manage artists you collaborate with.
-    </p>
-  </section>
-
-  <div class="artist-create-grid">
-    <div class="chart-card settings-card" data-settings-section="artists-create">
-      <div class="section-head">
-        <h3 class="section-title">New Artist</h3>
-      </div>
-      <form class="artist-form" data-artist-create-form>
-        <div class="field-grid">
-          <label class="field">
-            <span class="field-label">Name</span>
-            <input
-              class="text-input"
-              data-artist-name-input
-              name="name"
-              type="text"
-              maxlength="64"
-              placeholder="Ex. Daft Punk"
-              required
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Email</span>
-            <input
-              class="text-input"
-              data-artist-email-input
-              name="email"
-              type="email"
-              placeholder="Ex. info@daftpunk.com"
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Phone</span>
-            <input
-              class="text-input"
-              data-artist-phone-input
-              name="phone"
-              type="text"
-              placeholder="Ex. +1 555-0100"
-            >
-          </label>
-          <label class="field">
-            <span class="field-label">Instagram</span>
-            <input
-              class="text-input"
-              data-artist-ig-input
-              name="instagram"
-              type="text"
-              placeholder="Ex. @daftpunk"
-            >
-          </label>
-        </div>
-        <div class="settings-actions">
-          <button class="btn" type="submit" data-artist-submit>Save artist</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="table-card" data-settings-section="artists-library">
-    <div class="section-head">
-      <h3 class="section-title">Library</h3>
-      <span class="section-meta" data-artists-library-meta>0 total</span>
-    </div>
-    <div class="artist-library">
-      <div class="artist-library-grid" data-artist-library-grid></div>
-    </div>
-  </div>
-
-  <!-- ─────────────────────────  PROJECT METADATA  ─────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="project-options">
-    <div class="section-head">
-      <h3 class="section-title">Project Options</h3>
-      <span class="section-meta">status &amp; type</span>
-    </div>
-    <p class="settings-copy">
-      Manage the statuses and types available for projects.
-    </p>
-
-    <div class="option-columns">
-      <div class="option-column">
-        <div class="option-column-label">
-          Statuses
-          <span class="option-count" data-option-count="statuses">0</span>
-        </div>
-        <div class="option-list" data-option-list="statuses"></div>
-        <div class="option-add">
-          <input type="text" class="text-input option-add-input" placeholder="Add status..." data-option-add-input="statuses" maxlength="32">
-        </div>
-      </div>
-      <div class="option-column">
-        <div class="option-column-label">
-          Types
-          <span class="option-count" data-option-count="types">0</span>
-        </div>
-        <div class="option-list" data-option-list="types"></div>
-        <div class="option-add">
-          <input type="text" class="text-input option-add-input" placeholder="Add type..." data-option-add-input="types" maxlength="32">
-        </div>
-      </div>
-    </div>
-    <div class="option-feedback-wrap">
-      <span class="option-feedback" data-project-options-feedback hidden>Saved ✓</span>
-    </div>
-  </section>
-
-  <!-- ─────────────────────────  DATA MANAGEMENT  ──────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="data">
-    <div class="section-head">
-      <h3 class="section-title">Data</h3>
-      <span class="section-meta">cleanup &amp; maintenance</span>
-    </div>
-    <p class="settings-copy">
-      Tidy your tracking history. Active sessions are preserved.
-    </p>
-
-    <div class="action-list">
-      <div class="action-row" data-action-row="clear-recent">
-        <div class="action-row-text">
-          <h4 class="action-row-title">Clear All Logs</h4>
-          <p class="action-row-desc">Permanently deletes every closed session from your history.</p>
-        </div>
-        <button class="btn danger" type="button" data-action="clear-recent">Clear logs</button>
-      </div>
-      <div class="action-row" data-action-row="clear-unsaved">
-        <div class="action-row-text">
-          <h4 class="action-row-title">Remove Drafts</h4>
-          <p class="action-row-desc">Drops closed sessions logged against <code>Untitled</code> or <code>Untitled Project</code>.</p>
-        </div>
-        <button class="btn danger" type="button" data-action="clear-unsaved">Remove drafts</button>
-      </div>
-      <div class="action-row" data-action-row="clear-phantoms">
-        <div class="action-row-text">
-          <h4 class="action-row-title">Clear Phantoms</h4>
-          <p class="action-row-desc">Removes rows that came from export dialogs or plugin windows instead of real Live sets.</p>
-        </div>
-        <button class="btn danger" type="button" data-action="clear-phantoms">Clean phantoms</button>
-      </div>
-      <div class="action-row" data-action-row="clear-notes">
-        <div class="action-row-text">
-          <h4 class="action-row-title">Clear Notes &amp; To-dos</h4>
-          <p class="action-row-desc">Permanently deletes all written notes and to-dos from your history without deleting the tracking sessions themselves.</p>
-        </div>
-        <button class="btn danger" type="button" data-action="clear-notes">Clear notes</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ───────────────────────────  APPEARANCE  ────────────────────────── -->
-  <section class="chart-card settings-card" data-settings-section="appearance">
-    <div class="section-head">
-      <h3 class="section-title">Appearance</h3>
-      <span class="section-meta" data-theme-meta>system</span>
-    </div>
-    <p class="settings-copy">
-      <strong>System</strong> follows your macOS appearance.
-    </p>
-    <div class="theme-picker" role="radiogroup" aria-label="Theme">
-      <button class="theme-option" type="button" role="radio" data-theme-option="light">
-        <span class="theme-option-swatch theme-option-swatch--light" aria-hidden="true"></span>
-        <span class="theme-option-label">Light</span>
-      </button>
-      <button class="theme-option" type="button" role="radio" data-theme-option="dark">
-        <span class="theme-option-swatch theme-option-swatch--dark" aria-hidden="true"></span>
-        <span class="theme-option-label">Dark</span>
-      </button>
-      <button class="theme-option" type="button" role="radio" data-theme-option="system">
-        <span class="theme-option-swatch theme-option-swatch--system" aria-hidden="true"></span>
-        <span class="theme-option-label">System</span>
-      </button>
-    </div>
-    <div class="scale-control" data-scale-control>
-      <div>
-        <label class="field-label" for="ui-scale-input">Zoom / Scale</label>
-        <p class="settings-copy scale-copy">Adjusts dashboard type size, card spacing, and layout density.</p>
-      </div>
-      <div class="scale-control-panel">
-        <span class="scale-endpoint">Compact</span>
-        <input
-          id="ui-scale-input"
-          class="scale-slider"
-          type="range"
-          min="85"
-          max="120"
-          step="5"
-          value="100"
-          data-ui-scale-input>
-        <span class="scale-endpoint">Large</span>
-        <output class="scale-output" for="ui-scale-input" data-ui-scale-output>100%</output>
-      </div>
-    </div>
-  </section>
-
 </div>

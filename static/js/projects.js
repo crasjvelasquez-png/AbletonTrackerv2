@@ -224,12 +224,6 @@
     }
 
     return `
-      <div class="chart-card chart-card-wide" style="margin-bottom:20px">
-        <div class="section-head">
-          <h3 class="section-title">By Category</h3>
-        </div>
-        <div class="chart-wrap"><div id="categoryChart"></div></div>
-      </div>
       <div class="proj-toolbar">
         <div class="proj-search-wrap">
           <svg class="proj-search-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -238,12 +232,6 @@
           </svg>
           <input class="proj-search" id="projSearch" type="search"
             placeholder="Search projects…" value="${esc(_searchQuery)}" autocomplete="off">
-        </div>
-        <div class="proj-filter-wrap">
-          <label class="proj-filter-label" for="projCatFilter">Category</label>
-          <select class="proj-filter" id="projCatFilter">
-            ${buildCategoryOptions(allProjects)}
-          </select>
         </div>
         <div class="proj-filter-wrap">
           <label class="proj-filter-label" for="projTimeFilter">Time</label>
@@ -298,35 +286,13 @@
     const actions = document.getElementById('prmActions');
     if (!actions) return;
 
-    // Find current category for this project
-    const proj = (_lastData?.projects || []).find(p => p.project_name === projectName);
-    const catKey   = proj?.category_key || null;
-    const catColor = proj?.category_color ||
-      (catKey && window.CATEGORY_BY_KEY?.[catKey]?.color) || '#8E8E93';
-    const catLabel = proj
-      ? (proj.category_label || window.CATEGORY_BY_KEY?.[catKey]?.label || 'Uncategorized')
-      : 'Uncategorized';
-
-    const catPill = `
-      <button class="prm-action-pill" id="prmChangeCat" type="button" title="Change category"
-        data-project="${esc(projectName)}" data-cat-key="${esc(catKey || '')}">
-        <span class="prm-action-pill-dot" style="background:${catColor}"></span>
-        ${esc(catLabel)}
-      </button>`;
-
     const csvBtn = `
       <a class="prm-action-icon" href="/api/project-report/download?project=${encodeURIComponent(projectName)}&format=csv"
         download="${esc(projectName)}.csv" title="Download CSV" role="button">
         <svg viewBox="0 0 14 14"><path d="M7 1v8M4 6l3 3 3-3M1 10v1a2 2 0 002 2h8a2 2 0 002-2v-1"/></svg>
       </a>`;
 
-    actions.innerHTML = catPill + csvBtn;
-
-    document.getElementById('prmChangeCat')?.addEventListener('click', () => {
-      if (typeof openCategoryPicker === 'function') {
-        openCategoryPicker({ projectName, categoryKey: catKey });
-      }
-    });
+    actions.innerHTML = csvBtn;
   }
 
   function openModal(projectName) {

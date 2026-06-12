@@ -655,8 +655,40 @@ class DashboardProjectTaskTests(unittest.TestCase):
 
         result = dashboard.get_project_tasks_response("Planner Song")
         self.assertTrue(result["ok"])
-        self.assertEqual([task["title"] for task in result["tasks"]], ["Export rough", "Record vocals"])
-        self.assertEqual(result["tasks"][0]["id"], second["task"]["id"])
+        self.assertEqual([task["title"] for task in result["tasks"]], ["Record vocals", "Export rough"])
+        self.assertEqual(result["tasks"][0]["id"], first["task"]["id"])
+
+    def test_project_tasks_sort_by_status_then_priority(self):
+        low = dashboard.create_project_task("Planner Song", "Polish fades", "low", "", 0)
+        normal = dashboard.create_project_task("Planner Song", "Export rough", "normal", "", 0)
+        high = dashboard.create_project_task("Planner Song", "Record vocals", "high", "", 0)
+        done_high = dashboard.create_project_task("Planner Song", "Send final", "high", "", 0)
+        done_low = dashboard.create_project_task("Planner Song", "Archive stems", "low", "", 0)
+
+        dashboard.update_project_task(done_high["task"]["id"], {"status": "done"})
+        dashboard.update_project_task(done_low["task"]["id"], {"status": "done"})
+
+        result = dashboard.get_project_tasks_response("Planner Song")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            [task["title"] for task in result["tasks"]],
+            ["Record vocals", "Export rough", "Polish fades", "Send final", "Archive stems"],
+        )
+        self.assertEqual(result["tasks"][0]["id"], high["task"]["id"])
+        self.assertEqual(result["tasks"][2]["id"], low["task"]["id"])
+
+    def test_project_task_priority_update_reorders_tasks(self):
+        first = dashboard.create_project_task("Planner Song", "Polish fades", "low")
+        second = dashboard.create_project_task("Planner Song", "Export rough", "normal")
+
+        updated = dashboard.update_project_task(first["task"]["id"], {"priority": "high"})
+        result = dashboard.get_project_tasks_response("Planner Song")
+
+        self.assertTrue(updated["ok"])
+        self.assertEqual([task["title"] for task in result["tasks"]], ["Polish fades", "Export rough"])
+        self.assertEqual(result["tasks"][0]["id"], first["task"]["id"])
+        self.assertEqual(result["tasks"][1]["id"], second["task"]["id"])
 
     def test_update_project_task_fields(self):
         created = dashboard.create_project_task("Planner Song", "Record scratch", "normal")

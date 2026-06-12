@@ -485,7 +485,7 @@
   function renderProjectOptions(data) {
     const root = $('[data-settings-root]');
     if (!root || isEditingOptions) return;
-    
+
     const statusesList = $('[data-option-list="statuses"]', root);
     const typesList = $('[data-option-list="types"]', root);
     if (!statusesList || !typesList) return;
@@ -629,7 +629,7 @@
   function addOptionFromInput(inputEl) {
     const label = inputEl.value.trim();
     if (!label) return;
-    
+
     const listEl = document.querySelector(`[data-option-list="${inputEl.dataset.optionAddInput}"]`);
     if (!listEl) return;
 
@@ -1100,21 +1100,303 @@
     }
   }
 
+  function bindTabNavigation(root) {
+    const tabs = $all('.settings-nav-tab', root);
+    const panes = $all('.settings-pane', root);
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tabTarget;
+        tabs.forEach(t => t.classList.toggle('is-active', t === tab));
+        panes.forEach(p => p.classList.toggle('is-active', p.dataset.tabPane === target));
+      });
+    });
+  }
+
+  function bindAppearanceControls(root) {
+    const accentPicker = $('[data-accent-picker]', root);
+    if (accentPicker) {
+      $all('.color-preset', accentPicker).forEach(btn => {
+        btn.addEventListener('click', () => {
+          const hex = btn.dataset.accentValue;
+          document.documentElement.style.setProperty('--accent', hex);
+          localStorage.setItem('ableton_tracker_accent', hex);
+        });
+      });
+    }
+    const fontPicker = $('[data-typography-picker]', root);
+    if (fontPicker) {
+      $all('[data-font-value]', fontPicker).forEach(btn => {
+        btn.addEventListener('click', () => {
+          const val = btn.dataset.fontValue;
+          localStorage.setItem('ableton_tracker_typography', val);
+          if (val === 'Inter') document.documentElement.style.setProperty('--font-body', "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+          if (val === 'System') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+          if (val === 'Mono') document.documentElement.style.setProperty('--font-body', "'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace");
+        });
+      });
+    }
+  }
+
+  function bindWidgetControls(root) {
+    const heatmapToggle = $('[data-widget-toggle="heatmap"]', root);
+    const rhythmToggle = $('[data-widget-toggle="rhythm"]', root);
+
+    if (heatmapToggle) {
+      const stored = localStorage.getItem('ableton_tracker_hide_heatmap');
+      heatmapToggle.checked = stored !== '1';
+      heatmapToggle.addEventListener('change', () => {
+        const hide = !heatmapToggle.checked;
+        localStorage.setItem('ableton_tracker_hide_heatmap', hide ? '1' : '0');
+        if (hide) {
+          document.documentElement.setAttribute('data-hide-heatmap', 'true');
+        } else {
+          document.documentElement.removeAttribute('data-hide-heatmap');
+        }
+      });
+    }
+
+    if (rhythmToggle) {
+      const stored = localStorage.getItem('ableton_tracker_hide_rhythm');
+      rhythmToggle.checked = stored !== '1';
+      rhythmToggle.addEventListener('change', () => {
+        const hide = !rhythmToggle.checked;
+        localStorage.setItem('ableton_tracker_hide_rhythm', hide ? '1' : '0');
+        if (hide) {
+          document.documentElement.setAttribute('data-hide-rhythm', 'true');
+        } else {
+          document.documentElement.removeAttribute('data-hide-rhythm');
+        }
+      });
+    }
+  }
+
+
+  // ── merge projects ──────────────────────────────────────────────────
+  const mergeState = {
+    projects: [],
+    query: '',
+    aliases: new Set(),
+    canonical: '',
+  };
+
+  function projectName(project) {
+    return String((project && project.project_name) || '').trim();
+  }
+
+  function projectVariationHint(name) {
+    const cleaned = String(name || '').trim();
+    if (!cleaned) return 'Untitled project';
+    const separators = [' - ', ' – ', ' — ', ' / ', ' | '];
+    for (const sep of separators) {
+      const parts = cleaned.split(sep).map(part => part.trim()).filter(Boolean);
+      if (parts.length > 1) return parts.slice(1).join(' / ');
+    }
+    return 'No variation hint';
+  }
+
+  function mergeFilteredProjects() {
+    const query = mergeState.query.trim().toLowerCase();
+    if (!query) return mergeState.projects;
+    return mergeState.projects.filter(project => projectName(project).toLowerCase().includes(query));
+  }
+
+  function mergeProjectRow(project, mode) {
+    const name = projectName(project);
+    const safeName = window.escapeHtml(name);
+    const hint = window.escapeHtml(projectVariationHint(name));
+    const isCanonical = mergeState.canonical === name;
+    const isAliasMode = mode === 'alias';
+    const isAlias = isAliasMode && mergeState.aliases.has(name);
+    const isDisabledAlias = isAliasMode && isCanonical;
+    const inputType = isAliasMode ? 'checkbox' : 'radio';
+    const inputName = isAliasMode ? 'merge_aliases' : 'merge_canonical';
+    const checked = isAliasMode ? isAlias : isCanonical;
+    const classes = [
+      'merge-project-row',
+      isAlias ? 'is-selected' : '',
+      isCanonical ? 'is-target' : '',
+      isDisabledAlias ? 'is-disabled' : '',
+    ].filter(Boolean).join(' ');
+
+    return `
+      <label class="${classes}" title="${safeName}">
+        <input type="${inputType}" name="${inputName}" value="${safeName}" ${checked ? 'checked' : ''} ${isDisabledAlias ? 'disabled' : ''} data-merge-${isAliasMode ? 'alias' : 'canonical'}="${safeName}">
+        <span class="merge-project-copy">
+          <span class="merge-project-name">${safeName}</span>
+          <span class="merge-project-meta">${isDisabledAlias ? 'Canonical target' : hint}</span>
+        </span>
+      </label>
+    `;
+  }
+
+  function renderMergeWorkspace(root) {
+    const sourceList = $('[data-merge-source-list]', root);
+    const targetList = $('[data-merge-target-list]', root);
+    const summary = $('[data-merge-summary]', root);
+    const submitBtn = $('[data-merge-submit]', root);
+    const aliasCount = $('[data-merge-alias-count]', root);
+    const targetCount = $('[data-merge-target-count]', root);
+    const searchInput = $('[data-merge-search]', root);
+    if (!sourceList || !targetList || !summary || !submitBtn) return;
+
+    if (searchInput && searchInput.value !== mergeState.query) {
+      searchInput.value = mergeState.query;
+    }
+
+    const availableNames = new Set(mergeState.projects.map(projectName));
+    mergeState.aliases = new Set(Array.from(mergeState.aliases).filter(name => availableNames.has(name)));
+    if (mergeState.canonical && !availableNames.has(mergeState.canonical)) {
+      mergeState.canonical = '';
+    }
+    if (mergeState.canonical) {
+      mergeState.aliases.delete(mergeState.canonical);
+    }
+
+    const filtered = mergeFilteredProjects();
+    const hasProjects = mergeState.projects.length > 0;
+    const aliases = Array.from(mergeState.aliases).filter(name => name !== mergeState.canonical);
+    const canSubmit = Boolean(mergeState.canonical && aliases.length > 0);
+
+    sourceList.innerHTML = !hasProjects
+      ? '<div class="merge-empty">No projects are available to merge.</div>'
+      : filtered.length
+        ? filtered.map(project => mergeProjectRow(project, 'alias')).join('')
+        : '<div class="merge-empty">No projects match this search.</div>';
+
+    targetList.innerHTML = !hasProjects
+      ? '<div class="merge-empty">No canonical targets are available.</div>'
+      : filtered.length
+        ? filtered.map(project => mergeProjectRow(project, 'canonical')).join('')
+        : '<div class="merge-empty">No targets match this search.</div>';
+
+    if (aliasCount) aliasCount.textContent = `${aliases.length} selected`;
+    if (targetCount) targetCount.textContent = mergeState.canonical ? 'Target set' : 'Choose one';
+
+    if (!hasProjects) {
+      summary.dataset.state = 'warning';
+      summary.innerHTML = '<span>No projects are available yet.</span>';
+    } else if (canSubmit) {
+      summary.dataset.state = 'ready';
+      summary.innerHTML = `<span><strong>${aliases.length}</strong> project${aliases.length === 1 ? '' : 's'} will merge into <strong>${window.escapeHtml(mergeState.canonical)}</strong>.</span><span>Notes and tasks will be aggregated.</span>`;
+    } else {
+      summary.dataset.state = '';
+      summary.innerHTML = '<span>Select projects and a canonical target.</span>';
+    }
+
+    submitBtn.disabled = !canSubmit;
+  }
+
+  function renderMergeProjects(data) {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    mergeState.projects = ((data && data.projects) || [])
+      .map(project => ({ ...project, project_name: projectName(project) }))
+      .filter(project => project.project_name)
+      .sort((a, b) => projectName(a).localeCompare(projectName(b), undefined, { sensitivity: 'base' }));
+    renderMergeWorkspace(root);
+  }
+
+  function bindMergeDelegation(root) {
+    root.addEventListener('input', event => {
+      const target = event.target;
+      if (target.matches('[data-merge-search]')) {
+        mergeState.query = target.value || '';
+        renderMergeWorkspace(root);
+      }
+    });
+
+    root.addEventListener('change', event => {
+      const target = event.target;
+      if (target.matches('[data-merge-alias]')) {
+        const name = target.value;
+        if (target.checked) {
+          mergeState.aliases.add(name);
+        } else {
+          mergeState.aliases.delete(name);
+        }
+        renderMergeWorkspace(root);
+      }
+      if (target.matches('[data-merge-canonical]')) {
+        mergeState.canonical = target.value;
+        mergeState.aliases.delete(target.value);
+        renderMergeWorkspace(root);
+      }
+    });
+
+    root.addEventListener('submit', async event => {
+      const target = event.target;
+      if (target.matches('[data-merge-form]')) {
+        event.preventDefault();
+        await handleMergeSubmit(target);
+      }
+    });
+  }
+
+  async function handleMergeSubmit(form) {
+    const canonical_name = mergeState.canonical;
+    const aliases = Array.from(mergeState.aliases).filter(name => name && name !== canonical_name);
+    const submitBtn = form.querySelector('[data-merge-submit]');
+    const feedback = form.querySelector('[data-merge-feedback]');
+
+    if (!canonical_name || aliases.length === 0) {
+      window.toast('Select a target and at least one project to merge');
+      return;
+    }
+
+    const ok = await window.confirmDialog({
+      title: 'Merge Projects?',
+      body: `This will group <strong>${aliases.length}</strong> project${aliases.length === 1 ? '' : 's'} into <code>${window.escapeHtml(canonical_name)}</code>.<br><br>${aliases.map(name => `<code>${window.escapeHtml(name)}</code>`).join('<br>')}<br><br>Notes and tasks will be aggregated.`,
+      confirmLabel: 'Merge Projects',
+    });
+    if (!ok) return;
+
+    submitBtn.disabled = true;
+    try {
+      await window.postJson('/api/merge-projects', { canonical_name, aliases });
+      if (feedback) {
+        feedback.textContent = 'Merged ✓';
+        feedback.style.color = 'var(--accent)';
+        feedback.hidden = false;
+        setTimeout(() => feedback.hidden = true, 3000);
+      }
+      mergeState.query = '';
+      mergeState.aliases.clear();
+      mergeState.canonical = '';
+      form.reset();
+      renderMergeWorkspace($('[data-settings-root]') || form);
+      await window.load?.();
+    } catch (error) {
+      const message = error.message || 'Failed to merge projects';
+      window.toast(message);
+      if (feedback) {
+        feedback.textContent = `Merge failed: ${message}`;
+        feedback.style.color = 'var(--danger)';
+        feedback.hidden = false;
+        setTimeout(() => feedback.hidden = true, 3000);
+      }
+    } finally {
+      renderMergeWorkspace($('[data-settings-root]') || form);
+    }
+  }
+
   function init() {
     if (inited) return;
     const root = $('[data-settings-root]');
     if (!root) return;
     inited = true;
     mountedAt = Date.now();
+    bindTabNavigation(root);
+    bindAppearanceControls(root);
+    bindWidgetControls(root);
     bindArtistUI(root);
     bindCategoryDelegation(root);
     bindProjectOptionsDelegation(root);
+    bindMergeDelegation(root);
     bindScaleControl(root);
     syncThemePicker();
     loadUiScale();
     refreshGoals();
     loadWeekStartDay();
-
   }
 
   function render(data) {
@@ -1126,6 +1408,7 @@
       renderCategories(lastData);
       renderArtists(lastData);
       renderProjectOptions(lastData);
+      renderMergeProjects(lastData);
     }
     syncThemePicker();
     // Don't refetch goals on every dashboard data change — they update when the user

@@ -26,6 +26,20 @@
       root.style.setProperty('--ui-card-min-h', `${203 * factor}px`);
       root.style.setProperty('--ui-page-max', `${1200 + ((factor - 1) * 280)}px`);
     }
+    const accent = localStorage.getItem('ableton_tracker_accent');
+    if (accent) document.documentElement.style.setProperty('--accent', accent);
+    const typography = localStorage.getItem('ableton_tracker_typography');
+    if (typography) {
+      if (typography === 'Inter') document.documentElement.style.setProperty('--font-body', "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+      if (typography === 'System') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+      if (typography === 'Mono') document.documentElement.style.setProperty('--font-body', "'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace");
+    }
+    if (localStorage.getItem('ableton_tracker_hide_heatmap') === '1') {
+      document.documentElement.setAttribute('data-hide-heatmap', 'true');
+    }
+    if (localStorage.getItem('ableton_tracker_hide_rhythm') === '1') {
+      document.documentElement.setAttribute('data-hide-rhythm', 'true');
+    }
   } catch (e) {}
 })();
 </script>
@@ -52,18 +66,18 @@
   --ink-3:#6e6e73;
   --ink-4:#75757a;
   --accent:#4f46e5;
-  --accent-soft:rgba(79,70,229,.10);
-  --accent-line:rgba(79,70,229,.18);
+  --accent-soft:color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-line:color-mix(in srgb, var(--accent) 18%, transparent);
   --live:#34c759;
   --danger:#ff3b30;
   --danger-soft:rgba(255,59,48,.08);
   --page-wash:linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,0) 220px);
-  --page-glow-a:radial-gradient(900px 500px at 0% 0%, rgba(79,70,229,.05), transparent 60%);
+  --page-glow-a:radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 60%);
   --page-glow-b:radial-gradient(700px 420px at 100% 0%, rgba(14,165,233,.07), transparent 52%);
   --header-bg:rgba(245,245,247,.58);
   --logo-bg:linear-gradient(180deg, #ffffff, #f2f7ff);
-  --logo-border:rgba(79,70,229,.12);
-  --logo-shadow:0 10px 24px rgba(79,70,229,.08);
+  --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
+  --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
   --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0));
   --control-bg:rgba(255,255,255,.8);
   --control-bg-strong:#fff;
@@ -85,7 +99,7 @@
   --ease-press:cubic-bezier(.34,1.56,.64,1);
   --ease-spring:linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.112 22.6%, 1.134 24.9%, 1.144 27.6%, 1.146 30.4%, 1.013 48.3%, 1.001 55.4%, .995 62.1%, 1 100%);
 
-  --orb-1:rgba(79,70,229,.16);
+  --orb-1:color-mix(in srgb, var(--accent) 16%, transparent);
   --orb-2:rgba(14,165,233,.12);
   --orb-3:rgba(168,85,247,.10);
   --ui-gap:14px;
@@ -100,7 +114,7 @@
     color-scheme:dark;
     --bg:#080808;
     --bg-elev:rgba(16,16,18,.92);
-    --surface:rgba(18,18,20,.62);
+    --surface:rgba(18,18,20,.45);
     --surface-2:rgba(24,24,28,.94);
     --surface-hover:rgba(255,255,255,.06);
     --bg-card:rgba(18,18,20,.72);
@@ -117,8 +131,8 @@
     --ink-3:#aaaab3;
     --ink-4:#90909a;
     --accent:#818cf8;
-    --accent-soft:rgba(129,140,248,.16);
-    --accent-line:rgba(129,140,248,.28);
+    --accent-soft:color-mix(in srgb, var(--accent) 16%, transparent);
+    --accent-line:color-mix(in srgb, var(--accent) 28%, transparent);
     --live:#30d158;
     --danger:#ff453a;
     --danger-soft:rgba(255,69,58,.14);
@@ -127,8 +141,8 @@
     --page-glow-b:none;
     --header-bg:rgba(8,8,8,.72);
     --logo-bg:linear-gradient(180deg, rgba(32,32,36,.94), rgba(18,18,20,.94));
-    --logo-border:rgba(129,140,248,.12);
-    --logo-shadow:0 10px 24px rgba(129,140,248,.08);
+    --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
+    --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
     --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
     --control-bg:rgba(30,30,34,.82);
     --control-bg-strong:rgba(38,38,44,.96);
@@ -412,6 +426,8 @@ header{
 .chart-card,
 .table-card{
   background:var(--surface);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border:1px solid var(--border);
   box-shadow:var(--shadow-1);
   position:relative;overflow:hidden;
@@ -431,8 +447,9 @@ header{
   display:flex;flex-direction:column;align-items:flex-start;
 }
 .card:hover{
-  box-shadow:var(--shadow-card-hover);
-  transform:translateY(-3px) scale(1.006);
+  box-shadow:var(--shadow-card-hover), 0 0 32px color-mix(in srgb, var(--accent) 5%, transparent);
+  transform:translateY(-4px) scale(1.008);
+  border-color:color-mix(in srgb, var(--border-strong) 80%, var(--accent));
   z-index:2;
 }
 .card:active,
@@ -1362,8 +1379,8 @@ header{
   transition:background .24s ease, background-position .42s var(--ease-smooth), border-color .18s ease, color .18s ease, transform .18s var(--ease-press), box-shadow .22s ease;
   user-select:none;
 }
-.btn:hover{color:var(--ink);border-color:var(--border-strong);background:linear-gradient(135deg, color-mix(in srgb,var(--accent) 10%,transparent), transparent 56%),var(--control-bg-strong);background-position:100% 0;box-shadow:0 6px 18px rgba(15,23,42,.08)}
-.btn:active{transform:scale(.96)}
+.btn:hover{color:var(--ink);border-color:var(--border-strong);background:linear-gradient(135deg, color-mix(in srgb,var(--accent) 10%,transparent), transparent 56%),var(--control-bg-strong);background-position:100% 0;box-shadow:0 8px 24px rgba(15,23,42,.08), 0 0 0 1px var(--border-strong);transform:translateY(-1px)}
+.btn:active{transform:scale(.97) translateY(0);box-shadow:0 2px 8px rgba(15,23,42,.06)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.danger{color:var(--danger);border-color:rgba(255,59,48,.18)}
 .btn.danger:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28);color:var(--danger)}
@@ -1583,9 +1600,6 @@ header{
 .category-option-label{
   font-size:14px;font-weight:600;color:var(--ink);
 }
-.category-option-note{
-  font-size:12px;color:var(--ink-4);
-}
 .category-option-check{
   font-size:12px;font-weight:700;color:var(--category-color, var(--accent));
   opacity:0;
@@ -1634,9 +1648,6 @@ select.project-planning-input{
 .project-planning-input:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
-.project-planning-status{
-  display:flex;gap:6px;flex-wrap:wrap;
-}
 .task-form{
   display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:10px;
   align-items:center;padding:12px;border:1px solid var(--border);
@@ -1681,7 +1692,26 @@ select.project-planning-input{
 }
 .task-row{
   display:grid;grid-template-columns:auto minmax(0,1fr) 112px auto;gap:10px;align-items:center;
-  padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:var(--surface);
+  --task-priority-accent:var(--border);
+  --task-priority-soft:var(--surface);
+  --task-priority-ink:var(--ink-2);
+  padding:10px 12px;border:1px solid var(--task-priority-accent);border-radius:14px;
+  background:linear-gradient(90deg,var(--task-priority-soft),var(--surface) 44%);
+}
+.task-row.is-priority-high{
+  --task-priority-accent:rgba(255,178,74,.38);
+  --task-priority-soft:rgba(255,178,74,.10);
+  --task-priority-ink:#ffbd5f;
+}
+.task-row.is-priority-normal{
+  --task-priority-accent:var(--border);
+  --task-priority-soft:rgba(142,142,147,.08);
+  --task-priority-ink:var(--ink-2);
+}
+.task-row.is-priority-low{
+  --task-priority-accent:rgba(82,168,255,.30);
+  --task-priority-soft:rgba(82,168,255,.08);
+  --task-priority-ink:#8bc7ff;
 }
 .task-row.is-done{opacity:.62}
 .task-check{
@@ -1696,6 +1726,11 @@ select.project-planning-input{
   white-space:nowrap;
 }
 .task-row.is-done .task-title{text-decoration:line-through;color:var(--ink-4)}
+.task-row .task-priority-select{
+  border-color:var(--task-priority-accent);
+  color:var(--task-priority-ink);
+  background-color:rgba(16,16,18,.72);
+}
 .task-delete{
   width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;
   color:var(--danger);font-size:16px;line-height:1;cursor:pointer;opacity:.66;
@@ -1707,6 +1742,21 @@ select.project-planning-input{
 }
 
 .settings-shell{display:grid;gap:28px}
+.settings-layout{display:flex;gap:32px;align-items:flex-start}
+.settings-sidebar{flex:0 0 240px;display:flex;flex-direction:column;gap:6px;position:sticky;top:100px}
+.settings-nav-tab{text-align:left;border:none;background:transparent;color:var(--ink-3);font-size:14px;font-weight:600;padding:10px 14px;border-radius:12px;cursor:pointer;transition:background .18s ease, color .18s ease}
+.settings-nav-tab:hover{background:var(--surface-hover);color:var(--ink)}
+.settings-nav-tab.is-active{background:var(--control-bg-strong);color:var(--ink);box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.settings-content{flex:1;min-width:0;display:flex;flex-direction:column;gap:28px}
+.settings-pane{display:none;animation:fadeSlideUp .4s var(--ease-spring) both}
+.settings-pane.is-active{display:grid;gap:28px}
+
+.toggle-switch{appearance:none;-webkit-appearance:none;width:44px;height:24px;border-radius:24px;background:color-mix(in srgb, var(--border) 50%, transparent);position:relative;cursor:pointer;outline:none;border:1px solid var(--border);box-shadow:inset 0 1px 2px rgba(0,0,0,.04);transition:background .3s var(--ease-smooth), border-color .3s var(--ease-smooth)}
+.toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#ffffff;box-shadow:0 2px 4px rgba(0,0,0,.15), 0 0 1px rgba(0,0,0,.1);transition:transform .4s var(--ease-spring), width .2s ease}
+.toggle-switch:active::after{width:24px}
+.toggle-switch:checked{background:var(--accent);border-color:var(--accent)}
+.toggle-switch:checked::after{transform:translateX(20px)}
+.toggle-switch:focus-visible{box-shadow:0 0 0 3px var(--accent-soft), inset 0 1px 2px rgba(0,0,0,.04)}
 .settings-grid{
   display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:18px;
 }
@@ -1756,8 +1806,9 @@ select.project-planning-input{
 .text-input:focus,
 .color-picker-button:focus-within{
   outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow:0 0 0 4px var(--accent-soft), 0 2px 8px rgba(0,0,0,.04);
   background:var(--control-bg-strong);
+  transition:box-shadow .25s var(--ease-spring), border-color .2s ease;
 }
 .color-field{
   display:grid;gap:10px;
@@ -1821,6 +1872,86 @@ select.project-planning-input{
 .artist-editor .field-grid{
   grid-template-columns:repeat(2,minmax(220px,1fr));
   gap:16px;
+}
+
+.merge-form{
+  display:grid;gap:14px;
+}
+.merge-search-field{
+  max-width:520px;
+}
+.merge-workspace{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;
+  align-items:start;
+}
+.merge-panel{
+  display:grid;gap:10px;min-width:0;
+}
+.merge-panel-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.merge-count{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);
+}
+.merge-project-list{
+  display:grid;gap:8px;min-height:220px;max-height:330px;overflow:auto;
+  padding:10px;border:1px solid var(--border);border-radius:18px;background:var(--control-bg);
+}
+.merge-project-row{
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;
+  width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:14px;
+  background:var(--surface);color:var(--ink);text-align:left;cursor:pointer;
+  transition:border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.merge-project-row:hover{
+  border-color:var(--border-strong);background:var(--control-bg-strong);transform:translateY(-1px);
+}
+.merge-project-row:focus-within{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+.merge-project-row.is-selected,
+.merge-project-row.is-target{
+  border-color:color-mix(in srgb, var(--accent) 72%, var(--border));
+  background:color-mix(in srgb, var(--accent) 11%, var(--control-bg-strong));
+}
+.merge-project-row.is-disabled{
+  opacity:.48;cursor:not-allowed;transform:none;
+}
+.merge-project-row input{
+  margin-top:3px;accent-color:var(--accent);
+}
+.merge-project-copy{
+  display:grid;gap:4px;min-width:0;
+}
+.merge-project-name{
+  font-size:13px;font-weight:700;line-height:1.3;color:var(--ink);
+  overflow-wrap:anywhere;
+}
+.merge-project-meta{
+  font-size:12px;line-height:1.35;color:var(--ink-4);
+  overflow-wrap:anywhere;
+}
+.merge-empty{
+  display:grid;place-items:center;min-height:86px;padding:16px;
+  border:1px dashed var(--border);border-radius:14px;
+  color:var(--ink-4);font-size:12px;text-align:center;line-height:1.45;
+}
+.merge-review{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:12px 14px;border:1px solid var(--border);border-radius:16px;
+  background:var(--control-bg);font-size:13px;color:var(--ink-3);
+}
+.merge-review strong{
+  color:var(--ink);
+}
+.merge-review[data-state="ready"]{
+  border-color:color-mix(in srgb, var(--accent) 46%, var(--border));
+  background:color-mix(in srgb, var(--accent) 8%, var(--control-bg));
+}
+.merge-review[data-state="warning"]{
+  border-color:color-mix(in srgb, var(--danger) 42%, var(--border));
+  background:color-mix(in srgb, var(--danger) 8%, var(--control-bg));
+  color:var(--danger);
 }
 
 /* Project Options Editor */
@@ -2355,7 +2486,7 @@ tbody tr:hover .row-note{opacity:1}
   width:100%;min-height:80px;max-height:200px;padding:10px 12px;
   border:1px solid var(--border);border-radius:10px;
   background:var(--surface);color:var(--ink);
-  font-family:var(--font-sans);font-size:13.5px;line-height:1.5;
+  font-family:var(--font-body);font-size:13.5px;line-height:1.5;
   resize:vertical;outline:none;
   transition:border-color .15s ease, box-shadow .15s ease;
 }
@@ -2586,7 +2717,6 @@ select.planner-goal-input{
 .planner-board-column{
   border:1px solid var(--border);border-radius:18px;background:var(--control-bg);
   padding:14px;display:grid;gap:10px;align-content:start;
-  border-top: 4px solid var(--status-color, var(--border)) !important;
   background-color: var(--status-bg, var(--control-bg)) !important;
   transition: all 0.2s ease-in-out;
 }
@@ -2720,6 +2850,14 @@ select.planner-goal-input{
 .board-card-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:800;color:var(--ink)}
 .board-card-date{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:var(--ink-4)}
 .board-card-date strong{color:var(--ink-2);font-weight:800}
+.board-card-meta{
+  display:flex;align-items:center;gap:16px;min-width:0;margin-left:auto;font-size:12px;color:var(--ink-4);
+}
+.board-card-meta strong{color:var(--ink-2);font-weight:800;white-space:nowrap;width:160px;flex:0 0 160px;text-align:center}
+.planner-board-project .category-pill{
+  min-width:0;min-height:0;height:24px;padding:3px 8px;border-radius:10px;gap:6px;font-size:11px;line-height:1;
+}
+.planner-board-project .category-pill-swatch{width:7px;height:7px}
 .board-pin{
   width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
   border:1px solid var(--border);border-radius:10px;background:var(--control-bg);
@@ -2870,6 +3008,8 @@ select.planner-goal-input{
   .field-grid{grid-template-columns:1fr}
   .artist-form .field-grid,
   .artist-editor .field-grid{grid-template-columns:1fr}
+  .merge-workspace{grid-template-columns:1fr}
+  .merge-project-list{max-height:280px}
   .artist-header{align-items:stretch;flex-direction:column;gap:12px}
   .artist-edit-btn{align-self:flex-start}
   .color-control{grid-template-columns:auto 1fr}
@@ -2954,6 +3094,9 @@ select.planner-goal-input{
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+html[data-hide-heatmap="true"] #heatmapCard { display: none !important; }
+html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 </style>
 </head>
 <body>
@@ -3088,6 +3231,12 @@ select.planner-goal-input{
         </div>
         <div class="project-planning-grid">
           <div class="project-planning-field">
+            <label for="projectCategoryInput">Category</label>
+            <select class="project-planning-input" id="projectCategoryInput">
+              <option value="">No category</option>
+            </select>
+          </div>
+          <div class="project-planning-field">
             <label for="projectStatusInput">Status</label>
             <select class="project-planning-input" id="projectStatusInput">
               <option value="">Set status</option>
@@ -3108,7 +3257,6 @@ select.planner-goal-input{
             <textarea class="project-planning-input project-note-input" id="projectNoteInput" maxlength="1000" placeholder="Project note"></textarea>
           </div>
         </div>
-        <div class="project-planning-status" id="projectPlanningReasons"></div>
       </form>
       <form class="task-form" id="taskForm">
         <input class="task-input" id="taskTitleInput" type="text" maxlength="180" placeholder="Add a project task" autocomplete="off">
@@ -4774,6 +4922,13 @@ async function postJson(path, payload) {
   return data;
 }
 
+async function saveProjectCategory(projectName, categoryKey) {
+  return postJson('/api/project-category', {
+    project_name: projectName,
+    category_key: categoryKey,
+  });
+}
+
 async function getJson(path) {
   const res = await fetch(path);
   const data = await res.json();
@@ -4993,8 +5148,9 @@ function renderProjectTaskRows(tasks) {
   }
   return tasks.map(task => {
     const done = task.status === 'done';
+    const priorityClass = ['low', 'normal', 'high'].includes(task.priority) ? `is-priority-${task.priority}` : 'is-priority-normal';
     return `
-      <div class="task-row ${done ? 'is-done' : ''}" data-task-row="${task.id}">
+      <div class="task-row ${priorityClass} ${done ? 'is-done' : ''}" data-task-row="${task.id}">
         <input class="task-check" type="checkbox" data-task-toggle="${task.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} ${escapeHtml(task.title)}">
         <div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(task.title)}</div>
         ${taskPrioritySelect(task)}
@@ -5020,14 +5176,18 @@ async function refreshProjectTaskModal(projectName) {
 
 function refreshProjectPlanningForm(projectName) {
   const project = findProjectByName(projectName) || { project_name: projectName };
+  const categoryInput = document.getElementById('projectCategoryInput');
   const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
   const pinnedInput = document.getElementById('projectPinnedInput');
   const noteInput = document.getElementById('projectNoteInput');
   const summary = document.getElementById('projectPlanningSummary');
-  const reasonsEl = document.getElementById('projectPlanningReasons');
-  if (!statusInput || !dueInput || !pinnedInput || !noteInput) return;
+  if (!categoryInput || !statusInput || !dueInput || !pinnedInput || !noteInput) return;
 
+  categoryInput.innerHTML = [
+    `<option value="" ${(project.category_key || '') === '' ? 'selected' : ''}>No category</option>`,
+    ...CATEGORY_OPTIONS.map(option => `<option value="${option.key}" ${(project.category_key || '') === option.key ? 'selected' : ''}>${escapeHtml(option.label)}</option>`),
+  ].join('');
   statusInput.innerHTML = PROJECT_STATUS_OPTIONS
     .map(([value, label]) => `<option value="${value}" ${(project.status || '') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
     .join('');
@@ -5041,17 +5201,11 @@ function refreshProjectPlanningForm(projectName) {
     ].filter(Boolean);
     summary.textContent = bits.length ? bits.join(' · ') : 'Set status and due date';
   }
-  if (reasonsEl) {
-    const reasons = [
-      project.status ? { label: projectStatusLabel(project.status) } : { label: 'No status' },
-      { label: projectDueDateText(project), className: projectDuePillClass(project) },
-    ];
-    reasonsEl.innerHTML = plannerReasonPills(reasons);
-  }
 }
 
 async function saveProjectPlanning(projectName) {
   const project = findProjectByName(projectName) || {};
+  const categoryInput = document.getElementById('projectCategoryInput');
   const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
   const pinnedInput = document.getElementById('projectPinnedInput');
@@ -5073,6 +5227,10 @@ async function saveProjectPlanning(projectName) {
     pinned: !!pinnedInput?.checked,
     project_note: noteInput?.value || '',
   });
+  const nextCategory = categoryInput?.value || null;
+  if ((nextCategory || '') !== (project.category_key || '')) {
+    await saveProjectCategory(projectName, nextCategory);
+  }
   return result.metadata || null;
 }
 
@@ -5234,7 +5392,6 @@ function openCategoryPicker({ projectName, categoryKey }) {
       <span class="category-option-swatch"></span>
       <span>
         <span class="category-option-label">${escapeHtml(option.label)}</span>
-        <span class="category-option-note">${escapeHtml(option.color)}</span>
       </span>
       <span class="category-option-check">Selected</span>
     </button>
@@ -5253,10 +5410,7 @@ function openCategoryPicker({ projectName, categoryKey }) {
 
   const save = async (nextKey) => {
     try {
-      const result = await postJson('/api/project-category', {
-        project_name: projectName,
-        category_key: nextKey,
-      });
+      const result = await saveProjectCategory(projectName, nextKey);
       close();
       const message = result.category
         ? `${projectName} → ${result.category.label}`
@@ -6186,7 +6340,6 @@ function renderPlanner(data) {
           <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status) || 'No status')} · ${escapeHtml(lastWorkedLabel(project))}</div>
           ${plannerReasonPills(reasons)}
         </div>
-        <button class="btn small" type="button">Open</button>
       </div>
       `;
     });
@@ -6236,12 +6389,13 @@ function renderPlanner(data) {
             <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
             <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(project.project_name || 'Untitled')}</span>
           </div>
+          <div class="board-card-meta">
+            <strong>${escapeHtml(projectDueDateText(project))}</strong>
+            ${categoryPill(project)}
+          </div>
           <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
           </button>
-        </div>
-        <div class="board-card-date">
-          <strong>${escapeHtml(projectDueDateText(project))}</strong>
         </div>
       </div>
     `;
@@ -6383,6 +6537,7 @@ function renderPlanner(data) {
   `;
   bindProjectMetaControls();
   bindProjectTaskTriggers();
+  bindCategoryTriggers();
   bindPlannerGoals();
   bindProjectBoard(data);
 }
@@ -6423,7 +6578,8 @@ function bindProjectBoard(data) {
   document.querySelectorAll('[data-open-project]').forEach(trigger => {
     trigger.addEventListener('click', event => {
       const pinButton = event.target.closest('[data-pin-project]');
-      if (pinButton) return;
+      const categoryButton = event.target.closest('[data-category-trigger]');
+      if (pinButton || categoryButton) return;
       const projectName = decodeURIComponent(trigger.dataset.openProject || '');
       if (projectName) openProjectTasks(projectName);
     });
@@ -6772,9 +6928,6 @@ function render(data) {
             <thead><tr>
               <th style="width:40px">#</th>
               <th>Project</th>
-              <th>Category</th>
-              <th>Status / Type</th>
-              <th>Tasks</th>
               <th style="text-align:right">Total</th>
               <th style="text-align:right">Sessions</th>
             </tr></thead>
@@ -6788,9 +6941,6 @@ function render(data) {
                       ${projectBadge(p, i)}
                     </div>
                   </td>
-                  <td>${categoryPill(p)}</td>
-                  <td>${projectMetaControls(p)}</td>
-                  <td>${projectTaskButton(p)}</td>
                   <td class="dur">${fmt.dur(p.total_seconds)}</td>
                   <td class="num">${p.session_count}</td>
                 </tr>`;
