@@ -393,16 +393,12 @@
     return report.sessions.map(s => {
       const ids = s.session_ids || [];
       const notesMap = {};
-      const todoNotesMap = {};
-      const todosMap = {};
       const startTimesMap = {};
       const endTimesMap = {};
       const lastSeenTimesMap = {};
       ids.forEach(sid => {
         const k = String(sid);
         notesMap[k]      = (report.notes      || {})[k] || '';
-        todoNotesMap[k]  = (report.todo_notes || {})[k] || '';
-        todosMap[k]      = (report.todos       || {})[k] || [];
         startTimesMap[k]    = (report.start_times     || {})[k] || 0;
         endTimesMap[k]      = (report.end_times       || {})[k] ?? null;
         lastSeenTimesMap[k] = (report.last_seen_times || {})[k] || 0;
@@ -410,9 +406,8 @@
       return {
         sessionIds:    ids,
         projectName:   projectName,
+        projectNote:   report.project_note || '',
         notes:         notesMap,
-        todoNotes:     todoNotesMap,
-        todos:         todosMap,
         startTimes:    startTimesMap,
         endTimes:      endTimesMap,
         lastSeenTimes: lastSeenTimesMap,

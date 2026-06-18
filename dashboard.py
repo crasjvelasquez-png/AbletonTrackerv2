@@ -9,6 +9,7 @@ import time
 import traceback
 import webbrowser
 import threading
+import gzip
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -40,6 +41,9 @@ STATIC_CONTENT_TYPES = {
 PORT = 7421
 UNTITLED_NAMES = {"untitled", "untitled project"}
 MAX_CUSTOM_CATEGORIES = 12
+CONFIG_CACHE_TTL_SECONDS = 60
+RECENT_SESSION_PAGE_SIZE = 60
+CONFIG_CACHE: dict[str, tuple[float, object]] = {}
 PROJECT_STATUS_OPTIONS = {
     "idea": "Idea",
     "needs_work": "Needs Work",
@@ -201,26 +205,55 @@ def set_session_notes(session_id, notes: str, todo_notes: str = "", todos_json=N
         return {"error": "no data yet"}
 
     trimmed = (notes or "").strip()[:MAX_NOTES_LENGTH]
-    todos = _normalize_todos(todos_json) if todos_json is not None else []
-    trimmed_todo_notes = " | ".join(todo["text"] for todo in todos) if todos_json is not None else (todo_notes or "").strip()
-    todos_text = json.dumps(todos, separators=(",", ":"))
 
     with db_connection() as conn:
         ensure_sessions_notes_column(conn)
-        cur = conn.execute(
-            "UPDATE sessions SET notes = ?, todo_notes = ?, todos_json = ? WHERE id = ?",
-            (trimmed, trimmed_todo_notes, todos_text, sid),
-        )
-        conn.commit()
-        if cur.rowcount == 0:
-            return {"error": "session not found"}
-        return {
-            "ok": True,
-            "session_id": sid,
-            "notes": trimmed,
-            "todo_notes": trimmed_todo_notes,
-            "todos": todos,
-        }
+        if todos_json is not None:
+            todos = _normalize_todos(todos_json)
+            trimmed_todo_notes = " | ".join(todo["text"] for todo in todos)
+            todos_text = json.dumps(todos, separators=(",", ":"))
+            cur = conn.execute(
+                "UPDATE sessions SET notes = ?, todo_notes = ?, todos_json = ? WHERE id = ?",
+                (trimmed, trimmed_todo_notes, todos_text, sid),
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return {"error": "session not found"}
+            return {
+                "ok": True,
+                "session_id": sid,
+                "notes": trimmed,
+                "todo_notes": trimmed_todo_notes,
+                "todos": todos,
+            }
+        elif todo_notes:
+            trimmed_todo = (todo_notes or "").strip()
+            cur = conn.execute(
+                "UPDATE sessions SET notes = ?, todo_notes = ? WHERE id = ?",
+                (trimmed, trimmed_todo, sid),
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return {"error": "session not found"}
+            return {
+                "ok": True,
+                "session_id": sid,
+                "notes": trimmed,
+                "todo_notes": trimmed_todo,
+            }
+        else:
+            cur = conn.execute(
+                "UPDATE sessions SET notes = ? WHERE id = ?",
+                (trimmed, sid),
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return {"error": "session not found"}
+            return {
+                "ok": True,
+                "session_id": sid,
+                "notes": trimmed,
+            }
 
 
 def clear_session_notes() -> dict:
@@ -512,6 +545,28 @@ def get_app_setting(key: str, default: str | None = None) -> str | None:
         return row["value"] if row else default
 
 
+def _cache_get(key: str):
+    entry = CONFIG_CACHE.get(key)
+    if not entry:
+        return None
+    cached_at, value = entry
+    if time.monotonic() - cached_at > CONFIG_CACHE_TTL_SECONDS:
+        CONFIG_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value) -> None:
+    CONFIG_CACHE[key] = (time.monotonic(), value)
+
+
+def _cache_clear(key: str | None = None) -> None:
+    if key is None:
+        CONFIG_CACHE.clear()
+    else:
+        CONFIG_CACHE.pop(key, None)
+
+
 def set_app_setting(key: str, value: str) -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_connection() as conn:
@@ -527,17 +582,24 @@ def set_app_setting(key: str, value: str) -> None:
             (key, value),
         )
         conn.commit()
+    _cache_clear("all_app_settings")
 
 
 def get_all_app_settings() -> dict[str, str]:
     if not DB_PATH.exists():
         return {}
+    cache_key = "all_app_settings"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return dict(cached)
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT key, value FROM app_settings ORDER BY key"
         ).fetchall()
-        return {row["key"]: row["value"] for row in rows}
+        settings = {row["key"]: row["value"] for row in rows}
+        _cache_set(cache_key, settings)
+        return settings
 
 
 def ensure_indexes(conn: sqlite3.Connection) -> None:
@@ -546,6 +608,9 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_end_time ON sessions(end_time)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_project_categories_key ON project_categories(category_key)"
@@ -2222,6 +2287,17 @@ def _compute_data_etag(month_value: str = "") -> str:
             "  (SELECT COUNT(*) FROM sessions WHERE end_time IS NULL)"
             " FROM sessions"
         ).fetchone()
+        sn = conn.execute(
+            """
+            SELECT COUNT(*), MAX(rowid),
+                   GROUP_CONCAT(id || ':' || COALESCE(notes, '') || ':' || COALESCE(todo_notes, '') || ':' || COALESCE(todos_json, ''), '|')
+            FROM (
+                SELECT id, rowid, notes, todo_notes, todos_json
+                FROM sessions
+                ORDER BY id
+            )
+            """
+        ).fetchone()
         cd = conn.execute("SELECT COUNT(*), MAX(rowid) FROM category_definitions").fetchone()
         pc = conn.execute("SELECT COUNT(*), MAX(rowid) FROM project_categories").fetchone()
         pm = conn.execute(
@@ -2258,17 +2334,23 @@ def _compute_data_etag(month_value: str = "") -> str:
             """
         ).fetchone()
         dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
-        raw = f"{s}|{cd}|{pc}|{pm}|{pt}|{pg}|{dm}|{month_value}"
+        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{dm}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def get_project_list() -> list[str]:
     if not DB_PATH.exists():
         return []
+    cache_key = "project_list"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return list(cached)
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT DISTINCT COALESCE(pa.canonical_name, s.project_name) AS project_name FROM sessions s LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name WHERE s.project_name IS NOT NULL ORDER BY LOWER(COALESCE(pa.canonical_name, s.project_name)) ASC").fetchall()
-        return [row["project_name"] for row in rows if row["project_name"]]
+        projects = [row["project_name"] for row in rows if row["project_name"]]
+        _cache_set(cache_key, projects)
+        return projects
 
 
 def get_project_report(project_name: str) -> dict:
@@ -2281,7 +2363,7 @@ def get_project_report(project_name: str) -> dict:
         placeholders = ",".join("?" * len(names))
         
         rows = conn.execute(f"""
-            SELECT id, COALESCE(pa.canonical_name, s.project_name) AS project_name, start_time, last_seen_time, end_time, active_seconds, notes
+            SELECT id, COALESCE(pa.canonical_name, s.project_name) AS project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes, todos_json
             FROM sessions s
             LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
             WHERE s.project_name IN ({placeholders}) AND s.active_seconds > 0
@@ -2299,10 +2381,20 @@ def get_project_report(project_name: str) -> dict:
         
         # Build per-session maps for condensed entries.
         raw_notes = {}
+        raw_todo_notes = {}
+        raw_todos = {}
+        raw_start_times = {}
+        raw_end_times = {}
+        raw_last_seen_times = {}
         raw_entries = {}
         for r in rows:
             sid = int(r["id"])
             raw_notes[sid] = (r["notes"] or "").strip()
+            raw_todo_notes[sid] = (r["todo_notes"] or "").strip()
+            raw_todos[sid] = _parse_todos_json(r["todos_json"])
+            raw_start_times[sid] = float(r["start_time"] or 0)
+            raw_end_times[sid] = float(r["end_time"]) if r["end_time"] is not None else None
+            raw_last_seen_times[sid] = float(r["last_seen_time"] or 0)
             start_ts = r["start_time"]
             end_ts = r["end_time"] if r["end_time"] is not None else r["last_seen_time"]
             start_dt = datetime.fromtimestamp(start_ts)
@@ -2360,6 +2452,35 @@ def get_project_report(project_name: str) -> dict:
                 "session_entries": [raw_entries[sid] for sid in session_ids if sid in raw_entries],
             })
             
+        # Query project note for the canonical project
+        project_note = ""
+        metadata_row = conn.execute(
+            "SELECT project_note FROM project_metadata WHERE project_name = ?",
+            (project_name,),
+        ).fetchone()
+        if metadata_row:
+            project_note = (metadata_row["project_note"] or "").strip()
+
+        # Build per-session maps keyed by session id string
+        session_notes_map = {}
+        session_todo_notes_map = {}
+        session_todos_map = {}
+        session_start_times_map = {}
+        session_end_times_map = {}
+        session_last_seen_times_map = {}
+        for sid in raw_notes:
+            sid_str = str(sid)
+            if raw_notes.get(sid):
+                session_notes_map[sid_str] = raw_notes[sid]
+            if raw_todo_notes.get(sid):
+                session_todo_notes_map[sid_str] = raw_todo_notes[sid]
+            todos = raw_todos.get(sid, [])
+            if todos:
+                session_todos_map[sid_str] = todos
+            session_start_times_map[sid_str] = raw_start_times.get(sid, 0)
+            session_end_times_map[sid_str] = raw_end_times.get(sid)
+            session_last_seen_times_map[sid_str] = raw_last_seen_times.get(sid, 0)
+
         th, trem = divmod(total_seconds, 3600)
         tm, ts = divmod(trem, 60)
         
@@ -2368,11 +2489,18 @@ def get_project_report(project_name: str) -> dict:
             "sessions": sessions,
             "total_duration": f"{th:02d}:{tm:02d}:{ts:02d}",
             "total_duration_seconds": total_seconds,
-            "session_count": len(sessions)
+            "session_count": len(sessions),
+            "project_note": project_note,
+            "notes": session_notes_map,
+            "todo_notes": session_todo_notes_map,
+            "todos": session_todos_map,
+            "start_times": session_start_times_map,
+            "end_times": session_end_times_map,
+            "last_seen_times": session_last_seen_times_map,
         }
 
 
-def get_stats(month_value: str = "") -> dict:
+def get_stats(month_value: str = "", recent_before: float | None = None) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
     try:
@@ -2429,13 +2557,20 @@ def get_stats(month_value: str = "") -> dict:
                 if day >= last_year_ago
             ]
 
-            recent = conn.execute("""
+            recent_params: tuple[float, ...] = ()
+            recent_before_clause = ""
+            if recent_before and recent_before > 0:
+                recent_before_clause = "AND start_time < ?"
+                recent_params = (recent_before,)
+
+            recent = conn.execute(f"""
                 SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes, todos_json
                 FROM   sessions
-                WHERE  active_seconds >= 5 OR end_time IS NULL
+                WHERE  (active_seconds >= 5 OR end_time IS NULL)
+                  {recent_before_clause}
                 ORDER  BY start_time DESC
                 LIMIT  240
-            """).fetchall()
+            """, recent_params).fetchall()
             # Build notes, start-time, end-time, and last-seen maps from raw rows before condensation
             raw_notes = {}
             raw_todo_notes = {}
@@ -2453,7 +2588,9 @@ def get_stats(month_value: str = "") -> dict:
                 raw_end_times[sid] = float(r["end_time"]) if r["end_time"] is not None else None
                 raw_last_seen_times[sid] = float(r["last_seen_time"] or 0)
                 raw_active_seconds[sid] = float(r["active_seconds"] or 0)
-            recent = condense_recent_sessions(recent)[:60]
+            condensed_recent = condense_recent_sessions(recent)
+            recent_has_more = len(condensed_recent) > RECENT_SESSION_PAGE_SIZE
+            recent = condensed_recent[:RECENT_SESSION_PAGE_SIZE]
 
             today_str   = today.isoformat()
             week_start_weekday = int(get_app_setting("week_start_weekday") or DEFAULT_WEEK_START_WEEKDAY)
@@ -2678,6 +2815,8 @@ def get_stats(month_value: str = "") -> dict:
                 "year_daily": [dict(r) for r in year_daily],
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
+                "recent_has_more": recent_has_more,
+                "recent_oldest_start_time": min((row["start_time"] for row in recent_rows), default=None),
                 "category_options": category_options,
                 "project_status_options": list(get_project_status_options(conn).items()),
                 "project_type_options": list(get_project_type_options(conn).items()),
@@ -6063,10 +6202,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, payload, status=200, etag=None):
         body = json.dumps(payload).encode()
+        accept_encoding = self.headers.get("Accept-Encoding", "")
+        use_gzip = "gzip" in accept_encoding.lower() and len(body) > 1024 and status != 304
+        if use_gzip:
+            body = gzip.compress(body)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Vary", "Accept-Encoding")
+        if use_gzip:
+            self.send_header("Content-Encoding", "gzip")
         if etag:
             self.send_header("ETag", etag)
         self.end_headers()
@@ -6094,7 +6240,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "public, max-age=3600")
         self.end_headers()
         self.wfile.write(body)
         return True
@@ -6108,16 +6254,25 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_static(TEMPLATES_DIR, parsed.path[len("/partials/"):])
             return
         if parsed.path == "/api/data":
-            month_value = parse_qs(parsed.query).get("month", [""])[0]
+            query = parse_qs(parsed.query)
+            month_value = query.get("month", [""])[0]
+            recent_before_value = query.get("recent_before", [""])[0]
+            recent_before = None
+            if recent_before_value:
+                try:
+                    recent_before = float(recent_before_value)
+                except ValueError:
+                    self._json({"error": "recent_before must be a timestamp"}, status=400)
+                    return
             etag = _compute_data_etag(month_value)
             if_none_match = self.headers.get("If-None-Match", "")
-            if etag and if_none_match == etag:
+            if etag and if_none_match == etag and recent_before is None:
                 self.send_response(304)
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 return
             try:
-                self._json(get_stats(month_value), etag=etag)
+                self._json(get_stats(month_value, recent_before), etag=etag if recent_before is None else None)
             except ValueError as exc:
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/daily-target":

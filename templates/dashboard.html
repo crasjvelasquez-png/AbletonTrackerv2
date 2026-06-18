@@ -234,8 +234,8 @@ body{
   to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
 }
 @keyframes backdropReveal{
-  from{opacity:0;backdrop-filter:blur(0);-webkit-backdrop-filter:blur(0)}
-  to{opacity:1;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  from{opacity:0}
+  to{opacity:1}
 }
 @keyframes softPulse{
   0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
@@ -270,8 +270,6 @@ body{
 header{
   position:sticky;top:0;z-index:20;
   background:var(--header-bg);
-  backdrop-filter:saturate(180%) blur(24px);
-  -webkit-backdrop-filter:saturate(180%) blur(24px);
   border-bottom:1px solid var(--border);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   padding:0 36px;height:68px;
@@ -426,8 +424,6 @@ header{
 .chart-card,
 .table-card{
   background:var(--surface);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border:1px solid var(--border);
   box-shadow:var(--shadow-1);
   position:relative;overflow:hidden;
@@ -1397,7 +1393,7 @@ header{
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 .modal-backdrop{
-  position:fixed;inset:0;background:var(--modal-backdrop);backdrop-filter:blur(10px);
+  position:fixed;inset:0;background:var(--modal-backdrop);
   display:none;align-items:center;justify-content:center;z-index:90;
 }
 .modal-backdrop.show{display:flex;animation:backdropReveal .24s ease both}
@@ -1421,11 +1417,11 @@ header{
   border:1px solid var(--border);
 }
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+.table-more{display:flex;justify-content:center;padding:14px 0 4px}
 .detail-modal-backdrop{
   position:fixed;inset:0;z-index:95;
   display:none;align-items:center;justify-content:center;
   padding:24px;background:var(--modal-backdrop);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
 }
 .detail-modal-backdrop.is-open{display:flex;animation:backdropReveal .24s ease both}
 .detail-modal{
@@ -1736,6 +1732,9 @@ select.project-planning-input{
   color:var(--danger);font-size:16px;line-height:1;cursor:pointer;opacity:.66;
 }
 .task-delete:hover{opacity:1;background:var(--danger-soft);border-color:rgba(255,59,48,.28)}
+.task-toggle-row{
+  display:flex;align-items:center;justify-content:flex-end;gap:8px;
+}
 .task-empty{
   padding:28px 14px;text-align:center;border:1px dashed var(--border-strong);border-radius:16px;
   color:var(--ink-4);font-size:13px;
@@ -3227,7 +3226,6 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
             <div class="project-planning-title">Details</div>
             <div class="category-modal-kicker" id="projectPlanningSummary"></div>
           </div>
-          <button class="btn small" id="projectPlanningSave" type="submit">Save</button>
         </div>
         <div class="project-planning-grid">
           <div class="project-planning-field">
@@ -3253,8 +3251,20 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
             </label>
           </div>
           <div class="project-planning-field" style="grid-column:1 / -1">
-            <label for="projectNoteInput">Note</label>
-            <textarea class="project-planning-input project-note-input" id="projectNoteInput" maxlength="1000" placeholder="Project note"></textarea>
+            <label>Notes</label>
+            <div class="inline-notes-toggle" id="projectNotesToggle" style="display:flex;gap:4px;margin-bottom:6px;padding:3px;background:var(--control-bg);border-radius:9px;border:1px solid var(--border)">
+              <button class="notes-mode-btn is-active" id="projectGlobalBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
+              <button class="notes-mode-btn" id="projectSessionBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
+            </div>
+            <textarea class="notes-textarea" id="projectNotesTextarea" maxlength="3000" placeholder="" style="min-height:70px;max-height:140px"></textarea>
+            <div id="projectNotesSessionInfo" style="display:none;font-size:11px;color:var(--ink-4);margin-top:4px;line-height:1.4"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+              <div class="notes-nav" id="projectNotesNav" aria-label="Navigate session entries" hidden>
+                <button class="notes-nav-btn" id="projectNotesPrevBtn" type="button" aria-label="Previous session">‹</button>
+                <button class="notes-nav-btn" id="projectNotesNextBtn" type="button" aria-label="Next session">›</button>
+              </div>
+              <span class="notes-char-count" id="projectNotesCharCount" style="margin-left:auto">0 / 3000</span>
+            </div>
           </div>
         </div>
       </form>
@@ -3267,10 +3277,13 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
         </select>
         <button class="btn small" id="taskAddButton" type="submit">Add</button>
       </form>
+      <div class="task-toggle-row" id="taskToggleRow">
+        <button class="btn small" id="taskToggleCompleted" type="button" aria-pressed="false">Show completed (0)</button>
+      </div>
       <div class="task-list" id="taskModalList"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn" id="taskModalDone" type="button">Done</button>
+      <button class="btn primary" id="taskModalDone" type="button">Save &amp; Close</button>
     </div>
   </div>
 </div>
@@ -3279,17 +3292,22 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 <div class="modal-backdrop" id="notesModal">
   <div class="modal notes-modal" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
     <div class="notes-modal-head">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="notes-modal-title-row">
-          <h3 id="notesModalTitle">Session notes</h3>
-          <div class="notes-nav" aria-label="Navigate session notes">
-            <button class="notes-nav-btn" id="notesPrevBtn" type="button" aria-label="Previous session notes">‹</button>
-            <button class="notes-nav-btn" id="notesNextBtn" type="button" aria-label="Next session notes">›</button>
+          <h3 id="notesModalTitle">Notes</h3>
+          <div class="notes-nav" id="notesNav" aria-label="Navigate session entries" hidden>
+            <button class="notes-nav-btn" id="notesPrevBtn" type="button" aria-label="Previous session">‹</button>
+            <button class="notes-nav-btn" id="notesNextBtn" type="button" aria-label="Next session">›</button>
           </div>
         </div>
         <div class="notes-modal-subtitle" id="notesModalSubtitle"></div>
+        <div id="notesSessionDateTime" style="display:none;font-size:12px;color:var(--ink-4);margin-top:4px;line-height:1.45"></div>
       </div>
       <button class="notes-modal-close" id="notesModalClose" type="button" aria-label="Close notes">×</button>
+    </div>
+    <div class="notes-mode-toggle" id="notesModeToggle" style="display:flex;gap:4px;margin-bottom:12px;padding:4px;background:var(--control-bg);border-radius:10px;border:1px solid var(--border)">
+      <button class="notes-mode-btn is-active" id="notesGlobalBtn" type="button" style="flex:1;padding:7px 12px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
+      <button class="notes-mode-btn" id="notesSessionBtn" type="button" style="flex:1;padding:7px 12px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
     </div>
     <div class="notes-modal-body" id="notesModalBody"></div>
     <div class="notes-modal-foot">
@@ -3347,6 +3365,14 @@ const weeklyTargetState = {
   historyRows: [],
   dailyRows: [],
 };
+
+function debounce(fn, wait = 120) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}
 
 function activeTheme() {
   const stored = localStorage.getItem(window.THEME_STORAGE_KEY);
@@ -5133,6 +5159,24 @@ function priorityLabel(priority) {
   return found ? found[1] : 'Normal';
 }
 
+function TASK_PRIORITY_RANK(priority) {
+  if (priority === 'high') return 0;
+  if (priority === 'normal') return 1;
+  return 2;
+}
+
+function sortProjectTasks(tasks) {
+  return tasks.slice().sort((a, b) => {
+    const aDone = a.status === 'done' ? 1 : 0;
+    const bDone = b.status === 'done' ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    const aPri = TASK_PRIORITY_RANK(a.priority);
+    const bPri = TASK_PRIORITY_RANK(b.priority);
+    if (aPri !== bPri) return aPri - bPri;
+    return (a.sort_order || 0) - (b.sort_order || 0) || (a.created_at || 0) - (b.created_at || 0) || (a.id || 0) - (b.id || 0);
+  });
+}
+
 function taskPrioritySelect(task) {
   const current = task.priority || 'normal';
   return `
@@ -5162,13 +5206,34 @@ function renderProjectTaskRows(tasks) {
 
 async function refreshProjectTaskModal(projectName) {
   const list = document.getElementById('taskModalList');
+  const toggle = document.getElementById('taskToggleCompleted');
   if (!list) return;
   refreshProjectPlanningForm(projectName);
   list.innerHTML = '<div class="task-empty">Loading tasks…</div>';
   try {
     const result = await getJson(`/api/project-tasks?project=${encodeURIComponent(projectName)}`);
-    list.innerHTML = renderProjectTaskRows(result.tasks || []);
+    const allTasks = sortProjectTasks(result.tasks || []);
+    if (projectTaskModalState) {
+      projectTaskModalState.tasks = allTasks;
+    }
+    const showCompleted = projectTaskModalState?.showCompleted === true;
+    const visible = showCompleted ? allTasks : allTasks.filter(t => t.status !== 'done');
+    if (visible.length === 0 && allTasks.length > 0) {
+      list.innerHTML = '<div class="task-empty">Completed tasks hidden.</div>';
+    } else {
+      list.innerHTML = renderProjectTaskRows(visible);
+    }
     bindProjectTaskModalRows(projectName);
+    if (toggle) {
+      const doneCount = allTasks.filter(t => t.status === 'done').length;
+      if (showCompleted) {
+        toggle.textContent = 'Hide completed';
+        toggle.setAttribute('aria-pressed', 'true');
+      } else {
+        toggle.textContent = doneCount ? `Show completed (${doneCount})` : 'Show completed (0)';
+        toggle.setAttribute('aria-pressed', 'false');
+      }
+    }
   } catch (error) {
     list.innerHTML = `<div class="task-empty">${escapeHtml(error.message || 'Could not load tasks')}</div>`;
   }
@@ -5180,9 +5245,8 @@ function refreshProjectPlanningForm(projectName) {
   const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
   const pinnedInput = document.getElementById('projectPinnedInput');
-  const noteInput = document.getElementById('projectNoteInput');
   const summary = document.getElementById('projectPlanningSummary');
-  if (!categoryInput || !statusInput || !dueInput || !pinnedInput || !noteInput) return;
+  if (!categoryInput || !statusInput || !dueInput || !pinnedInput) return;
 
   categoryInput.innerHTML = [
     `<option value="" ${(project.category_key || '') === '' ? 'selected' : ''}>No category</option>`,
@@ -5193,7 +5257,6 @@ function refreshProjectPlanningForm(projectName) {
     .join('');
   dueInput.value = project.due_date || '';
   pinnedInput.checked = !!project.pinned;
-  noteInput.value = project.project_note || '';
   if (summary) {
     const bits = [
       projectUrgencyLabel(project),
@@ -5209,7 +5272,6 @@ async function saveProjectPlanning(projectName) {
   const statusInput = document.getElementById('projectStatusInput');
   const dueInput = document.getElementById('projectDueDateInput');
   const pinnedInput = document.getElementById('projectPinnedInput');
-  const noteInput = document.getElementById('projectNoteInput');
   const nextStatus = statusInput?.value || '';
   if (isTerminalProjectStatus(nextStatus) && nextStatus !== (project.status || '')) {
     const ok = await confirmTerminalProjectMove(projectName, nextStatus);
@@ -5218,15 +5280,15 @@ async function saveProjectPlanning(projectName) {
       return null;
     }
   }
-  const result = await postJson('/api/project-metadata', {
+  const payload = {
     project_name: projectName,
     status: nextStatus,
     type: project.type || '',
     priority: project.priority || '',
     due_date: dueInput?.value || '',
     pinned: !!pinnedInput?.checked,
-    project_note: noteInput?.value || '',
-  });
+  };
+  const result = await postJson('/api/project-metadata', payload);
   const nextCategory = categoryInput?.value || null;
   if ((nextCategory || '') !== (project.category_key || '')) {
     await saveProjectCategory(projectName, nextCategory);
@@ -5299,25 +5361,40 @@ function openProjectTasks(projectName) {
   const doneBtn = document.getElementById('taskModalDone');
   const form = document.getElementById('taskForm');
   const planningForm = document.getElementById('projectPlanningForm');
-  const planningSave = document.getElementById('projectPlanningSave');
   const titleInput = document.getElementById('taskTitleInput');
   const priorityInput = document.getElementById('taskPriorityInput');
   const addBtn = document.getElementById('taskAddButton');
+  const toggle = document.getElementById('taskToggleCompleted');
   if (!modal || !projectName) return;
+  doneBtn.disabled = false;
+  doneBtn.textContent = 'Save & Close';
 
   if (projectTaskModalState?.close) projectTaskModalState.close();
   projectLabel.textContent = projectName;
   titleInput.value = '';
   priorityInput.value = 'normal';
 
+  const toggleCompleted = () => {
+    const show = !(projectTaskModalState?.showCompleted ?? false);
+    if (projectTaskModalState) projectTaskModalState.showCompleted = show;
+    refreshProjectTaskModal(projectName);
+  };
+
+  let _projectNotesCleanup = null;
+
   const close = () => {
     modal.classList.remove('show');
     closeBtn.removeEventListener('click', close);
-    doneBtn.removeEventListener('click', close);
+    doneBtn.removeEventListener('click', onDone);
     modal.removeEventListener('click', onBackdrop);
     document.removeEventListener('keydown', onKey);
     form.removeEventListener('submit', onSubmit);
     planningForm?.removeEventListener('submit', onPlanningSubmit);
+    toggle?.removeEventListener('click', toggleCompleted);
+    if (_projectNotesCleanup) {
+      _projectNotesCleanup();
+      _projectNotesCleanup = null;
+    }
     projectTaskModalState = null;
   };
   const onBackdrop = event => { if (event.target === modal) close(); };
@@ -5349,7 +5426,6 @@ function openProjectTasks(projectName) {
   };
   const onPlanningSubmit = async event => {
     event.preventDefault();
-    if (planningSave) planningSave.disabled = true;
     try {
       await saveProjectPlanning(projectName);
       toast(`Updated ${projectName}`);
@@ -5357,21 +5433,303 @@ function openProjectTasks(projectName) {
       refreshProjectPlanningForm(projectName);
     } catch (error) {
       toast(error.message || 'Failed to save project planning');
-    } finally {
-      if (planningSave) planningSave.disabled = false;
     }
   };
 
-  projectTaskModalState = { close };
+  const _notes = setupProjectInlineNotes(projectName);
+  _projectNotesCleanup = _notes ? _notes.cleanup : null;
+  const _saveNotes = _notes ? _notes.save : null;
+
+  const onDone = async () => {
+    doneBtn.disabled = true;
+    doneBtn.textContent = 'Saving\u2026';
+    try {
+      await saveProjectPlanning(projectName);
+      toast(`Updated ${projectName}`);
+      await load();
+      refreshProjectPlanningForm(projectName);
+      if (_saveNotes) await _saveNotes();
+      close();
+    } catch(error) {
+      doneBtn.disabled = false;
+      doneBtn.textContent = 'Save & Close';
+      toast(error.message || 'Failed to save');
+    }
+  };
+
+  projectTaskModalState = { close, showCompleted: false };
   modal.classList.add('show');
   closeBtn.addEventListener('click', close);
-  doneBtn.addEventListener('click', close);
+  doneBtn.addEventListener('click', onDone);
   modal.addEventListener('click', onBackdrop);
   document.addEventListener('keydown', onKey);
   form.addEventListener('submit', onSubmit);
   planningForm?.addEventListener('submit', onPlanningSubmit);
+  toggle?.addEventListener('click', toggleCompleted);
   refreshProjectTaskModal(projectName);
   titleInput.focus();
+}
+
+function setupProjectInlineNotes(projectName) {
+  const MAX_PROJECT_NOTE_LEN = 3000;
+  const toggle = document.getElementById('projectNotesToggle');
+  const globalBtn = document.getElementById('projectGlobalBtn');
+  const sessionBtn = document.getElementById('projectSessionBtn');
+  const textarea = document.getElementById('projectNotesTextarea');
+  const sessionInfo = document.getElementById('projectNotesSessionInfo');
+  const nav = document.getElementById('projectNotesNav');
+  const prevBtn = document.getElementById('projectNotesPrevBtn');
+  const nextBtn = document.getElementById('projectNotesNextBtn');
+  const charCount = document.getElementById('projectNotesCharCount');
+
+  if (!toggle || !textarea) return;
+
+  const project = findProjectByName(projectName) || { project_name: projectName };
+  const abletonIsRunning = latestDashboardData?.summary?.ableton_running === true;
+
+  let currentMode = 'global';
+  let currentProjectNote = (project.project_note || '').trim();
+  let editingSessionId = null;
+  let previousSessionId = null;
+  let nextSessionId = null;
+  let hasSessionNav = false;
+  let notes = {};
+  let startTimes = {};
+  let endTimes = {};
+  let lastSeenTimes = {};
+  let activeSeconds = {};
+
+  const sessions = latestDashboardData?.recent || [];
+  const projSessions = sessions.filter(s => s.project_name === projectName);
+  const sessionIds = projSessions.length > 0 ? (projSessions[0].session_ids || []) : [];
+
+  if (sessionIds.length > 0) {
+    editingSessionId = sessionIds[0];
+    sessionIds.forEach(sid => {
+      const k = String(sid);
+      notes[k] = (projSessions[0].session_notes || {})[k] || '';
+      startTimes[k] = (projSessions[0].session_start_times || {})[k] || 0;
+      endTimes[k] = (projSessions[0].session_end_times || {})[k] ?? null;
+      lastSeenTimes[k] = (projSessions[0].session_last_seen_times || {})[k] || 0;
+      activeSeconds[k] = (projSessions[0].session_active_seconds || {})[k] || 0;
+    });
+  }
+
+  let currentSessionNote = editingSessionId ? (notes[String(editingSessionId)] || '') : '';
+
+  function endTimePlain(sidStr) {
+    const et = endTimes[sidStr];
+    const lst = lastSeenTimes[sidStr];
+    if (et != null) return fmt.time(et);
+    if (abletonIsRunning) return 'Active';
+    if (lst) return fmt.time(lst);
+    return '—';
+  }
+
+  function sessionSummary(sidStr) {
+    const startTs = startTimes[sidStr] || 0;
+    const seconds = activeSeconds?.[sidStr] || 0;
+    const dateStr = fmt.dateOrdinal(startTs);
+    const range = fmt.time(startTs) + ' to ' + endTimePlain(sidStr);
+    return { dateStr: dateStr, range: range, duration: seconds > 0 ? fmt.dur(seconds) : '' };
+  }
+
+  function updateNavButtons() {
+    if (prevBtn) prevBtn.disabled = !previousSessionId;
+    if (nextBtn) nextBtn.disabled = !nextSessionId;
+  }
+
+  async function loadNavState() {
+    if (sessionIds.length !== 1) {
+      hasSessionNav = false;
+      if (nav) nav.hidden = true;
+      updateNavButtons();
+      return;
+    }
+    try {
+      const data = await getJson('/api/session-notes-entry?session_id=' + encodeURIComponent(sessionIds[0]) + '&project=' + encodeURIComponent(projectName || ''));
+      previousSessionId = data.previous_session_id || null;
+      nextSessionId = data.next_session_id || null;
+      hasSessionNav = !!(previousSessionId || nextSessionId);
+      updateNavButtons();
+    } catch(e) {
+      hasSessionNav = false;
+      updateNavButtons();
+    }
+  }
+
+  async function openEntry(sessionId) {
+    if (!sessionId) return;
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    try {
+      const data = await getJson('/api/session-notes-entry?session_id=' + encodeURIComponent(sessionId) + '&project=' + encodeURIComponent(projectName || ''));
+      const entry = data.session;
+      editingSessionId = entry.id;
+      notes[String(entry.id)] = entry.notes || '';
+      startTimes[String(entry.id)] = entry.start_time || 0;
+      endTimes[String(entry.id)] = entry.end_time ?? null;
+      lastSeenTimes[String(entry.id)] = entry.last_seen_time || 0;
+      activeSeconds[String(entry.id)] = entry.active_seconds || 0;
+      currentSessionNote = entry.notes || '';
+      previousSessionId = data.previous_session_id || null;
+      nextSessionId = data.next_session_id || null;
+      hasSessionNav = !!(previousSessionId || nextSessionId);
+      updateTextarea('session');
+      updateNavButtons();
+      if (currentMode === 'session' && nav) {
+        nav.hidden = !hasSessionNav;
+      }
+    } catch(e) {
+      toast('Failed to load session notes');
+      updateNavButtons();
+    }
+  }
+
+  function setModeButtons() {
+    if (!globalBtn || !sessionBtn) return;
+    if (currentMode === 'global') {
+      globalBtn.classList.add('is-active');
+      sessionBtn.classList.remove('is-active');
+      globalBtn.style.background = 'var(--surface)';
+      globalBtn.style.color = 'var(--ink)';
+      sessionBtn.style.background = 'transparent';
+      sessionBtn.style.color = 'var(--ink-3)';
+    } else {
+      sessionBtn.classList.add('is-active');
+      globalBtn.classList.remove('is-active');
+      sessionBtn.style.background = 'var(--surface)';
+      sessionBtn.style.color = 'var(--ink)';
+      globalBtn.style.background = 'transparent';
+      globalBtn.style.color = 'var(--ink-3)';
+    }
+  }
+
+  function updateTextarea(mode) {
+    if (!textarea) return;
+    const val = textarea.value;
+    if (currentMode === 'global') {
+      currentProjectNote = val;
+    } else if (currentMode === 'session' && editingSessionId) {
+      notes[String(editingSessionId)] = val;
+      currentSessionNote = val;
+    }
+
+    if (mode === 'global') {
+      textarea.value = currentProjectNote;
+      textarea.placeholder = '';
+      textarea.maxLength = MAX_PROJECT_NOTE_LEN;
+      if (nav) nav.hidden = true;
+      if (sessionInfo) sessionInfo.style.display = 'none';
+      if (charCount) charCount.textContent = currentProjectNote.length + ' / ' + MAX_PROJECT_NOTE_LEN;
+    } else {
+      textarea.value = currentSessionNote;
+      textarea.placeholder = '';
+      textarea.maxLength = MAX_NOTES_LEN;
+
+      if (editingSessionId && sessionIds.length === 1) {
+        const summary = sessionSummary(String(editingSessionId));
+        if (sessionInfo) {
+          sessionInfo.style.display = 'block';
+          sessionInfo.textContent = summary.dateStr + ' \u00b7 ' + summary.range;
+        }
+        if (nav) nav.hidden = !hasSessionNav;
+      } else {
+        if (nav) nav.hidden = true;
+        if (sessionInfo) sessionInfo.style.display = 'none';
+      }
+
+      if (charCount) charCount.textContent = currentSessionNote.length + ' / ' + MAX_NOTES_LEN;
+    }
+    if (charCount) charCount.classList.toggle('over', false);
+  }
+
+  function switchMode(mode) {
+    if (currentMode === mode) return;
+    updateTextarea(mode);
+    currentMode = mode;
+    setModeButtons();
+  }
+
+  // Initialize UI state
+  textarea.value = currentProjectNote;
+  textarea.maxLength = MAX_PROJECT_NOTE_LEN;
+  textarea.placeholder = '';
+  if (charCount) charCount.textContent = currentProjectNote.length + ' / ' + MAX_PROJECT_NOTE_LEN;
+  if (nav) nav.hidden = true;
+  if (sessionInfo) sessionInfo.style.display = 'none';
+  setModeButtons();
+
+  function onTextareaInput() {
+    const val = textarea.value;
+    if (currentMode === 'global') {
+      currentProjectNote = val;
+      if (charCount) charCount.textContent = val.length + ' / ' + MAX_PROJECT_NOTE_LEN;
+      if (charCount) charCount.classList.toggle('over', val.length > MAX_PROJECT_NOTE_LEN);
+    } else {
+      if (editingSessionId) notes[String(editingSessionId)] = val;
+      currentSessionNote = val;
+      if (charCount) charCount.textContent = val.length + ' / ' + MAX_NOTES_LEN;
+      if (charCount) charCount.classList.toggle('over', val.length > MAX_NOTES_LEN);
+    }
+  }
+
+  async function onSave() {
+    if (!textarea) return;
+    const val = textarea.value.trim();
+    if (currentMode === 'global') {
+      currentProjectNote = val;
+      const proj = findProjectByName(projectName) || { project_name: projectName };
+      await postJson('/api/project-metadata', {
+        project_name: projectName,
+        status: proj.status || '',
+        type: proj.type || '',
+        priority: proj.priority || '',
+        due_date: proj.due_date || '',
+        pinned: !!proj.pinned,
+        project_note: val,
+      });
+    } else {
+      if (editingSessionId) notes[String(editingSessionId)] = val;
+      currentSessionNote = val;
+      await postJson('/api/session-notes', { session_id: editingSessionId, notes: val });
+    }
+    toast('Notes saved');
+    load();
+  }
+
+  function onPrev() { openEntry(previousSessionId); }
+  function onNext() { openEntry(nextSessionId); }
+  function onGlobalClick() { switchMode('global'); }
+  function onSessionClick() { switchMode('session'); }
+
+  if (globalBtn) globalBtn.addEventListener('click', onGlobalClick);
+  if (sessionBtn) sessionBtn.addEventListener('click', onSessionClick);
+  if (textarea) textarea.addEventListener('input', onTextareaInput);
+  if (prevBtn) prevBtn.addEventListener('click', onPrev);
+  if (nextBtn) nextBtn.addEventListener('click', onNext);
+
+  loadNavState().then(function() {
+    if (currentMode === 'session') {
+      if (editingSessionId && sessionIds.length === 1) {
+        if (nav) nav.hidden = !hasSessionNav;
+        if (sessionInfo && hasSessionNav) sessionInfo.style.display = 'block';
+        if (!hasSessionNav && sessionInfo) sessionInfo.style.display = 'none';
+      }
+    }
+    updateNavButtons();
+  });
+
+  return {
+    cleanup: function() {
+      if (globalBtn) globalBtn.removeEventListener('click', onGlobalClick);
+      if (sessionBtn) sessionBtn.removeEventListener('click', onSessionClick);
+      if (textarea) textarea.removeEventListener('input', onTextareaInput);
+      if (prevBtn) prevBtn.removeEventListener('click', onPrev);
+      if (nextBtn) nextBtn.removeEventListener('click', onNext);
+    },
+    save: onSave,
+  };
 }
 
 function openCategoryPicker({ projectName, categoryKey }) {
@@ -5536,6 +5894,23 @@ async function deleteRecentEntry(sessionIds, projectName){
 // ── Notes ──
 const MAX_NOTES_LEN = 500;
 
+// Bridge for Project Entries → notes modal
+function openNotesModalWithData(entries, idx) {
+  if (!Array.isArray(entries) || idx < 0 || idx >= entries.length) return;
+  const entry = entries[idx];
+  openNotesPopup({
+    sessionIds: entry.sessionIds || [],
+    projectName: entry.projectName || '',
+    notes: entry.notes || {},
+    startTimes: entry.startTimes || {},
+    endTimes: entry.endTimes || {},
+    lastSeenTimes: entry.lastSeenTimes || {},
+    activeSeconds: entry.activeSeconds || {},
+    projectNote: entry.projectNote || '',
+  });
+}
+window.openNotesModalWithData = openNotesModalWithData;
+
 function bindNotesTriggers(){
   document.querySelectorAll('.row-note').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -5545,28 +5920,27 @@ function bindNotesTriggers(){
         .filter(n => Number.isFinite(n));
       const projectName = decodeURIComponent(btn.dataset.projectName || '');
       let notes = {};
-      let todos = {};
       let startTimes = {};
       let endTimes = {};
       let lastSeenTimes = {};
       let activeSeconds = {};
+      let projectNote = '';
       try {
         notes = JSON.parse(decodeURIComponent(btn.dataset.sessionNotes || '{}'));
-        todos = JSON.parse(decodeURIComponent(btn.dataset.sessionTodos || '{}'));
         startTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionStartTimes || '{}'));
         endTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionEndTimes || '{}'));
         lastSeenTimes = JSON.parse(decodeURIComponent(btn.dataset.sessionLastSeenTimes || '{}'));
         activeSeconds = JSON.parse(decodeURIComponent(btn.dataset.sessionActiveSeconds || '{}'));
+        projectNote = decodeURIComponent(btn.dataset.projectNote || '');
       } catch(e) {}
-      openNotesPopup({ sessionIds: ids, projectName, notes, todos, startTimes, endTimes, lastSeenTimes, activeSeconds });
+      openNotesPopup({ sessionIds: ids, projectName, notes, startTimes, endTimes, lastSeenTimes, activeSeconds, projectNote });
     });
   });
 }
 
 let notesModalState = null;
 
-function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, endTimes, lastSeenTimes, activeSeconds }){
-  // Close any existing notes modal first
+function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, lastSeenTimes, activeSeconds, projectNote, initialMode }){
   if (notesModalState) closeNotesModal();
 
   const modal = document.getElementById('notesModal');
@@ -5579,30 +5953,29 @@ function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, end
   const prevBtn = document.getElementById('notesPrevBtn');
   const nextBtn = document.getElementById('notesNextBtn');
   const charCount = document.getElementById('notesCharCount');
+  const navEl = document.getElementById('notesNav');
+  const dateTimeEl = document.getElementById('notesSessionDateTime');
+  const globalBtn = document.getElementById('notesGlobalBtn');
+  const sessionBtn = document.getElementById('notesSessionBtn');
 
+  const MAX_PROJECT_NOTE_LEN = 3000;
   const abletonIsRunning = latestDashboardData?.summary?.ableton_running === true;
-  let currentSessionIds = [...sessionIds];
+
+  let currentMode = initialMode || 'global';
   let currentProjectName = projectName;
+  let currentProjectNote = (projectNote || '').trim();
+  let currentSessionIds = [...sessionIds];
+  let editingSessionId = sessionIds.length > 0 ? sessionIds[0] : null;
+  let currentSessionNote = editingSessionId ? (notes[String(editingSessionId)] || '') : '';
   let previousSessionId = null;
   let nextSessionId = null;
   let isDirty = false;
+  let hasSessionNav = false;
 
   title.textContent = currentProjectName || 'Untitled session';
   saveBtn.disabled = false;
   saveBtn.textContent = 'Save';
   cancelBtn.textContent = 'Cancel';
-
-  // Helper to get a display end-time string for a session
-  function endTimeDisplay(sidStr) {
-    const et = endTimes[sidStr];        // number (timestamp) | null (live) | undefined (missing)
-    const lst = lastSeenTimes[sidStr];  // number | undefined
-    if (et != null) return fmt.time(et);
-    // end_time is null — still open. Only show "Active" if Ableton is running.
-    if (abletonIsRunning) return '<span class="active-tag"><span class="dot"></span>Active</span>';
-    // Stale session: show last_seen_time as effective end
-    if (lst) return fmt.time(lst);
-    return '—';
-  }
 
   function endTimePlain(sidStr) {
     const et = endTimes[sidStr];
@@ -5622,141 +5995,32 @@ function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, end
     return { dateStr, range, duration };
   }
 
-  if (sessionIds.length === 1) {
-    const sidStr = String(sessionIds[0]);
-    const summary = sessionSummary(sidStr);
-    const durationHtml = summary.duration
-      ? ` <span class="notes-session-duration">${escapeHtml(summary.duration)}</span>`
-      : '';
-    subtitle.innerHTML = `${escapeHtml(summary.dateStr)} from <span class="notes-session-range">${escapeHtml(summary.range)}</span>${durationHtml}`;
-  } else {
-    const totalSeconds = sessionIds.reduce((sum, sid) => sum + (activeSeconds?.[String(sid)] || 0), 0);
-    subtitle.textContent = `${sessionIds.length} sessions · ${fmt.dur(totalSeconds)}`;
-  }
-
-  // Build textareas
-  let html = '';
-  sessionIds.forEach((sid, i) => {
-    const sidStr = String(sid);
-    const note = notes[sidStr] || '';
-    const sessionTodos = Array.isArray(todos?.[sidStr]) ? todos[sidStr] : [];
-    const ts = startTimes[sidStr] || 0;
-    const dateStr = fmt.date(ts);
-    const startStr = fmt.datetime(ts);
-    const timePart = `${startStr} &ndash; ${endTimeDisplay(sidStr)}`;
-    const label = sessionIds.length > 1
-      ? `<div class="notes-session-label">Session ${i + 1} &middot; ${dateStr} &middot; ${timePart}</div>`
-      : '';
-    html += `${label}<div class="notes-session" data-sid="${sidStr}">
-      <textarea class="notes-textarea" data-sid="${sidStr}" maxlength="${MAX_NOTES_LEN}" placeholder="What did you work on?">${escapeHtml(note)}</textarea>
-      <div class="notes-todo-head">
-        <div class="notes-session-label">To-dos</div>
-        <button class="btn small notes-recall" type="button" data-sid="${sidStr}">Recall last session to-dos</button>
-      </div>
-      <div class="notes-todo-list" data-sid="${sidStr}">${sessionTodos.map(todo => `<div class="notes-todo-item${todo.done ? ' done' : ''}"><label class="notes-todo-check"><input type="checkbox" ${todo.done ? 'checked' : ''}><span>${escapeHtml(todo.text || '')}</span></label><button class="notes-todo-delete" type="button" aria-label="Delete to-do">×</button></div>`).join('')}</div>
-      <input class="notes-todo-add" data-sid="${sidStr}" type="text" placeholder="Add to-do and press Enter">
-    </div>`;
-  });
-  body.innerHTML = html;
-  const markDirty = () => {
-    isDirty = true;
-    cancelBtn.textContent = 'Cancel';
-  };
-
-  // Character counter
-  const textareas = body.querySelectorAll('.notes-textarea');
-  const updateCounter = () => {
-    let total = 0;
-    textareas.forEach(ta => { total += ta.value.length; });
-    charCount.textContent = `${total} / ${MAX_NOTES_LEN}`;
-    charCount.classList.toggle('over', total > MAX_NOTES_LEN);
-  };
-  textareas.forEach(ta => {
-    ta.addEventListener('input', () => { updateCounter(); markDirty(); });
-  });
-  updateCounter();
-
-  const removeTodoItem = item => {
-    if (!item || item.classList.contains('removing')) return;
-    item.classList.add('removing');
-    markDirty();
-    setTimeout(() => item.remove(), 220);
-  };
-  const todoValuesFor = sid => Array.from(body.querySelectorAll(`.notes-todo-list[data-sid="${sid}"] .notes-todo-item:not(.removing)`)).map(item => ({
-    text: item.querySelector('span')?.textContent || '',
-    done: item.querySelector('input')?.checked === true,
-  })).filter(todo => todo.text.trim());
-  const addTodo = (sid, text, done=false) => {
-    const clean = (text || '').trim();
-    if (!clean) return;
-    const list = body.querySelector(`.notes-todo-list[data-sid="${sid}"]`);
-    if (!list) return;
-    const label = document.createElement('label');
-    label.className = `notes-todo-item${done ? ' done' : ''}`;
-    label.innerHTML = `<label class="notes-todo-check"><input type="checkbox" ${done ? 'checked' : ''}><span>${escapeHtml(clean)}</span></label><button class="notes-todo-delete" type="button" aria-label="Delete to-do">×</button>`;
-    label.querySelector('input').addEventListener('change', e => {
-      label.classList.toggle('done', e.target.checked);
-      markDirty();
-    });
-    label.querySelector('.notes-todo-delete').addEventListener('click', () => {
-      removeTodoItem(label);
-    });
-    list.appendChild(label);
-    markDirty();
-  };
-  body.querySelectorAll('.notes-todo-item input').forEach(input => {
-    input.addEventListener('change', e => {
-      e.currentTarget.closest('.notes-todo-item')?.classList.toggle('done', e.currentTarget.checked);
-      markDirty();
-    });
-  });
-  body.querySelectorAll('.notes-todo-delete').forEach(button => {
-    button.addEventListener('click', () => {
-      removeTodoItem(button.closest('.notes-todo-item'));
-    });
-  });
-  body.querySelectorAll('.notes-todo-add').forEach(input => {
-    input.addEventListener('keydown', e => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      addTodo(input.dataset.sid, input.value);
-      input.value = '';
-    });
-  });
-  body.querySelectorAll('.notes-recall').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      try {
-        const data = await getJson(`/api/last-session-todos?project=${encodeURIComponent(currentProjectName || '')}`);
-        const existing = new Set(todoValuesFor(btn.dataset.sid).map(todo => todo.text));
-        (data.todos || []).filter(todo => !todo.done && !existing.has(todo.text)).forEach(todo => addTodo(btn.dataset.sid, todo.text, false));
-      } catch(e) {
-        toast('Failed to recall to-dos');
-      }
-    });
-  });
-
-  const updateNavButtons = () => {
+  function updateNavButtons() {
     prevBtn.disabled = !previousSessionId;
     nextBtn.disabled = !nextSessionId;
-  };
-  updateNavButtons();
+  }
 
-  const loadNavState = async () => {
-    if (sessionIds.length !== 1) return;
+  async function loadNavState() {
+    if (sessionIds.length !== 1) {
+      hasSessionNav = false;
+      updateNavButtons();
+      return;
+    }
     try {
       const data = await getJson(`/api/session-notes-entry?session_id=${encodeURIComponent(sessionIds[0])}&project=${encodeURIComponent(currentProjectName || '')}`);
       previousSessionId = data.previous_session_id || null;
       nextSessionId = data.next_session_id || null;
+      hasSessionNav = !!(previousSessionId || nextSessionId);
       updateNavButtons();
     } catch(e) {
+      hasSessionNav = false;
       updateNavButtons();
     }
-  };
-  loadNavState();
+  }
 
   const openEntry = async sessionId => {
     if (!sessionId) return;
-    if (isDirty && !window.confirm('Discard unsaved notes and switch sessions?')) return;
+    if (isDirty && !window.confirm('Discard unsaved changes and switch sessions?')) return;
     prevBtn.disabled = true;
     nextBtn.disabled = true;
     try {
@@ -5767,11 +6031,12 @@ function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, end
         sessionIds: [entry.id],
         projectName: entry.project_name || currentProjectName,
         notes: { [String(entry.id)]: entry.notes || '' },
-        todos: { [String(entry.id)]: Array.isArray(entry.todos) ? entry.todos : [] },
         startTimes: { [String(entry.id)]: entry.start_time || 0 },
         endTimes: { [String(entry.id)]: entry.end_time ?? null },
         lastSeenTimes: { [String(entry.id)]: entry.last_seen_time || 0 },
         activeSeconds: { [String(entry.id)]: entry.active_seconds || 0 },
+        projectNote: currentProjectNote,
+        initialMode: 'session',
       });
     } catch(e) {
       toast('Failed to load session notes');
@@ -5779,20 +6044,180 @@ function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, end
     }
   };
 
+  const markDirty = () => {
+    isDirty = true;
+    cancelBtn.textContent = 'Cancel';
+  };
+
+  function setModeButtons() {
+    if (currentMode === 'global') {
+      globalBtn.style.background = 'var(--surface)';
+      globalBtn.style.color = 'var(--ink)';
+      sessionBtn.style.background = 'transparent';
+      sessionBtn.style.color = 'var(--ink-3)';
+    } else {
+      sessionBtn.style.background = 'var(--surface)';
+      sessionBtn.style.color = 'var(--ink)';
+      globalBtn.style.background = 'transparent';
+      globalBtn.style.color = 'var(--ink-3)';
+    }
+  }
+
+  function updateTextarea(mode) {
+    const textarea = body.querySelector('#notesTextarea');
+    if (!textarea) return;
+
+    // Flush current text to the right in-memory slot
+    const val = textarea.value;
+    if (currentMode === 'global') {
+      currentProjectNote = val;
+    } else if (currentMode === 'session' && editingSessionId) {
+      notes[String(editingSessionId)] = val;
+      currentSessionNote = val;
+    }
+
+    if (mode === 'global') {
+      textarea.value = currentProjectNote;
+      textarea.placeholder = '';
+      textarea.maxLength = MAX_PROJECT_NOTE_LEN;
+      navEl.hidden = true;
+      if (dateTimeEl) dateTimeEl.style.display = 'none';
+      subtitle.textContent = 'Project-wide — guidance, vibe, big picture';
+      charCount.textContent = `${currentProjectNote.length} / ${MAX_PROJECT_NOTE_LEN}`;
+    } else {
+      textarea.value = currentSessionNote;
+      textarea.placeholder = '';
+      textarea.maxLength = MAX_NOTES_LEN;
+
+      if (editingSessionId && sessionIds.length === 1) {
+        const sidStr = String(editingSessionId);
+        const summary = sessionSummary(sidStr);
+        subtitle.innerHTML = `${escapeHtml(summary.dateStr)} from ${escapeHtml(summary.range)}`;
+        navEl.hidden = !hasSessionNav;
+        if (dateTimeEl) {
+          dateTimeEl.style.display = 'block';
+          dateTimeEl.textContent = `${summary.dateStr} · ${summary.range}`;
+        }
+      } else {
+        navEl.hidden = true;
+        if (dateTimeEl) dateTimeEl.style.display = 'none';
+        const totalSeconds = currentSessionIds.reduce((sum, sid) => sum + (activeSeconds?.[String(sid)] || 0), 0);
+        subtitle.textContent = `${currentSessionIds.length} sessions · ${fmt.dur(totalSeconds)}`;
+      }
+
+      charCount.textContent = `${currentSessionNote.length} / ${MAX_NOTES_LEN}`;
+    }
+    charCount.classList.toggle('over', false);
+    textarea.focus();
+  }
+
+  const switchMode = (mode) => {
+    if (currentMode === mode) return;
+    updateTextarea(mode);
+    currentMode = mode;
+    setModeButtons();
+  };
+
+  // Build the single persistent textarea
+  const initialValue = currentMode === 'global' ? currentProjectNote : currentSessionNote;
+  const initialMax = currentMode === 'global' ? MAX_PROJECT_NOTE_LEN : MAX_NOTES_LEN;
+  const initialPlaceholder = currentMode === 'global'
+    ? ''
+    : '';
+
+  body.innerHTML = `<textarea class="notes-textarea" id="notesTextarea" maxlength="${initialMax}" placeholder="${initialPlaceholder}">${escapeHtml(initialValue)}</textarea>`;
+
+  const textarea = body.querySelector('#notesTextarea');
+  if (textarea) {
+    textarea.addEventListener('input', () => {
+      const val = textarea.value;
+      if (currentMode === 'global') {
+        currentProjectNote = val;
+        charCount.textContent = `${val.length} / ${MAX_PROJECT_NOTE_LEN}`;
+        charCount.classList.toggle('over', val.length > MAX_PROJECT_NOTE_LEN);
+      } else {
+        if (editingSessionId) notes[String(editingSessionId)] = val;
+        currentSessionNote = val;
+        charCount.textContent = `${val.length} / ${MAX_NOTES_LEN}`;
+        charCount.classList.toggle('over', val.length > MAX_NOTES_LEN);
+      }
+      markDirty();
+    });
+  }
+
+  // Initialize mode UI
+  if (currentMode === 'global') {
+    navEl.hidden = true;
+    if (dateTimeEl) dateTimeEl.style.display = 'none';
+    subtitle.textContent = 'Project-wide — guidance, vibe, big picture';
+    charCount.textContent = `${initialValue.length} / ${MAX_PROJECT_NOTE_LEN}`;
+  } else {
+    if (sessionIds.length === 1 && editingSessionId) {
+      const sidStr = String(editingSessionId);
+      const summary = sessionSummary(sidStr);
+      subtitle.innerHTML = `${escapeHtml(summary.dateStr)} from ${escapeHtml(summary.range)}`;
+    } else if (sessionIds.length > 1) {
+      const totalSeconds = sessionIds.reduce((sum, sid) => sum + (activeSeconds?.[String(sid)] || 0), 0);
+      subtitle.textContent = `${sessionIds.length} sessions · ${fmt.dur(totalSeconds)}`;
+    }
+    if (dateTimeEl && editingSessionId && sessionIds.length === 1) {
+      dateTimeEl.style.display = 'block';
+      const summary = sessionSummary(String(editingSessionId));
+      dateTimeEl.textContent = `${summary.dateStr} · ${summary.range}`;
+    }
+    charCount.textContent = `${initialValue.length} / ${MAX_NOTES_LEN}`;
+  }
+
+  const onGlobalMode = () => switchMode('global');
+  const onSessionMode = () => switchMode('session');
+
+  globalBtn.addEventListener('click', onGlobalMode);
+  sessionBtn.addEventListener('click', onSessionMode);
+
+  loadNavState().then(() => {
+    setModeButtons();
+    // Apply current mode UI state (arrows, date/time)
+    if (currentMode === 'session') {
+      if (editingSessionId && sessionIds.length === 1) {
+        navEl.hidden = !hasSessionNav;
+        if (dateTimeEl && hasSessionNav) dateTimeEl.style.display = 'block';
+        if (!hasSessionNav && dateTimeEl) dateTimeEl.style.display = 'none';
+      }
+    }
+    updateNavButtons();
+  });
+
   // Handlers
   const onSave = async () => {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';
     try {
-      for (const ta of textareas) {
-        const sid = parseInt(ta.dataset.sid, 10);
-        const notesVal = ta.value.trim();
-        await postJson('/api/session-notes', { session_id: sid, notes: notesVal, todos: todoValuesFor(String(sid)) });
+      const ta = body.querySelector('#notesTextarea');
+      const val = ta ? ta.value.trim() : '';
+
+      if (currentMode === 'global') {
+        currentProjectNote = val;
+        const project = findProjectByName(currentProjectName) || { project_name: currentProjectName };
+        await postJson('/api/project-metadata', {
+          project_name: currentProjectName,
+          status: project.status || '',
+          type: project.type || '',
+          priority: project.priority || '',
+          due_date: project.due_date || '',
+          pinned: !!project.pinned,
+          project_note: val,
+        });
+      } else {
+        if (editingSessionId) notes[String(editingSessionId)] = val;
+        currentSessionNote = val;
+        await postJson('/api/session-notes', { session_id: editingSessionId, notes: val });
       }
       toast('Notes saved');
       isDirty = false;
       cancelBtn.textContent = 'Exit';
-      load();
+      await load();
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
     } catch(e) {
       toast('Failed to save notes');
       saveBtn.disabled = false;
@@ -5824,21 +6249,22 @@ function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, end
   document.addEventListener('keydown', onKey);
 
   modal.classList.add('show');
-  if (textareas.length > 0) textareas[0].focus();
+  if (textarea) textarea.focus();
 
-  // Store cleanup refs
-  notesModalState = { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal };
+  notesModalState = { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn };
 }
 
 function closeNotesModal(){
   if (!notesModalState) return;
-  const { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal } = notesModalState;
+  const { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn } = notesModalState;
   modal.classList.remove('show');
   saveBtn.removeEventListener('click', onSave);
   cancelBtn.removeEventListener('click', onCancel);
   closeBtn.removeEventListener('click', onCancel);
   prevBtn.removeEventListener('click', onPrev);
   nextBtn.removeEventListener('click', onNext);
+  if (globalBtn) globalBtn.removeEventListener('click', onGlobalMode);
+  if (sessionBtn) sessionBtn.removeEventListener('click', onSessionMode);
   modal.removeEventListener('click', onBackdrop);
   document.removeEventListener('keydown', onKey);
   notesModalState = null;
@@ -5862,24 +6288,34 @@ async function clearPhantoms(){
 
 let lastETag = '';
 let lastFetchedMonth = '';
+let dashboardRefreshTimer = null;
+
+async function fetchDashboardData({ recentBefore = null } = {}) {
+  const monthKey = currentMonthStateKey();
+  const headers = {};
+  if (!recentBefore && lastETag && lastFetchedMonth === monthKey) {
+    headers['If-None-Match'] = lastETag;
+  }
+  const params = new URLSearchParams({ month: monthKey });
+  if (recentBefore) params.set('recent_before', String(recentBefore));
+  const res = await fetch(`/api/data?${params.toString()}`, { headers });
+  if (res.status === 304) {
+    return null;
+  }
+  const newETag = res.headers.get('ETag');
+  if (!recentBefore && newETag) {
+    lastETag = newETag;
+    lastFetchedMonth = monthKey;
+  }
+  const data = await res.json();
+  return { data, monthKey };
+}
 
 async function load() {
   try {
-    const monthKey = currentMonthStateKey();
-    const headers = {};
-    if (lastETag && lastFetchedMonth === monthKey) {
-      headers['If-None-Match'] = lastETag;
-    }
-    const res  = await fetch(`/api/data?month=${encodeURIComponent(monthKey)}`, { headers });
-    if (res.status === 304) {
-      return;
-    }
-    const newETag = res.headers.get('ETag');
-    if (newETag) {
-      lastETag = newETag;
-      lastFetchedMonth = monthKey;
-    }
-    const data = await res.json();
+    const result = await fetchDashboardData();
+    if (!result) return;
+    const { data } = result;
     if (data?.summary?.selected_month) {
       dashboardMonthState.selectedMonth = data.summary.selected_month;
     }
@@ -5887,6 +6323,30 @@ async function load() {
     render(data);
   } catch(e) {
     console.error(e);
+  }
+}
+
+async function loadOlderRecent() {
+  if (!latestDashboardData?.recent_has_more || !latestDashboardData?.recent_oldest_start_time) return;
+  const button = document.getElementById('btnLoadOlderRecent');
+  if (button) button.disabled = true;
+  try {
+    const result = await fetchDashboardData({ recentBefore: latestDashboardData.recent_oldest_start_time });
+    if (!result?.data) return;
+    latestDashboardData = {
+      ...latestDashboardData,
+      recent: [
+        ...(latestDashboardData.recent || []),
+        ...(result.data.recent || []),
+      ],
+      recent_has_more: result.data.recent_has_more,
+      recent_oldest_start_time: result.data.recent_oldest_start_time,
+    };
+    render(latestDashboardData);
+  } catch (error) {
+    toast(error.message || 'Failed to load older entries');
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -6946,7 +7406,8 @@ function render(data) {
                 </tr>`;
               }).join('')}
             </tbody>
-          </table></div>`}
+          </table></div>
+          ${data.recent_has_more ? '<div class="table-more"><button class="btn small" id="btnLoadOlderRecent" type="button">Load older entries</button></div>' : ''}`}
     </div>
 
     <div class="table-card">
@@ -6998,6 +7459,7 @@ function render(data) {
                         data-session-last-seen-times="${encodeURIComponent(lastSeenData)}"
                         data-session-active-seconds="${encodeURIComponent(activeSecondsData)}"
                         data-project-name="${encodeURIComponent(s.project_name || '')}"
+                        data-project-note="${encodeURIComponent(s.project_note || '')}"
                         title="${hasNotes ? 'Edit notes' : 'Add notes'}">✎</button>`;
                     })()}
                     <button class="row-del" type="button"
@@ -7035,9 +7497,11 @@ function render(data) {
   const br = document.getElementById('btnClearRecent');
   const bp = document.getElementById('btnClearPhantoms');
   const bu = document.getElementById('btnClearUnsaved');
+  const bo = document.getElementById('btnLoadOlderRecent');
   if (br) br.addEventListener('click', clearRecent);
   if (bp) bp.addEventListener('click', clearPhantoms);
   if (bu) bu.addEventListener('click', clearUnsaved);
+  if (bo) bo.addEventListener('click', loadOlderRecent);
   bindCategoryTriggers();
   bindProjectMetaControls();
   bindProjectTaskTriggers();
@@ -7262,9 +7726,10 @@ function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null) {
     const canvas = stageEl.querySelector('.heatmap-canvas');
     const gridRows = stageEl.querySelector('.heatmap-grid-rows');
     const paint = () => paintHeatmapCanvas(canvas, gridRows, week.days, activityByDayHour);
+    const schedulePaint = debounce(() => requestAnimationFrame(paint), 120);
     requestAnimationFrame(paint);
     if (heatmapResizeObserver) heatmapResizeObserver.disconnect();
-    heatmapResizeObserver = new ResizeObserver(paint);
+    heatmapResizeObserver = new ResizeObserver(schedulePaint);
     heatmapResizeObserver.observe(gridRows);
 
     let footHTML = '';
@@ -7980,7 +8445,10 @@ function renderCategoryChart(projects, summary = {}) {
 }
 
 load();
-setInterval(load, 60_000);
+if (dashboardRefreshTimer) {
+  clearInterval(dashboardRefreshTimer);
+}
+dashboardRefreshTimer = setInterval(load, 60_000);
 </script>
 <script src="/static/js/settings.js"></script>
 </body>

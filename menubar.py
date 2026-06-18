@@ -6,6 +6,7 @@ import time
 import signal
 import threading
 import subprocess
+import os
 from datetime import date
 from pathlib import Path
 
@@ -145,10 +146,31 @@ class TrackerThread(threading.Thread):
 
 
 class DashboardProcess:
-    """Lazily spawns the embedded dashboard window as a subprocess."""
+    """Keeps the dashboard server warm and opens the embedded window on demand."""
 
     def __init__(self):
         self.proc: subprocess.Popen | None = None
+        self.server_proc: subprocess.Popen | None = None
+        self._lock = threading.Lock()
+
+    def prewarm(self):
+        if "unittest" in sys.modules:
+            return
+        threading.Thread(target=self.start_server, daemon=True).start()
+
+    def start_server(self):
+        with self._lock:
+            if self.server_proc is not None and self.server_proc.poll() is None:
+                return
+            env = os.environ.copy()
+            env["ABLETON_TRACKER_NO_BROWSER"] = "1"
+            self.server_proc = subprocess.Popen(
+                [sys.executable, str(APP_DIR / "dashboard.py")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=APP_DIR,
+                env=env,
+            )
 
     def open(self):
         if self.proc is None or self.proc.poll() is not None:
@@ -162,6 +184,8 @@ class DashboardProcess:
     def stop(self):
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
+        if self.server_proc and self.server_proc.poll() is None:
+            self.server_proc.terminate()
 
 
 class AbletonTrackerApp(rumps.App):
@@ -206,6 +230,7 @@ class AbletonTrackerApp(rumps.App):
         ]
 
         self.tracker_thread.start()
+        self.dashboard.prewarm()
         self.refresh_timer = rumps.Timer(self._refresh, REFRESH_INTERVAL)
         self.refresh_timer.start()
         self._refresh(None)

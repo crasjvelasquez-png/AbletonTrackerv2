@@ -470,6 +470,32 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertNotEqual(before, after_pin_note)
         self.assertNotEqual(after_pin_note, after_note_change)
 
+    def test_session_notes_changes_invalidate_data_etag(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Planner Song", 100.0, 200.0, 200.0, 100.0),
+            )
+            session_id = cur.lastrowid
+            conn.commit()
+        before = dashboard._compute_data_etag()
+
+        dashboard.set_session_notes(session_id, "Started a second section")
+        after_note = dashboard._compute_data_etag()
+        dashboard.set_session_notes(
+            session_id,
+            "Started a second section",
+            "",
+            [{"text": "Bounce stems", "done": False}],
+        )
+        after_todos = dashboard._compute_data_etag()
+
+        self.assertNotEqual(before, after_note)
+        self.assertNotEqual(after_note, after_todos)
+
     def test_project_metadata_omitted_fields_preserve_existing_deadlines(self):
         self._insert_session("Planner Song")
         dashboard.set_project_metadata(
