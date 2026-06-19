@@ -62,6 +62,13 @@ _PAREN_RE = re.compile(r"\s*\([^)]*\)")
 _ALS_SUFFIX_RE = re.compile(r"\.als\s*$", re.IGNORECASE)
 
 
+def is_untitled_project_name(name: str | None) -> bool:
+    raw = (name or "").strip()
+    if not raw:
+        return False
+    return _WHITESPACE_RE.sub(" ", raw).strip().lower() in UNTITLED_NAMES
+
+
 def setup_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
@@ -163,6 +170,25 @@ def cleanup_phantom_sessions() -> dict:
         conn.execute(f"DELETE FROM sessions WHERE id IN ({placeholders})", ids)
         conn.commit()
         return {"ok": True, "deleted": len(ids)}
+
+
+def cleanup_untitled_sessions() -> dict:
+    """Delete closed sessions whose project name is Untitled / Untitled Project."""
+    if not DB_PATH.exists():
+        return {"ok": True, "deleted": 0}
+
+    placeholders = ",".join("?" * len(UNTITLED_NAMES))
+    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+        cur = conn.execute(
+            f"""
+            DELETE FROM sessions
+            WHERE end_time IS NOT NULL
+              AND LOWER(TRIM(project_name)) IN ({placeholders})
+            """,
+            tuple(UNTITLED_NAMES),
+        )
+        conn.commit()
+        return {"ok": True, "deleted": cur.rowcount}
 
 
 def close_stale_open_sessions() -> int:
@@ -872,6 +898,27 @@ def get_project_name(current_project: str | None = None) -> str | None:
         return None
 
     if current_project:
+        # Draft-to-saved conversion: when tracking an Untitled session,
+        # prefer a single non-Untitled candidate as a reliable rename
+        # (the user saved the draft with a real name). Check this
+        # before the "still visible" branch because both titles may
+        # appear briefly while Live is switching window titles.
+        if is_untitled_project_name(current_project):
+            non_untitled_live = {
+                k: v for k, v in distinct_live.items()
+                if not is_untitled_project_name(v)
+            }
+            if len(non_untitled_live) == 1:
+                return next(iter(non_untitled_live.values()))
+            non_untitled_distinct = {
+                k: v for k, v in distinct.items()
+                if not is_untitled_project_name(v)
+            }
+            if len(non_untitled_distinct) == 1:
+                return next(iter(non_untitled_distinct.values()))
+            if non_untitled_distinct or non_untitled_live:
+                return None
+
         if current_project in candidates:
             return current_project
 
@@ -929,6 +976,20 @@ class Tracker:
         # Pay swiftc compile cost up front so the first audio probe doesn't stall a poll.
         if _ensure_audio_probe_binary() is None:
             print(f"[{_ts()}] audio probe unavailable at startup — will retry on first use")
+
+    def _rename(self, new_project: str):
+        if self.session_id is None:
+            self.project_name = new_project
+            return
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+            conn.execute(
+                "UPDATE sessions SET project_name=? WHERE id=? AND end_time IS NULL",
+                (new_project, self.session_id),
+            )
+            conn.commit()
+        old = self.project_name
+        self.project_name = new_project
+        print(f"[{_ts()}] ↻  {old} → {new_project}")
 
     def _start(self, project: str):
         now = time.time()
@@ -1030,9 +1091,13 @@ class Tracker:
                     "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
                 ).fetchone()
                 active = row[0] if row else 0
-                if active < 5:
+                delete = active < 5
+                if not delete and not preserve_resume_hint and is_untitled_project_name(project_name):
+                    delete = True
+                if delete:
                     conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
-                    print(f"[{_ts()}] ✗  {project_name} (too short — discarded)")
+                    reason = "too short — discarded" if active < 5 else "unsaved — discarded"
+                    print(f"[{_ts()}] ✗  {project_name} ({reason})")
                 else:
                     print(f"[{_ts()}] ■  {project_name}")
                 conn.commit()
@@ -1170,8 +1235,14 @@ class Tracker:
             return
 
         if project != self.project_name:
-            self._close()
-            self._start(project)
+            if (
+                is_untitled_project_name(self.project_name)
+                and not is_untitled_project_name(project)
+            ):
+                self._rename(project)
+            else:
+                self._close()
+                self._start(project)
         self._tick()
         self.last_state = STATE_TRACKING
 
@@ -1184,6 +1255,12 @@ class Tracker:
         deleted = result.get("deleted", 0)
         if deleted:
             print(f"[{_ts()}] cleaned {deleted} phantom session{'s' if deleted != 1 else ''}")
+
+        result = cleanup_untitled_sessions()
+        deleted = result.get("deleted", 0)
+        if deleted:
+            print(f"[{_ts()}] cleaned {deleted} unsaved session{'s' if deleted != 1 else ''}")
+
         self.next_cleanup_at = now + CLEANUP_INTERVAL
 
 

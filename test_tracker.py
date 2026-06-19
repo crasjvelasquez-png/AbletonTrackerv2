@@ -718,5 +718,267 @@ class StartResumeTests(unittest.TestCase):
         self.assertEqual(rows[1], ("Real Song", 400.0, 400.0, None, 0.0))
 
 
+class UntitledSessionTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        tracker.setup_db()
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_is_untitled_project_name(self):
+        self.assertTrue(tracker.is_untitled_project_name("Untitled"))
+        self.assertTrue(tracker.is_untitled_project_name("untitled"))
+        self.assertTrue(tracker.is_untitled_project_name("  Untitled  "))
+        self.assertTrue(tracker.is_untitled_project_name("Untitled Project"))
+        self.assertFalse(tracker.is_untitled_project_name("Real Song"))
+        self.assertFalse(tracker.is_untitled_project_name(""))
+        self.assertFalse(tracker.is_untitled_project_name(None))
+
+    def test_cleanup_removes_closed_untitled_sessions(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, 1, 1, ?, ?)
+                """,
+                [
+                    ("Untitled", 2, 61),
+                    ("Untitled Project", 2, 30),
+                    ("Real Song", 2, 120),
+                    ("Another Untitled", 2, 30),
+                ],
+            )
+            conn.commit()
+
+        result = tracker.cleanup_untitled_sessions()
+        self.assertEqual(result["deleted"], 2)
+        self.assertEqual(result["ok"], True)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            names = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT project_name FROM sessions ORDER BY id"
+                ).fetchall()
+            ]
+        self.assertEqual(names, ["Real Song", "Another Untitled"])
+
+    def test_cleanup_preserves_open_untitled_sessions(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, 1, 1, ?, ?)
+                """,
+                [
+                    ("Untitled", None, 0),
+                    ("Untitled Project", None, 0),
+                    ("Untitled", 2, 61),
+                ],
+            )
+            conn.commit()
+
+        result = tracker.cleanup_untitled_sessions()
+        self.assertEqual(result["deleted"], 1)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            names = [
+                row[0]
+                for row in conn.execute(
+                    "SELECT project_name FROM sessions ORDER BY id"
+                ).fetchall()
+            ]
+        self.assertEqual(names, ["Untitled", "Untitled Project"])
+
+    def test_untitled_to_saved_renames_session(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Untitled")
+        untitled_id = t.session_id
+        self.assertEqual(t.project_name, "Untitled")
+
+        with patch.object(tracker.time, "time", return_value=1010.0), \
+             patch.object(tracker.time, "monotonic", return_value=20.0):
+            t._rename("Real Song")
+
+        self.assertEqual(t.session_id, untitled_id)
+        self.assertEqual(t.project_name, "Real Song")
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT project_name, active_seconds FROM sessions WHERE id=?",
+                (untitled_id,),
+            ).fetchone()
+        self.assertEqual(row[0], "Real Song")
+
+    def test_poll_once_renames_when_untitled_becomes_saved(self):
+        project_state = {"name": "Untitled"}
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
+             patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t = tracker.Tracker()
+            t.poll_once(paused=False)
+        untitled_id = t.session_id
+        self.assertEqual(t.project_name, "Untitled")
+
+        project_state["name"] = "Real Song"
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
+             patch.object(tracker.time, "time", return_value=1010.0), \
+             patch.object(tracker.time, "monotonic", return_value=20.0):
+            t.poll_once(paused=False)
+
+        self.assertEqual(t.session_id, untitled_id)
+        self.assertEqual(t.project_name, "Real Song")
+        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT project_name FROM sessions WHERE id=?",
+                (untitled_id,),
+            ).fetchone()
+        self.assertEqual(row[0], "Real Song")
+
+    def test_close_deletes_untitled_when_not_preserving_hint(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Untitled")
+        with patch.object(tracker.time, "time", return_value=1100.0), \
+             patch.object(tracker.time, "monotonic", return_value=110.0):
+            t._tick()
+        sid = t.session_id
+
+        with patch.object(tracker.time, "time", return_value=1120.0), \
+             patch.object(tracker.time, "monotonic", return_value=130.0):
+            t._close(preserve_resume_hint=False)
+
+        self.assertIsNone(t.session_id)
+        self.assertIsNone(t.resume_hint_project)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id=?", (sid,)
+            ).fetchone()
+        self.assertIsNone(row)
+
+    def test_close_preserves_untitled_with_resume_hint(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Untitled")
+        with patch.object(tracker.time, "time", return_value=1100.0), \
+             patch.object(tracker.time, "monotonic", return_value=110.0):
+            t._tick()
+        sid = t.session_id
+
+        with patch.object(tracker.time, "time", return_value=1120.0), \
+             patch.object(tracker.time, "monotonic", return_value=130.0):
+            t._close(preserve_resume_hint=True)
+
+        self.assertIsNone(t.session_id)
+        self.assertEqual(t.resume_hint_project, "Untitled")
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT id, end_time FROM sessions WHERE id=?", (sid,)
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNotNone(row[1])
+
+    def test_get_project_name_prefers_non_untitled_when_current_is_untitled(self):
+        with patch.object(
+            tracker,
+            "get_live_window_titles",
+            return_value=["Untitled", "Real Song - Ableton Live 12 Suite"],
+        ):
+            result = tracker.get_project_name("Untitled")
+        self.assertEqual(result, "Real Song")
+
+    def test_get_project_name_returns_none_when_multiple_saved_titles(self):
+        with patch.object(
+            tracker,
+            "get_live_window_titles",
+            return_value=["Untitled", "Real Song - Ableton Live 12 Suite", "Other Song - Ableton Live 12 Suite"],
+        ):
+            result = tracker.get_project_name("Untitled")
+        self.assertIsNone(result)
+
+    def test_get_project_name_keeps_untitled_if_no_saved_candidates(self):
+        with patch.object(
+            tracker,
+            "get_live_window_titles",
+            return_value=["Untitled"],
+        ):
+            result = tracker.get_project_name("Untitled")
+        self.assertEqual(result, "Untitled")
+
+    def test_poll_once_does_not_rename_when_multiple_saved_titles_visible(self):
+        project_state = {"name": "Untitled"}
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
+             patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t = tracker.Tracker()
+            t.poll_once(paused=False)
+        untitled_id = t.session_id
+
+        project_state["name"] = None
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
+             patch.object(tracker.time, "time", return_value=1010.0), \
+             patch.object(tracker.time, "monotonic", return_value=20.0):
+            t.poll_once(paused=False)
+
+        self.assertEqual(t.session_id, untitled_id)
+        self.assertEqual(t.project_name, "Untitled")
+
+    def test_ableton_closed_deletes_untitled_through_poll(self):
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "get_idle_seconds", return_value=0), \
+             patch.object(tracker, "get_project_name", return_value="Untitled"), \
+             patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t = tracker.Tracker()
+            t.poll_once(paused=False)
+        sid = t.session_id
+
+        self.assertEqual(t.project_name, "Untitled")
+
+        with patch.object(tracker, "is_ableton_running", return_value=False), \
+             patch.object(tracker.time, "time", return_value=1100.0), \
+             patch.object(tracker.time, "monotonic", return_value=110.0):
+            t.poll_once(paused=False)
+
+        self.assertIsNone(t.session_id)
+        self.assertEqual(t.status().state, tracker.STATE_ABLETON_CLOSED)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id=?", (sid,)
+            ).fetchone()
+        self.assertIsNone(row)
+
+
 if __name__ == "__main__":
     unittest.main()

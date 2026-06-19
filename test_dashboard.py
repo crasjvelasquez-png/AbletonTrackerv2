@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -1589,6 +1590,253 @@ class DashboardRolloverTests(unittest.TestCase):
         self.assertEqual(may_stats["summary"]["month_seconds"], 5400.0)
         self.assertEqual(may_projects["Boundary Song"], 1800.0)
         self.assertEqual(may_projects["May Song"], 3600.0)
+
+
+class ConsolidateSessionsTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert(self, project, start_ts, end_ts, active, notes="", todos_json="[]"):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (project, start_ts, end_ts, end_ts, active, notes, todos_json),
+            )
+            conn.commit()
+            return cur.lastrowid
+
+    def _row_count(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            return conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+
+    def _all_rows(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.row_factory = tracker.sqlite3.Row
+            return conn.execute(
+                "SELECT * FROM sessions ORDER BY start_time ASC"
+            ).fetchall()
+
+    def test_merges_short_interruption(self):
+        """A(X) → short B(Y) → A(X): merge X fragments."""
+        x1_end = 100.0 + 900.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0
+        x2_start = y1_end
+        x2_end = x2_start + 1500.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("Y", y1_start, y1_end, 300.0)
+        self._insert("X", x2_start, x2_end, 1500.0)
+
+        self.assertEqual(self._row_count(), 3)
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 1)
+        self.assertEqual(result["deleted"], 1)
+        self.assertEqual(self._row_count(), 2)
+
+        rows = self._all_rows()
+        projects = [r["project_name"] for r in rows]
+        self.assertIn("X", projects)
+        self.assertIn("Y", projects)
+
+        x_row = next(r for r in rows if r["project_name"] == "X")
+        self.assertAlmostEqual(x_row["active_seconds"], 2400.0)
+        self.assertAlmostEqual(x_row["start_time"], 100.0)
+        self.assertAlmostEqual(x_row["end_time"], x2_end)
+
+    def test_does_not_merge_long_single_interruption(self):
+        """A(X) → long B(Y) > 15 min → A(X): don't merge."""
+        x1_end = 100.0 + 900.0
+        y1_start = x1_end
+        y1_end = y1_start + 1200.0  # 20 min > 15 min
+        x2_start = y1_end
+        x2_end = x2_start + 1500.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("Y", y1_start, y1_end, 1200.0)
+        self._insert("X", x2_start, x2_end, 1500.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(self._row_count(), 3)
+
+    def test_does_not_merge_across_midnight(self):
+        """Day 1 X → day 2 X: don't merge."""
+        ts1 = datetime(2026, 6, 15, 23, 50).timestamp()
+        ts2 = datetime(2026, 6, 15, 23, 55).timestamp()
+        ts3 = datetime(2026, 6, 16, 0, 0).timestamp()
+        ts4 = datetime(2026, 6, 16, 0, 5).timestamp()
+        ts5 = datetime(2026, 6, 16, 0, 10).timestamp()
+
+        self._insert("X", ts1, ts2, 300.0)
+        self._insert("Y", ts3, ts4, 300.0)
+        self._insert("X", ts4, ts5, 300.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(self._row_count(), 3)
+
+    def test_skips_active_sessions(self):
+        """Active sessions are never merged or deleted."""
+        x1_end = 100.0 + 900.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("Y", y1_start, y1_end, 300.0)
+        # Insert an active session (end_time IS NULL)
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, active_seconds)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("X", y1_end, y1_end, 0.0),
+            )
+            conn.commit()
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        # X1 is closed, Y is closed, X2 is active — no merges
+        rows = self._all_rows()
+        self.assertEqual(len(rows), 3)
+
+    def test_does_not_merge_return_window_exceeded(self):
+        """Gap > 30 min: don't merge."""
+        x1_end = 100.0 + 600.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0
+        x2_start = y1_end + (31 * 60)  # 31 min later
+
+        self._insert("X", 100.0, x1_end, 600.0)
+        self._insert("Y", y1_start, y1_end, 300.0)
+        # Need another X to check — but gap > 30 min, so won't merge
+        self._insert("X", x2_start, x2_start + 600.0, 600.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(self._row_count(), 3)
+
+    def test_does_not_merge_total_intervening_exceeded(self):
+        """Two intervening projects totaling > 20 min: don't merge."""
+        x1_end = 100.0 + 300.0
+        y1_start = x1_end
+        y1_end = y1_start + 660.0  # 11 min each
+        z1_start = y1_end
+        z1_end = z1_start + 660.0  # 11 min each, total 22 min > 20 min
+        x2_start = z1_end
+        x2_end = x2_start + 600.0
+
+        self._insert("X", 100.0, x1_end, 300.0)
+        self._insert("Y", y1_start, y1_end, 660.0)
+        self._insert("Z", z1_start, z1_end, 660.0)
+        self._insert("X", x2_start, x2_end, 600.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(self._row_count(), 4)
+
+    def test_preserves_notes_and_todos(self):
+        """Merged notes concatenate, todos deduplicate with latest done."""
+        x1_end = 100.0 + 900.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0
+        x2_start = y1_end
+        x2_end = x2_start + 1500.0
+
+        self._insert("X", 100.0, x1_end, 900.0,
+                     notes="Drums",
+                     todos_json='[{"text":"Kick","done":false}]')
+        self._insert("Y", y1_start, y1_end, 300.0,
+                     notes="Check ref")
+        self._insert("X", x2_start, x2_end, 1500.0,
+                     notes="Bass",
+                     todos_json='[{"text":"Kick","done":true},{"text":"Snare","done":false}]')
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 1)
+
+        rows = self._all_rows()
+        self.assertEqual(len(rows), 2)
+        x_row = next(r for r in rows if r["project_name"] == "X")
+        self.assertIn("Drums", x_row["notes"])
+        self.assertIn("Bass", x_row["notes"])
+
+        todos = json.loads(x_row["todos_json"] or "[]")
+        todos_by_text = {t["text"]: t["done"] for t in todos}
+        self.assertTrue(todos_by_text.get("Kick"))
+        self.assertFalse(todos_by_text.get("Snare"))
+
+    def test_preserves_total_active_seconds(self):
+        """Total active_seconds across all rows should be unchanged."""
+        x1_end = 100.0 + 900.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0
+        x2_start = y1_end
+        x2_end = x2_start + 1500.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("Y", y1_start, y1_end, 300.0)
+        self._insert("X", x2_start, x2_end, 1500.0)
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            before = conn.execute("SELECT COALESCE(SUM(active_seconds),0) FROM sessions").fetchone()[0]
+
+        dashboard.consolidate_sessions()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            after = conn.execute("SELECT COALESCE(SUM(active_seconds),0) FROM sessions").fetchone()[0]
+
+        self.assertAlmostEqual(before, after)
+        self.assertAlmostEqual(before, 2700.0)
+
+    def test_empty_db_returns_ok(self):
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(result["deleted"], 0)
+
+    def test_single_row_no_merge(self):
+        self._insert("X", 100.0, 200.0, 100.0)
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(result["deleted"], 0)
+
+    def test_different_projects_only_no_merge(self):
+        self._insert("X", 100.0, 200.0, 100.0)
+        self._insert("Y", 200.0, 300.0, 100.0)
+        self._insert("Z", 300.0, 400.0, 100.0)
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
 
 
 if __name__ == "__main__":

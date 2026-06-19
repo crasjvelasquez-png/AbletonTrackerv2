@@ -889,6 +889,15 @@
       empty: 'No notes or to-dos to clear',
       failure: 'Failed to clear notes',
     },
+    'consolidate-sessions': {
+      title: 'Consolidate <em>sessions?</em>',
+      body: 'Merges same-day fragments of the same project when separated only by brief visits to other projects.\n\nIntervening vibe-checks must be ≤ 15 min each (≤ 20 min total), and you must return to the project within 30 min.\n\nNotes and to-dos are preserved. Active sessions are never touched.',
+      confirmLabel: 'Consolidate',
+      endpoint: '/api/consolidate-sessions',
+      success: r => `Merged ${r.merged} fragment${r.merged === 1 ? '' : 's'} into ${r.deleted ? r.deleted : 0} row${r.deleted === 1 ? '' : 's'} removed`,
+      empty: 'No fragments to consolidate',
+      failure: 'Failed to consolidate sessions',
+    },
   };
 
   async function handleDataAction(button) {

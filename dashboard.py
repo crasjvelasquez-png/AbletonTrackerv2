@@ -20,6 +20,7 @@ from tracker import (
     allocate_session_activity,
     build_activity_rollups,
     cleanup_phantom_sessions,
+    cleanup_untitled_sessions,
     condense_recent_sessions,
     count_phantom_sessions,
     is_ableton_running,
@@ -112,24 +113,204 @@ def clear_all_sessions() -> dict:
 
 
 def clear_unsaved_projects() -> dict:
-    if not DB_PATH.exists():
-        return {"ok": True, "deleted": 0}
-    placeholders = ",".join("?" * len(UNTITLED_NAMES))
-    with db_connection() as conn:
-        cur = conn.execute(
-            f"""
-            DELETE FROM sessions
-            WHERE end_time IS NOT NULL
-              AND LOWER(TRIM(project_name)) IN ({placeholders})
-            """,
-            tuple(UNTITLED_NAMES),
-        )
-        conn.commit()
-        return {"ok": True, "deleted": cur.rowcount}
+    return cleanup_untitled_sessions()
 
 
 def clear_phantom_sessions() -> dict:
     return cleanup_phantom_sessions()
+
+
+CONSOLIDATE_RETURN_WINDOW_SECONDS = 30 * 60      # must return to same project within 30 min
+CONSOLIDATE_MAX_SINGLE_INTERVENING_SECONDS = 15 * 60  # each vibe-check project must be ≤ 15 min
+CONSOLIDATE_MAX_TOTAL_INTERVENING_SECONDS = 20 * 60   # total intervening time must be ≤ 20 min
+
+
+def consolidate_sessions() -> dict:
+    """Merge same-day same-project fragments separated by short vibe-checks.
+
+    Only closed rows are considered; active sessions are never touched.
+    Iterates chronological order, merges when:
+    - Same project, same calendar day (local time)
+    - Gap between fragments ≤ RETURN_WINDOW
+    - Every intervening other-project fragment ≤ MAX_SINGLE_INTERVENING
+    - Total intervening time ≤ MAX_TOTAL_INTERVENING
+    """
+    if not DB_PATH.exists():
+        return {"ok": True, "merged": 0, "deleted": 0}
+
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT id, project_name, start_time, last_seen_time, end_time,
+                   active_seconds, notes, todos_json
+            FROM sessions
+            WHERE end_time IS NOT NULL
+            ORDER BY start_time ASC, id ASC
+            """
+        ).fetchall()
+
+        if len(rows) < 2:
+            return {"ok": True, "merged": 0, "deleted": 0}
+
+        # last index per project (index into rows list)
+        last_idx_by_project: dict[str, int] = {}
+        absorb: dict[int, int] = {}  # absorbed_id -> survivor_id
+        survivors: dict[int, dict] = {}  # survivor_id -> accumulated row state
+        merged_count = 0
+        deleted_count = 0
+
+        for i, row in enumerate(rows):
+            pid = int(row["id"])
+            project = row["project_name"]
+            start_ts = float(row["start_time"] or 0)
+            end_ts = float(row["end_time"] or 0)
+            last_seen_ts = float(row["last_seen_time"] or 0)
+            active = float(row["active_seconds"] or 0)
+            notes = (row["notes"] or "").strip()
+            todos_raw = (row["todos_json"] or "[]")
+
+            if project not in last_idx_by_project:
+                last_idx_by_project[project] = i
+                continue
+
+            prev_idx = last_idx_by_project[project]
+            prev_row = rows[prev_idx]
+            prev_id = int(prev_row["id"])
+
+            # Resolve survivor: if prev was already absorbed, follow chain
+            while prev_id in absorb:
+                prev_id = absorb[prev_id]
+                # Find the actual row for prev_id
+                for r in rows:
+                    if int(r["id"]) == prev_id:
+                        prev_row = r
+                        break
+                prev_idx = next(j for j, r in enumerate(rows) if int(r["id"]) == prev_id)
+
+            prev_end_ts = float(prev_row["end_time"] or 0)
+
+            # Must be same calendar day (local time)
+            prev_day = datetime.fromtimestamp(float(prev_row["start_time"] or 0)).date()
+            cur_day = datetime.fromtimestamp(start_ts).date()
+            if prev_day != cur_day:
+                last_idx_by_project[project] = i
+                continue
+
+            gap_seconds = start_ts - prev_end_ts
+            if gap_seconds <= 0 or gap_seconds > CONSOLIDATE_RETURN_WINDOW_SECONDS:
+                last_idx_by_project[project] = i
+                continue
+
+            # Check intervening sessions (everything between prev_idx and i)
+            total_intervening = 0.0
+            ok_to_merge = True
+            for j in range(prev_idx + 1, i):
+                intervening = rows[j]
+                if intervening["project_name"] == project:
+                    # Another same-project fragment in between — don't skip over it
+                    ok_to_merge = False
+                    break
+                int_active = float(intervening["active_seconds"] or 0)
+                if int_active > CONSOLIDATE_MAX_SINGLE_INTERVENING_SECONDS:
+                    ok_to_merge = False
+                    break
+                total_intervening += int_active
+
+            if not ok_to_merge:
+                last_idx_by_project[project] = i
+                continue
+
+            if total_intervening > CONSOLIDATE_MAX_TOTAL_INTERVENING_SECONDS:
+                last_idx_by_project[project] = i
+                continue
+
+            # Merge this row into the survivor
+            survivor_id = prev_id
+            state = survivors.get(survivor_id)
+            if state is None:
+                # Initialize survivor state from prev_row
+                state = {
+                    "start_time": float(prev_row["start_time"] or 0),
+                    "end_time": max(prev_end_ts, end_ts),
+                    "last_seen_time": max(
+                        float(prev_row["last_seen_time"] or 0),
+                        last_seen_ts,
+                    ),
+                    "active_seconds": float(prev_row["active_seconds"] or 0),
+                    "notes_list": [(prev_row["notes"] or "").strip()],
+                    "todos_map": {},
+                }
+                # Parse prev todos
+                prev_todos = _parse_todos_json(prev_row["todos_json"] or "[]")
+                for t in prev_todos:
+                    state["todos_map"][t["text"]] = t["done"]
+
+            # Accumulate from current row
+            state["end_time"] = max(state["end_time"], end_ts)
+            state["last_seen_time"] = max(state["last_seen_time"], last_seen_ts)
+            state["active_seconds"] += active
+            cur_note = notes
+            if cur_note:
+                state["notes_list"].append(cur_note)
+            cur_todos = _parse_todos_json(todos_raw)
+            for t in cur_todos:
+                # Later rows override done status
+                state["todos_map"][t["text"]] = t["done"]
+
+            survivors[survivor_id] = state
+            absorb[pid] = survivor_id
+            merged_count += 1
+
+            # Don't update last_idx_by_project — keep pointing to earliest fragment
+            # so multiple returns to the same project chain correctly.
+
+        if not survivors:
+            return {"ok": True, "merged": 0, "deleted": 0}
+
+        # Write survivors and delete absorbed rows
+        for survivor_id, state in survivors.items():
+            merged_notes = " | ".join(
+                n for n in state["notes_list"] if n
+            )
+            merged_todos = [
+                {"text": txt, "done": done}
+                for txt, done in state["todos_map"].items()
+            ]
+            merged_todos_json = json.dumps(merged_todos, separators=(",", ":"))
+            conn.execute(
+                """
+                UPDATE sessions
+                SET end_time = ?, last_seen_time = ?, active_seconds = ?,
+                    notes = ?, todos_json = ?
+                WHERE id = ?
+                """,
+                (
+                    state["end_time"],
+                    state["last_seen_time"],
+                    state["active_seconds"],
+                    merged_notes,
+                    merged_todos_json,
+                    survivor_id,
+                ),
+            )
+
+        deleted_ids = list(absorb.keys())
+        placeholders = ",".join("?" * len(deleted_ids))
+        conn.execute(
+            f"DELETE FROM sessions WHERE id IN ({placeholders})",
+            deleted_ids,
+        )
+        deleted_count = conn.execute(
+            f"SELECT changes()"
+        ).fetchone()[0]
+        conn.commit()
+
+        return {
+            "ok": True,
+            "merged": merged_count,
+            "deleted": deleted_count,
+        }
 
 
 def delete_sessions(session_ids) -> dict:
@@ -6380,6 +6561,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(clear_unsaved_projects())
         elif self.path == "/api/clear-phantoms":
             self._json(clear_phantom_sessions())
+        elif self.path == "/api/consolidate-sessions":
+            self._json(consolidate_sessions())
         elif self.path == "/api/merge-projects":
             try:
                 payload = self._request_json()
