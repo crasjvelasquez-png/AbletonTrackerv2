@@ -35,6 +35,7 @@ CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60
 TRACKER_MAX_RETRIES = 5
 TRACKER_MAX_BACKOFF = 60
+WAKE_GRACE_MULTIPLIER = 3  # poll-interval multiplier to detect sleep/wake cycles
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 UNTITLED_NAMES = {"untitled", "untitled project"}
@@ -990,7 +991,7 @@ class Tracker:
                 """
                 UPDATE sessions
                 SET last_seen_time=?, active_seconds=active_seconds+?
-                WHERE id=?
+                WHERE id=? AND end_time IS NULL
                 """,
                 (now, elapsed, self.session_id),
             )
@@ -1007,28 +1008,34 @@ class Tracker:
                 self.resume_hint_project = None
             return
         now = time.time()
-        name = (self.project_name or "").strip().lower()
         project_name = self.project_name
+        elapsed = (
+            max(0.0, time.monotonic() - self.last_tick_mono)
+            if self.last_tick_mono is not None
+            else 0.0
+        )
         with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-            row = conn.execute(
-                "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
-            ).fetchone()
-            active = row[0] if row else 0
-            if active < 5:
-                # Drop phantom sub-5s rows (title flickers).
-                conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
-                print(f"[{_ts()}] ✗  {self.project_name} (too short — discarded)")
+            cur = conn.execute(
+                """
+                UPDATE sessions
+                SET last_seen_time=?, active_seconds=active_seconds+?, end_time=?
+                WHERE id=? AND end_time IS NULL
+                """,
+                (now, elapsed, now, self.session_id),
+            )
+            if cur.rowcount == 0:
+                conn.commit()
             else:
-                conn.execute(
-                    """
-                    UPDATE sessions
-                    SET last_seen_time=?, end_time=?
-                    WHERE id=? AND end_time IS NULL
-                    """,
-                    (now, now, self.session_id),
-                )
-                print(f"[{_ts()}] ■  {self.project_name}")
-            conn.commit()
+                row = conn.execute(
+                    "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
+                ).fetchone()
+                active = row[0] if row else 0
+                if active < 5:
+                    conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
+                    print(f"[{_ts()}] ✗  {project_name} (too short — discarded)")
+                else:
+                    print(f"[{_ts()}] ■  {project_name}")
+                conn.commit()
         if preserve_resume_hint and project_name:
             self.resume_hint_project = project_name
         else:
@@ -1055,6 +1062,7 @@ class Tracker:
 
     def poll_once(self, paused: bool = False):
         now = time.time()
+        previous_checked_at = self.last_checked_at
         self.last_checked_at = now
 
         if paused:
@@ -1104,8 +1112,15 @@ class Tracker:
         )
         idle_paused = should_check_audio and (
             self.last_hid_idle >= IDLE_THRESHOLD
-            and (not audio_known or self.last_audio_idle >= IDLE_THRESHOLD)
+            and audio_known
+            and self.last_audio_idle >= IDLE_THRESHOLD
         )
+        if idle_paused and (self.session_id is not None or self.resume_hint_project):
+            poll_gap = (
+                now - previous_checked_at if previous_checked_at else POLL_INTERVAL
+            )
+            if poll_gap > POLL_INTERVAL * WAKE_GRACE_MULTIPLIER:
+                idle_paused = False
         if should_check_audio:
             audio_idle_label = (
                 "inf" if self.last_audio_idle == float("inf")
@@ -1124,7 +1139,7 @@ class Tracker:
             if self.session_id is not None:
                 print(
                     f"[{_ts()}] ⏸  {self.project_name} "
-                    f"(idle {int(self.last_hid_idle)}s, audio quiet/unknown)"
+                    f"(idle {int(self.last_hid_idle)}s, audio quiet)"
                 )
             self._close(preserve_resume_hint=True)
             self.last_state = (

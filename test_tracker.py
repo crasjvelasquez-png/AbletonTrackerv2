@@ -138,7 +138,7 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertTrue(t.status().idle_paused)
         self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
 
-    def test_unavailable_audio_probe_does_idle_pause_open_session(self):
+    def test_unavailable_audio_probe_does_not_idle_pause_open_session(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
              patch.object(tracker, "is_audio_active", return_value=None), \
              patch.object(tracker, "get_idle_seconds", return_value=31), \
@@ -147,9 +147,73 @@ class TrackerPauseResumeTests(unittest.TestCase):
             t._start("Real Project")
             t.poll_once(paused=False)
 
+        self.assertIsNotNone(t.session_id)
+        self.assertFalse(t.status().idle_paused)
+        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
+
+    def test_close_adds_final_elapsed_since_last_tick(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Real Project")
+
+        with patch.object(tracker.time, "time", return_value=1050.0), \
+             patch.object(tracker.time, "monotonic", return_value=25.0):
+            t._close()
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT active_seconds, end_time FROM sessions WHERE project_name=?",
+                ("Real Project",),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], 15.0)
+        self.assertIsNotNone(row[1])
+
+    def test_tick_does_not_update_externally_closed_session(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Real Project")
+
+        sid = t.session_id
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.execute(
+                "UPDATE sessions SET end_time=? WHERE id=?", (1005.0, sid)
+            )
+            conn.commit()
+
+        with patch.object(tracker.time, "time", return_value=1020.0), \
+             patch.object(tracker.time, "monotonic", return_value=20.0):
+            t._tick()
+
         self.assertIsNone(t.session_id)
-        self.assertTrue(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
+
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT end_time, active_seconds FROM sessions WHERE id=?", (sid,)
+            ).fetchone()
+        self.assertIsNotNone(row[0])
+        self.assertEqual(row[1], 0.0)
+
+    def test_wake_from_sleep_grace_suppresses_idle_pause_one_cycle(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0):
+            t._start("Real Project")
+
+        t.last_checked_at = 1000.0
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=31), \
+             patch.object(tracker.time, "time", return_value=1200.0):
+            t.last_audio_active = 900.0
+            t.poll_once(paused=False)
+
+        self.assertIsNotNone(t.session_id)
+        self.assertFalse(t.status().idle_paused)
+        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
 
     def test_mouse_movement_resumes_after_idle_pause(self):
         t = tracker.Tracker()
