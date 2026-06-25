@@ -891,7 +891,7 @@
     },
     'consolidate-sessions': {
       title: 'Consolidate <em>sessions?</em>',
-      body: 'Merges same-day fragments of the same project when separated only by brief visits to other projects.\n\nIntervening vibe-checks must be ≤ 15 min each (≤ 20 min total), and you must return to the project within 30 min.\n\nNotes and to-dos are preserved. Active sessions are never touched.',
+      body: 'Merges same-day fragments of the same project when separated by idle breaks (≤ 90 min) or brief visits to other projects.\n\nVibe-check interruptions must be ≤ 15 min each (≤ 20 min total), and you must return to the project within 30 min.\n\nNotes, to-dos, and total active time are preserved. Active sessions are never touched.',
       confirmLabel: 'Consolidate',
       endpoint: '/api/consolidate-sessions',
       success: r => `Merged ${r.merged} fragment${r.merged === 1 ? '' : 's'} into ${r.deleted ? r.deleted : 0} row${r.deleted === 1 ? '' : 's'} removed`,

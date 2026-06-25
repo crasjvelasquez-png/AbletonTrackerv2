@@ -2632,6 +2632,8 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   const dateTimeEl = document.getElementById('notesSessionDateTime');
   const globalBtn = document.getElementById('notesGlobalBtn');
   const sessionBtn = document.getElementById('notesSessionBtn');
+  const mergeBtn = document.getElementById('notesMergeBtn');
+  const mergeBody = document.getElementById('notesMergeBody');
 
   const MAX_PROJECT_NOTE_LEN = 3000;
   const abletonIsRunning = latestDashboardData?.summary?.ableton_running === true;
@@ -2725,16 +2727,27 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   };
 
   function setModeButtons() {
-    if (currentMode === 'global') {
-      globalBtn.style.background = 'var(--surface)';
-      globalBtn.style.color = 'var(--ink)';
-      sessionBtn.style.background = 'transparent';
-      sessionBtn.style.color = 'var(--ink-3)';
+    const allBtns = [globalBtn, sessionBtn, mergeBtn];
+    allBtns.forEach(btn => {
+      if (!btn) return;
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--ink-3)';
+    });
+    const activeBtn = currentMode === 'global' ? globalBtn : currentMode === 'session' ? sessionBtn : mergeBtn;
+    if (activeBtn) {
+      activeBtn.style.background = 'var(--surface)';
+      activeBtn.style.color = 'var(--ink)';
+    }
+    // Toggle visibility of notes body vs merge body
+    const notesFootEl = body.parentElement.querySelector('.notes-modal-foot');
+    if (currentMode === 'merge') {
+      body.style.display = 'none';
+      mergeBody.classList.add('is-active');
+      if (notesFootEl) notesFootEl.style.display = 'none';
     } else {
-      sessionBtn.style.background = 'var(--surface)';
-      sessionBtn.style.color = 'var(--ink)';
-      globalBtn.style.background = 'transparent';
-      globalBtn.style.color = 'var(--ink-3)';
+      body.style.display = '';
+      mergeBody.classList.remove('is-active');
+      if (notesFootEl) notesFootEl.style.display = '';
     }
   }
 
@@ -2788,10 +2801,120 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
 
   const switchMode = (mode) => {
     if (currentMode === mode) return;
+    if (mode === 'merge') {
+      currentMode = mode;
+      setModeButtons();
+      renderMergeTab();
+      return;
+    }
     updateTextarea(mode);
     currentMode = mode;
     setModeButtons();
   };
+
+  // ── Merge tab ──
+  async function renderMergeTab() {
+    mergeBody.innerHTML = '<div class="notes-merge-empty">Loading…</div>';
+    try {
+      const [aliasData, projectListData] = await Promise.all([
+        getJson(`/api/project-aliases?project=${encodeURIComponent(currentProjectName)}`),
+        getJson('/api/project-list'),
+      ]);
+      const aliases = aliasData.aliases || [];
+      const allProjects = (projectListData || []).map(p => typeof p === 'string' ? p : p.project_name).filter(Boolean);
+      const otherProjects = allProjects.filter(p => p !== currentProjectName && !aliases.includes(p));
+
+      let html = '';
+
+      // Section 1: Merged projects (aliases)
+      html += '<div class="notes-merge-section">';
+      html += '<div class="notes-merge-section-title">Merged into this project</div>';
+      if (aliases.length === 0) {
+        html += '<div class="notes-merge-empty">No projects merged yet.</div>';
+      } else {
+        html += '<div class="notes-merge-alias-list">';
+        aliases.forEach(alias => {
+          html += `
+            <div class="notes-merge-alias-row">
+              <span class="notes-merge-alias-name">${escapeHtml(alias)}</span>
+              <button class="notes-merge-unmerge-btn" data-unmerge-alias="${escapeHtml(alias)}" type="button">Unmerge</button>
+            </div>`;
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Section 2: Merge another project into this one
+      html += '<div class="notes-merge-section">';
+      html += '<div class="notes-merge-section-title">Merge another project here</div>';
+      if (otherProjects.length === 0) {
+        html += '<div class="notes-merge-empty">No other projects available.</div>';
+      } else {
+        html += '<div class="notes-merge-into-wrap">';
+        html += '<select class="notes-merge-into-select" id="notesMergeSelect">';
+        html += '<option value="">Choose a project\u2026</option>';
+        otherProjects.forEach(p => {
+          html += `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`;
+        });
+        html += '</select>';
+        html += '<button class="notes-merge-into-btn" id="notesMergeConfirmBtn" type="button" disabled>Merge</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      mergeBody.innerHTML = html;
+
+      // Bind select enable button
+      const mergeSelect = mergeBody.querySelector('#notesMergeSelect');
+      const mergeConfirmBtn = mergeBody.querySelector('#notesMergeConfirmBtn');
+      if (mergeSelect && mergeConfirmBtn) {
+        mergeSelect.addEventListener('change', () => {
+          mergeConfirmBtn.disabled = !mergeSelect.value;
+        });
+        mergeConfirmBtn.addEventListener('click', async () => {
+          const aliasName = mergeSelect.value;
+          if (!aliasName) return;
+          const ok = await confirmDialog({
+            title: 'Merge <em>project?</em>',
+            body: `All sessions, notes, and tasks from <code>${escapeHtml(aliasName)}</code> will be combined into <code>${escapeHtml(currentProjectName)}</code>.<br><br>You can undo this later with the Unmerge button.`,
+            confirmLabel: 'Merge',
+          });
+          if (!ok) return;
+          try {
+            await postJson('/api/merge-projects', { canonical_name: currentProjectName, aliases: [aliasName] });
+            toast(`Merged \u201c${aliasName}\u201d into \u201c${currentProjectName}\u201d`);
+            await load();
+            renderMergeTab();
+          } catch (e) {
+            toast('Failed to merge project');
+          }
+        });
+      }
+
+      // Bind unmerge buttons
+      mergeBody.querySelectorAll('[data-unmerge-alias]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const alias = btn.dataset.unmergeAlias;
+          const ok = await confirmDialog({
+            title: 'Unmerge <em>project?</em>',
+            body: `<code>${escapeHtml(alias)}</code> will be restored as its own independent project with its original sessions and time.`,
+            confirmLabel: 'Unmerge',
+          });
+          if (!ok) return;
+          try {
+            await postJson('/api/unmerge-project', { alias_name: alias });
+            toast(`Unmerged \u201c${alias}\u201d`);
+            await load();
+            renderMergeTab();
+          } catch (e) {
+            toast('Failed to unmerge project');
+          }
+        });
+      });
+    } catch (e) {
+      mergeBody.innerHTML = '<div class="notes-merge-empty">Failed to load merge data.</div>';
+    }
+  }
 
   // Build the single persistent textarea
   const initialValue = currentMode === 'global' ? currentProjectNote : currentSessionNote;
@@ -2845,9 +2968,11 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
 
   const onGlobalMode = () => switchMode('global');
   const onSessionMode = () => switchMode('session');
+  const onMergeMode = () => switchMode('merge');
 
   globalBtn.addEventListener('click', onGlobalMode);
   sessionBtn.addEventListener('click', onSessionMode);
+  if (mergeBtn) mergeBtn.addEventListener('click', onMergeMode);
 
   loadNavState().then(() => {
     setModeButtons();
@@ -2926,12 +3051,12 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
   modal.classList.add('show');
   if (textarea) textarea.focus();
 
-  notesModalState = { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn };
+  notesModalState = { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, onMergeMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn, mergeBtn, mergeBody };
 }
 
 function closeNotesModal(){
   if (!notesModalState) return;
-  const { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn } = notesModalState;
+  const { onSave, onCancel, onBackdrop, onKey, onPrev, onNext, onGlobalMode, onSessionMode, onMergeMode, saveBtn, cancelBtn, closeBtn, prevBtn, nextBtn, modal, globalBtn, sessionBtn, mergeBtn, mergeBody } = notesModalState;
   modal.classList.remove('show');
   saveBtn.removeEventListener('click', onSave);
   cancelBtn.removeEventListener('click', onCancel);
@@ -2940,8 +3065,15 @@ function closeNotesModal(){
   nextBtn.removeEventListener('click', onNext);
   if (globalBtn) globalBtn.removeEventListener('click', onGlobalMode);
   if (sessionBtn) sessionBtn.removeEventListener('click', onSessionMode);
+  if (mergeBtn) mergeBtn.removeEventListener('click', onMergeMode);
+  if (mergeBody) { mergeBody.classList.remove('is-active'); mergeBody.innerHTML = ''; }
   modal.removeEventListener('click', onBackdrop);
   document.removeEventListener('keydown', onKey);
+  // Restore notes body and footer visibility
+  const notesBodyEl = document.getElementById('notesModalBody');
+  if (notesBodyEl) notesBodyEl.style.display = '';
+  const notesFootEl = modal.querySelector('.notes-modal-foot');
+  if (notesFootEl) notesFootEl.style.display = '';
   notesModalState = null;
 }
 

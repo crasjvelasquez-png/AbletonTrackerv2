@@ -120,20 +120,28 @@ def clear_phantom_sessions() -> dict:
     return cleanup_phantom_sessions()
 
 
-CONSOLIDATE_RETURN_WINDOW_SECONDS = 30 * 60      # must return to same project within 30 min
+CONSOLIDATE_RETURN_WINDOW_SECONDS = 30 * 60      # must return to same project within 30 min (vibe-checks)
 CONSOLIDATE_MAX_SINGLE_INTERVENING_SECONDS = 15 * 60  # each vibe-check project must be ≤ 15 min
 CONSOLIDATE_MAX_TOTAL_INTERVENING_SECONDS = 20 * 60   # total intervening time must be ≤ 20 min
+CONSOLIDATE_SAME_PROJECT_IDLE_SECONDS = 90 * 60    # idle/break gap with no intervening projects
 
 
 def consolidate_sessions() -> dict:
-    """Merge same-day same-project fragments separated by short vibe-checks.
+    """Merge same-day same-project fragments separated by short gaps.
 
     Only closed rows are considered; active sessions are never touched.
-    Iterates chronological order, merges when:
-    - Same project, same calendar day (local time)
-    - Gap between fragments ≤ RETURN_WINDOW
-    - Every intervening other-project fragment ≤ MAX_SINGLE_INTERVENING
-    - Total intervening time ≤ MAX_TOTAL_INTERVENING
+    Two merge modes:
+
+    1. Same-project idle gaps (no intervening rows): merges across
+       gaps ≤ CONSOLIDATE_SAME_PROJECT_IDLE_SECONDS (default 90 min).
+
+    2. Vibe-check interruptions (intervening other-project rows between
+       same-project fragments): merges when gap ≤ RETURN_WINDOW (30 min),
+       each intervening fragment ≤ MAX_SINGLE_INTERVENING (15 min),
+       and total intervening time ≤ MAX_TOTAL_INTERVENING (20 min).
+
+    Chaining: after a merge the accumulated end_time is used for
+    subsequent gap comparisons so multi-fragment chains merge correctly.
     """
     if not DB_PATH.exists():
         return {"ok": True, "merged": 0, "deleted": 0}
@@ -158,7 +166,6 @@ def consolidate_sessions() -> dict:
         absorb: dict[int, int] = {}  # absorbed_id -> survivor_id
         survivors: dict[int, dict] = {}  # survivor_id -> accumulated row state
         merged_count = 0
-        deleted_count = 0
 
         for i, row in enumerate(rows):
             pid = int(row["id"])
@@ -175,95 +182,98 @@ def consolidate_sessions() -> dict:
                 continue
 
             prev_idx = last_idx_by_project[project]
-            prev_row = rows[prev_idx]
-            prev_id = int(prev_row["id"])
 
-            # Resolve survivor: if prev was already absorbed, follow chain
-            while prev_id in absorb:
-                prev_id = absorb[prev_id]
-                # Find the actual row for prev_id
-                for r in rows:
-                    if int(r["id"]) == prev_id:
-                        prev_row = r
-                        break
-                prev_idx = next(j for j, r in enumerate(rows) if int(r["id"]) == prev_id)
+            # Resolve survivor chain to find the true survivor
+            survivor_id = int(rows[prev_idx]["id"])
+            while survivor_id in absorb:
+                survivor_id = absorb[survivor_id]
 
-            prev_end_ts = float(prev_row["end_time"] or 0)
+            # Use accumulated survivor state for end/start times if available
+            if survivor_id in survivors:
+                survivor_state = survivors[survivor_id]
+                prev_end_ts = survivor_state["end_time"]
+                prev_start_ts = survivor_state["start_time"]
+            else:
+                prev_end_ts = float(rows[prev_idx]["end_time"] or 0)
+                prev_start_ts = float(rows[prev_idx]["start_time"] or 0)
 
             # Must be same calendar day (local time)
-            prev_day = datetime.fromtimestamp(float(prev_row["start_time"] or 0)).date()
+            prev_day = datetime.fromtimestamp(prev_start_ts).date()
             cur_day = datetime.fromtimestamp(start_ts).date()
             if prev_day != cur_day:
                 last_idx_by_project[project] = i
                 continue
 
             gap_seconds = start_ts - prev_end_ts
-            if gap_seconds <= 0 or gap_seconds > CONSOLIDATE_RETURN_WINDOW_SECONDS:
+            if gap_seconds <= 0:
                 last_idx_by_project[project] = i
                 continue
 
-            # Check intervening sessions (everything between prev_idx and i)
-            total_intervening = 0.0
-            ok_to_merge = True
-            for j in range(prev_idx + 1, i):
-                intervening = rows[j]
-                if intervening["project_name"] == project:
-                    # Another same-project fragment in between — don't skip over it
-                    ok_to_merge = False
-                    break
-                int_active = float(intervening["active_seconds"] or 0)
-                if int_active > CONSOLIDATE_MAX_SINGLE_INTERVENING_SECONDS:
-                    ok_to_merge = False
-                    break
-                total_intervening += int_active
+            # Determine merge mode based on whether there are *unabsorbed* intervening rows
+            intervening_rows = [
+                j for j in range(prev_idx + 1, i)
+                if int(rows[j]["id"]) not in absorb
+            ]
 
-            if not ok_to_merge:
-                last_idx_by_project[project] = i
-                continue
+            if not intervening_rows:
+                # Mode 1: same-project idle gap — no intervening projects
+                if gap_seconds > CONSOLIDATE_SAME_PROJECT_IDLE_SECONDS:
+                    last_idx_by_project[project] = i
+                    continue
+            else:
+                # Mode 2: vibe-check interruption
+                if gap_seconds > CONSOLIDATE_RETURN_WINDOW_SECONDS:
+                    last_idx_by_project[project] = i
+                    continue
 
-            if total_intervening > CONSOLIDATE_MAX_TOTAL_INTERVENING_SECONDS:
-                last_idx_by_project[project] = i
-                continue
+                total_intervening = 0.0
+                ok_to_merge = True
+                for j in intervening_rows:
+                    intervening = rows[j]
+                    if intervening["project_name"] == project:
+                        ok_to_merge = False
+                        break
+                    int_active = float(intervening["active_seconds"] or 0)
+                    if int_active > CONSOLIDATE_MAX_SINGLE_INTERVENING_SECONDS:
+                        ok_to_merge = False
+                        break
+                    total_intervening += int_active
+
+                if not ok_to_merge or total_intervening > CONSOLIDATE_MAX_TOTAL_INTERVENING_SECONDS:
+                    last_idx_by_project[project] = i
+                    continue
 
             # Merge this row into the survivor
-            survivor_id = prev_id
-            state = survivors.get(survivor_id)
-            if state is None:
-                # Initialize survivor state from prev_row
-                state = {
-                    "start_time": float(prev_row["start_time"] or 0),
+            if survivor_id not in survivors:
+                survivors[survivor_id] = {
+                    "start_time": prev_start_ts,
                     "end_time": max(prev_end_ts, end_ts),
                     "last_seen_time": max(
-                        float(prev_row["last_seen_time"] or 0),
+                        float(row["last_seen_time"] or 0) if int(rows[prev_idx]["id"]) == survivor_id else 0,
                         last_seen_ts,
                     ),
-                    "active_seconds": float(prev_row["active_seconds"] or 0),
-                    "notes_list": [(prev_row["notes"] or "").strip()],
+                    "active_seconds": float(rows[prev_idx]["active_seconds"] or 0),
+                    "notes_list": [(rows[prev_idx]["notes"] or "").strip()],
                     "todos_map": {},
                 }
-                # Parse prev todos
-                prev_todos = _parse_todos_json(prev_row["todos_json"] or "[]")
+                # Parse previous todos
+                prev_todos = _parse_todos_json(rows[prev_idx]["todos_json"] or "[]")
                 for t in prev_todos:
-                    state["todos_map"][t["text"]] = t["done"]
+                    survivors[survivor_id]["todos_map"][t["text"]] = t["done"]
 
-            # Accumulate from current row
+            state = survivors[survivor_id]
             state["end_time"] = max(state["end_time"], end_ts)
             state["last_seen_time"] = max(state["last_seen_time"], last_seen_ts)
             state["active_seconds"] += active
-            cur_note = notes
-            if cur_note:
-                state["notes_list"].append(cur_note)
-            cur_todos = _parse_todos_json(todos_raw)
-            for t in cur_todos:
-                # Later rows override done status
+            if notes:
+                state["notes_list"].append(notes)
+            for t in _parse_todos_json(todos_raw):
                 state["todos_map"][t["text"]] = t["done"]
 
-            survivors[survivor_id] = state
             absorb[pid] = survivor_id
             merged_count += 1
-
-            # Don't update last_idx_by_project — keep pointing to earliest fragment
-            # so multiple returns to the same project chain correctly.
+            # Keep last_idx_by_project pointing to the earliest fragment so
+            # chains continue through the accumulated survivor state.
 
         if not survivors:
             return {"ok": True, "merged": 0, "deleted": 0}
@@ -2532,6 +2542,29 @@ def get_project_list() -> list[str]:
         projects = [row["project_name"] for row in rows if row["project_name"]]
         _cache_set(cache_key, projects)
         return projects
+
+
+def get_project_aliases(project_name: str) -> dict:
+    """Return alias information for a project (which projects are merged into it)."""
+    if not DB_PATH.exists():
+        return {"ok": True, "canonical_name": project_name, "aliases": []}
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        # Resolve to canonical if the given name is itself an alias
+        canonical_row = conn.execute(
+            "SELECT canonical_name FROM project_aliases WHERE alias_name = ?",
+            (project_name,),
+        ).fetchone()
+        canonical = canonical_row[0] if canonical_row else project_name
+        alias_rows = conn.execute(
+            "SELECT alias_name FROM project_aliases WHERE canonical_name = ?",
+            (canonical,),
+        ).fetchall()
+        return {
+            "ok": True,
+            "canonical_name": canonical,
+            "aliases": [row[0] for row in alias_rows],
+        }
 
 
 def get_project_report(project_name: str) -> dict:
@@ -6361,10 +6394,36 @@ def merge_projects(canonical_name: str, aliases: list) -> dict:
                     (alias, canonical_name)
                 )
             conn.commit()
+            _cache_clear("project_list")
             return {"ok": True}
         except Exception as e:
             conn.rollback()
             return {"error": str(e)}
+
+
+def unmerge_project(alias_name: str) -> dict:
+    """Remove a single alias, restoring it as an independent project."""
+    alias_name = (alias_name or "").strip()
+    if not alias_name:
+        return {"error": "alias_name is required"}
+    if not DB_PATH.exists():
+        return {"error": "No data."}
+
+    with db_connection() as conn:
+        try:
+            cur = conn.execute(
+                "DELETE FROM project_aliases WHERE alias_name = ?",
+                (alias_name,),
+            )
+            if cur.rowcount == 0:
+                return {"error": "Alias not found"}
+            conn.commit()
+            _cache_clear("project_list")
+            return {"ok": True, "removed": alias_name}
+        except Exception as e:
+            conn.rollback()
+            return {"error": str(e)}
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -6472,6 +6531,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-list":
             self._json(get_project_list())
+        elif parsed.path == "/api/project-aliases":
+            project = parse_qs(parsed.query).get("project", [""])[0]
+            if not project:
+                self._json({"error": "project required"}, status=400)
+                return
+            self._json(get_project_aliases(project))
         elif parsed.path == "/api/last-session-todos":
             project = parse_qs(parsed.query).get("project", [""])[0]
             self._json(get_last_session_todos(project))
@@ -6576,6 +6641,17 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("canonical_name", ""),
                 payload.get("aliases", [])
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/unmerge-project":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = unmerge_project(payload.get("alias_name", ""))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/delete-session":
             try:

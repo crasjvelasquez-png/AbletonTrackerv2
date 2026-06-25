@@ -1838,6 +1838,85 @@ class ConsolidateSessionsTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["merged"], 0)
 
+    def test_merges_same_project_idle_gap(self):
+        """Same project, no intervening rows, gap ≤ 90 min → merge."""
+        x1_end = 100.0 + 900.0
+        gap = 50 * 60  # 50 min idle
+        x2_start = x1_end + gap
+        x2_end = x2_start + 600.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("X", x2_start, x2_end, 600.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 1)
+        self.assertEqual(result["deleted"], 1)
+        self.assertEqual(self._row_count(), 1)
+
+        row = self._all_rows()[0]
+        self.assertAlmostEqual(row["start_time"], 100.0)
+        self.assertAlmostEqual(row["end_time"], x2_end)
+        self.assertAlmostEqual(row["active_seconds"], 1500.0)
+
+    def test_does_not_merge_same_project_idle_gap_exceeded(self):
+        """Same project, no intervening rows, gap > 90 min → don't merge."""
+        x1_end = 100.0 + 900.0
+        gap = 95 * 60  # 95 min idle
+        x2_start = x1_end + gap
+        x2_end = x2_start + 600.0
+
+        self._insert("X", 100.0, x1_end, 900.0)
+        self._insert("X", x2_start, x2_end, 600.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 0)
+        self.assertEqual(self._row_count(), 2)
+
+    def test_chains_multiple_same_project_fragments(self):
+        """5 same-project fragments with idle gaps ≤ 90 min → 1 row."""
+        base = 100.0
+        t = base
+        for i in range(5):
+            dur = 600.0
+            t_end = t + dur
+            self._insert("X", t, t_end, dur)
+            t = t_end + (10 * 60)  # 10 min gap between each
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 4)
+        self.assertEqual(result["deleted"], 4)
+        self.assertEqual(self._row_count(), 1)
+
+        row = self._all_rows()[0]
+        self.assertAlmostEqual(row["start_time"], 100.0)
+        self.assertAlmostEqual(row["active_seconds"], 3000.0)
+
+    def test_chains_mixed_idle_and_vibe_check(self):
+        """Chain with idle gaps + one short vibe-check interruption."""
+        x1_end = 100.0 + 600.0
+        y1_start = x1_end
+        y1_end = y1_start + 300.0  # 5 min vibe check
+        x2_start = y1_end
+        x2_end = x2_start + 600.0
+
+        self._insert("X", 100.0, x1_end, 600.0)
+        self._insert("Y", y1_start, y1_end, 300.0)
+        self._insert("X", x2_start, x2_end, 600.0)
+
+        result = dashboard.consolidate_sessions()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged"], 1)
+        self.assertEqual(self._row_count(), 2)
+
+        rows = self._all_rows()
+        x_row = next(r for r in rows if r["project_name"] == "X")
+        self.assertAlmostEqual(x_row["active_seconds"], 1200.0)
+        self.assertAlmostEqual(x_row["start_time"], 100.0)
+        self.assertAlmostEqual(x_row["end_time"], x2_end)
+
 
 if __name__ == "__main__":
     unittest.main()

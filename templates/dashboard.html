@@ -85,7 +85,8 @@
   --row-border:rgba(60,60,67,.08);
   --bar-bg:rgba(60,60,67,.08);
   --toast-shadow:0 18px 40px rgba(15,23,42,.12);
-  --modal-backdrop:rgba(15,23,42,.22);
+  --modal-backdrop:rgba(245,247,251,.74);
+  --modal-backdrop-shadow:inset 0 0 0 9999px rgba(255,255,255,.18);
 
   --font-display:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-body:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -150,7 +151,8 @@
     --row-border:rgba(255,255,255,.06);
     --bar-bg:rgba(255,255,255,.06);
     --toast-shadow:0 18px 40px rgba(0,0,0,.48);
-    --modal-backdrop:rgba(0,0,0,.52);
+    --modal-backdrop:rgba(0,0,0,.58);
+    --modal-backdrop-shadow:inset 0 0 0 9999px rgba(0,0,0,.08);
     --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
     --shadow-card-hover:0 18px 36px rgba(0,0,0,.48), 0 36px 72px rgba(255,255,255,.06);
 
@@ -1395,6 +1397,9 @@ header{
 .modal-backdrop{
   position:fixed;inset:0;background:var(--modal-backdrop);
   display:none;align-items:center;justify-content:center;z-index:90;
+  -webkit-backdrop-filter:blur(22px) saturate(.7);
+  backdrop-filter:blur(22px) saturate(.7);
+  box-shadow:var(--modal-backdrop-shadow);
 }
 .modal-backdrop.show{display:flex;animation:backdropReveal .24s ease both}
 .modal{
@@ -1422,6 +1427,9 @@ header{
   position:fixed;inset:0;z-index:95;
   display:none;align-items:center;justify-content:center;
   padding:24px;background:var(--modal-backdrop);
+  -webkit-backdrop-filter:blur(22px) saturate(.7);
+  backdrop-filter:blur(22px) saturate(.7);
+  box-shadow:var(--modal-backdrop-shadow);
 }
 .detail-modal-backdrop.is-open{display:flex;animation:backdropReveal .24s ease both}
 .detail-modal{
@@ -2526,6 +2534,55 @@ tbody tr:hover .row-note{opacity:1}
 }
 .notes-char-count.over{color:var(--danger)}
 
+/* Merge tab inside notes modal */
+.notes-merge-body{display:none}
+.notes-merge-body.is-active{display:block}
+.notes-merge-section{margin-bottom:16px}
+.notes-merge-section-title{
+  font-size:12px;font-weight:650;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.04em;
+  margin-bottom:8px;
+}
+.notes-merge-alias-list{display:grid;gap:4px}
+.notes-merge-alias-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;border-radius:10px;
+  background:var(--control-bg);border:1px solid var(--border);
+  font-size:13px;color:var(--ink-2);
+  transition:background .15s ease;
+}
+.notes-merge-alias-row:hover{background:var(--control-bg-strong)}
+.notes-merge-alias-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--ink)}
+.notes-merge-unmerge-btn{
+  padding:4px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--ink-3);font-size:12px;font-weight:600;
+  cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
+  white-space:nowrap;
+}
+.notes-merge-unmerge-btn:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28);color:var(--danger)}
+.notes-merge-empty{font-size:13px;color:var(--ink-4);padding:10px 0}
+.notes-merge-into-wrap{
+  display:flex;gap:8px;align-items:center;
+}
+.notes-merge-into-select{
+  flex:1;min-width:0;padding:8px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface);color:var(--ink);font-size:13px;
+  font-family:var(--font-body);outline:none;
+  transition:border-color .15s ease,box-shadow .15s ease;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:30px;
+}
+.notes-merge-into-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.notes-merge-into-btn{
+  padding:8px 16px;border-radius:10px;border:none;
+  background:var(--accent);color:#fff;font-size:13px;font-weight:600;
+  cursor:pointer;transition:opacity .15s ease;white-space:nowrap;
+}
+.notes-merge-into-btn:hover{opacity:.88}
+.notes-merge-into-btn:disabled{opacity:.4;cursor:not-allowed}
+
 .proj-badge{
   display:inline-flex;align-items:center;gap:8px;
   color:var(--ink);font-weight:600;letter-spacing:-.01em;font-size:13.5px;
@@ -3308,8 +3365,10 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
     <div class="notes-mode-toggle" id="notesModeToggle" style="display:flex;gap:4px;margin-bottom:12px;padding:4px;background:var(--control-bg);border-radius:10px;border:1px solid var(--border)">
       <button class="notes-mode-btn is-active" id="notesGlobalBtn" type="button" style="flex:1;padding:7px 12px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
       <button class="notes-mode-btn" id="notesSessionBtn" type="button" style="flex:1;padding:7px 12px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
+      <button class="notes-mode-btn" id="notesMergeBtn" type="button" style="flex:1;padding:7px 12px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Merge</button>
     </div>
     <div class="notes-modal-body" id="notesModalBody"></div>
+    <div class="notes-merge-body" id="notesMergeBody"></div>
     <div class="notes-modal-foot">
       <span class="notes-char-count" id="notesCharCount">0 / 500</span>
       <div class="modal-actions">
