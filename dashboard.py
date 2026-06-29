@@ -24,6 +24,8 @@ from tracker import (
     condense_recent_sessions,
     count_phantom_sessions,
     is_ableton_running,
+    session_end_time,
+    get_condense_gap_seconds,
 )
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"

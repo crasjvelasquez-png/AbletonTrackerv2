@@ -333,6 +333,65 @@
     syncWeekRefreshMeta();
   }
 
+  let currentCondenseGap = 15;
+
+  async function loadCondenseGap() {
+    try {
+      const res = await fetch('/api/app-settings');
+      const data = await res.json();
+      if (data && data.session_condense_gap_minutes != null) {
+        currentCondenseGap = parseInt(data.session_condense_gap_minutes, 10);
+      }
+    } catch (_) {
+      currentCondenseGap = 15;
+    }
+    syncCondenseGapUI();
+  }
+
+  function syncCondenseGapUI() {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    const slider = $('[data-gap-slider]', root);
+    const display = $('[data-gap-value-display]', root);
+    const saveBtn = $('[data-gap-save]', root);
+    if (slider) slider.value = currentCondenseGap;
+    if (display) display.textContent = `${currentCondenseGap} mins`;
+    if (saveBtn) saveBtn.disabled = true;
+  }
+
+  function bindCondenseGap(root) {
+    const slider = $('[data-gap-slider]', root);
+    const display = $('[data-gap-value-display]', root);
+    const saveBtn = $('[data-gap-save]', root);
+    const feedback = $('[data-gap-feedback]', root);
+    if (!slider || !saveBtn) return;
+
+    slider.addEventListener('input', () => {
+      display.textContent = `${slider.value} mins`;
+      saveBtn.disabled = parseInt(slider.value, 10) === currentCondenseGap;
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      const val = parseInt(slider.value, 10);
+      try {
+        await window.postJson('/api/app-settings', {
+          key: 'session_condense_gap_minutes',
+          value: val.toString()
+        });
+        currentCondenseGap = val;
+        feedback.textContent = 'Saved ✓';
+        feedback.hidden = false;
+        setTimeout(() => feedback.hidden = true, 2000);
+      } catch (e) {
+        feedback.textContent = 'Failed to save';
+        feedback.hidden = false;
+        saveBtn.disabled = false;
+        setTimeout(() => feedback.hidden = true, 3000);
+      }
+    });
+  }
+
   function bindCategoryDelegation(root) {
     // Create-form submit
     root.addEventListener('submit', async event => {
@@ -1406,6 +1465,8 @@
     loadUiScale();
     refreshGoals();
     loadWeekStartDay();
+    loadCondenseGap();
+    bindCondenseGap(root);
   }
 
   function render(data) {

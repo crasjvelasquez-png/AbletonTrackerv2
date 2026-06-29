@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build AbletonTrackerDashboard.app with a rounded-corner icon.
+"""Build AbletonTrackerDashboard.app with a correctly padded macOS icon.
 
 Requires: icon_source.png (or .jpg/.jpeg/.webp) in the same folder.
 Produces: AbletonTrackerDashboard.app — drag this to your Dock.
@@ -15,7 +15,8 @@ from PIL import Image, ImageChops, ImageDraw
 APP_DIR   = Path(__file__).resolve().parent
 APP_NAME  = "AbletonTrackerDashboard"
 APP_BUNDLE = APP_DIR / f"{APP_NAME}.app"
-CORNER_RADIUS_RATIO = 0.225  # Apple's squircle uses ~22.5% of side length
+MASTER_SIZE = 1024
+ARTWORK_SCALE = 0.80
 ICON_SIZES = [16, 32, 64, 128, 256, 512, 1024]
 
 
@@ -29,39 +30,36 @@ def find_source() -> Path:
     sys.exit(1)
 
 
-def trim_background(img: Image.Image, tolerance: int = 20) -> Image.Image:
-    # Trim near-white (or near-transparent) border from around the icon content.
+def isolate_existing_container(img: Image.Image) -> Image.Image:
+    """Mask away the source canvas outside its existing rounded container."""
     rgba = img.convert("RGBA")
-    r, g, b, a = rgba.split()
-    # Treat pixels as "background" if nearly white OR nearly transparent.
-    rgb = Image.merge("RGB", (r, g, b))
-    bg = Image.new("RGB", rgba.size, (255, 255, 255))
-    diff = ImageChops.difference(rgb, bg).convert("L")
-    # Combine color-diff with alpha so transparent pixels also count as background.
-    mask = ImageChops.lighter(diff, a)
-    bbox = mask.point(lambda v: 255 if v > tolerance else 0).getbbox()
-    return rgba.crop(bbox) if bbox else rgba
+    mask = Image.new("L", rgba.size, 0)
+    radius = round(min(rgba.size) * 0.225)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, rgba.width - 1, rgba.height - 1), radius=radius, fill=255
+    )
+    rgba.putalpha(ImageChops.multiply(rgba.getchannel("A"), mask))
+    return rgba
 
 
-def make_rounded_square(src: Path, size: int) -> Image.Image:
-    img = Image.open(src).convert("RGBA")
-    img = trim_background(img)
-    # Pad to square (don't crop content) so the full icon fits.
+def build_master(src: Path) -> Image.Image:
+    img = isolate_existing_container(Image.open(src))
+    bbox = img.getchannel("A").point(lambda value: 255 if value > 8 else 0).getbbox()
+    if bbox:
+        img = img.crop(bbox)
+
+    # The artwork already contains its rounded-square container. Preserve it and
+    # fit it proportionally inside a transparent square instead of adding another.
     w, h = img.size
-    side = max(w, h)
-    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    square.paste(img, ((side - w) // 2, (side - h) // 2))
-    img = square.resize((size, size), Image.LANCZOS)
-    img = img.resize((size, size), Image.LANCZOS)
-
-    # Rounded-corner mask
-    mask = Image.new("L", (size, size), 0)
-    radius = int(size * CORNER_RADIUS_RATIO)
-    ImageDraw.Draw(mask).rounded_rectangle([(0, 0), (size, size)], radius, fill=255)
-
-    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    out.paste(img, (0, 0), mask=mask)
-    return out
+    target = round(MASTER_SIZE * ARTWORK_SCALE)
+    ratio = min(target / w, target / h)
+    fitted = img.resize((round(w * ratio), round(h * ratio)), Image.LANCZOS)
+    master = Image.new("RGBA", (MASTER_SIZE, MASTER_SIZE), (0, 0, 0, 0))
+    master.alpha_composite(
+        fitted,
+        ((MASTER_SIZE - fitted.width) // 2, (MASTER_SIZE - fitted.height) // 2),
+    )
+    return master
 
 
 def build_iconset(src: Path) -> Path:
@@ -70,7 +68,10 @@ def build_iconset(src: Path) -> Path:
         shutil.rmtree(iconset)
     iconset.mkdir()
 
-    # iconutil requires specific filenames
+    master = build_master(src)
+    master.save(APP_DIR / "icon_master_1024.png", "PNG")
+
+    # iconutil requires specific filenames.
     spec = [
         (16,  "icon_16x16.png"),
         (32,  "icon_16x16@2x.png"),
@@ -84,7 +85,7 @@ def build_iconset(src: Path) -> Path:
         (1024,"icon_512x512@2x.png"),
     ]
     for size, name in spec:
-        make_rounded_square(src, size).save(iconset / name, "PNG")
+        master.resize((size, size), Image.LANCZOS).save(iconset / name, "PNG")
 
     icns = APP_DIR / f"{APP_NAME}.icns"
     subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], check=True)

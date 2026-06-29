@@ -66,6 +66,30 @@
           </div>
         </section>
 
+        <!-- TRACKING BEHAVIOR -->
+        <section class="chart-card settings-card" data-settings-section="tracking-behavior">
+          <div class="section-head">
+            <h3 class="section-title">Tracking Behavior</h3>
+            <span class="section-meta">auto-resume</span>
+          </div>
+          <p class="settings-copy">
+            When you return to the same project within this window, the tracker treats it as one continuous session instead of creating a new entry.
+          </p>
+          <div class="action-list" style="margin-top: 16px;">
+            <div class="action-row" style="flex-direction: column; align-items: flex-start; gap: 12px;">
+              <div class="action-row-text" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                <h4 class="action-row-title">Session Condensation Gap</h4>
+                <span class="goal-form-progress" data-gap-value-display>15 mins</span>
+              </div>
+              <div style="width: 100%; display: flex; gap: 16px; align-items: center;">
+                <input type="range" min="5" max="120" step="5" value="15" class="range-slider" data-gap-slider style="flex: 1;">
+                <button class="btn" type="button" data-gap-save disabled>Save</button>
+              </div>
+              <div class="goal-form-feedback" data-gap-feedback hidden></div>
+            </div>
+          </div>
+        </section>
+
         <!-- DASHBOARD WIDGETS -->
         <section class="chart-card settings-card" data-settings-section="dashboard-prefs">
           <div class="section-head">

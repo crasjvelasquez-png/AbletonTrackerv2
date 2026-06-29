@@ -585,13 +585,13 @@ class SessionCondenseTests(unittest.TestCase):
         self.assertEqual(condensed[0]["end_time"], 520.0)
         self.assertEqual(condensed[0]["active_seconds"], 240.0)
 
-    def test_does_not_condense_exactly_five_minute_gap(self):
+    def test_does_not_condense_exactly_fifteen_minute_gap(self):
         rows = [
             {
                 "project_name": "Real Song",
-                "start_time": 400.0,
-                "last_seen_time": 460.0,
-                "end_time": 460.0,
+                "start_time": 1000.0,
+                "last_seen_time": 1060.0,
+                "end_time": 1060.0,
                 "active_seconds": 60.0,
             },
             {
@@ -690,7 +690,7 @@ class StartResumeTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0], (session_id, "Real Song", 100.0, 400.0, None, 120.0))
 
-    def test_start_creates_new_row_when_gap_is_five_minutes_or_more(self):
+    def test_start_creates_new_row_when_gap_is_fifteen_minutes_or_more(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             conn.execute(
                 """
@@ -702,7 +702,7 @@ class StartResumeTests(unittest.TestCase):
             conn.commit()
 
         t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=400.0):
+        with patch.object(tracker.time, "time", return_value=1000.0):
             t._start("Real Song")
 
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
@@ -715,7 +715,7 @@ class StartResumeTests(unittest.TestCase):
             ).fetchall()
 
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[1], ("Real Song", 400.0, 400.0, None, 0.0))
+        self.assertEqual(rows[1], ("Real Song", 1000.0, 1000.0, None, 0.0))
 
 
 class UntitledSessionTests(unittest.TestCase):

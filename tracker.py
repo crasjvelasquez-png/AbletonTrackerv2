@@ -32,7 +32,8 @@ AUDIO_LEVEL_POLL_SECONDS = 1.0
 # treats audio as active when either peak or RMS crosses it.
 AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
-SESSION_CONDENSE_GAP_SECONDS = 5 * 60
+SESSION_CONDENSE_GAP_SECONDS = 5 * 60  # Deprecated, use DEFAULT_CONDENSE_GAP_MINUTES
+DEFAULT_CONDENSE_GAP_MINUTES = 15
 TRACKER_MAX_RETRIES = 5
 TRACKER_MAX_BACKOFF = 60
 WAKE_GRACE_MULTIPLIER = 3  # poll-interval multiplier to detect sleep/wake cycles
@@ -230,11 +231,29 @@ def session_end_time(session) -> float:
     )
 
 
+def get_condense_gap_seconds() -> float:
+    """Read the user-configured session condense gap from DB, or fallback to default."""
+    try:
+        if DB_PATH.exists():
+            with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT value FROM app_settings WHERE key = 'session_condense_gap_minutes'"
+                ).fetchone()
+                if row:
+                    return float(row["value"]) * 60
+    except Exception as e:
+        print(f"[{_ts()}] Warning: failed to read session_condense_gap_minutes: {e}")
+    return DEFAULT_CONDENSE_GAP_MINUTES * 60
+
+
 def condense_recent_sessions(
     rows,
-    max_gap_seconds: float = SESSION_CONDENSE_GAP_SECONDS,
+    max_gap_seconds: float | None = None,
 ):
     """Merge adjacent same-project fragments separated by short pauses."""
+    if max_gap_seconds is None:
+        max_gap_seconds = get_condense_gap_seconds()
     condensed = []
 
     for raw_row in rows:
@@ -1004,7 +1023,7 @@ class Tracker:
                 ORDER BY COALESCE(end_time, last_seen_time, start_time) DESC
                 LIMIT 1
                 """,
-                (project, now, SESSION_CONDENSE_GAP_SECONDS),
+                (project, now, get_condense_gap_seconds()),
             ).fetchone()
 
             if resumed_row:
