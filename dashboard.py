@@ -52,6 +52,7 @@ PROJECT_STATUS_OPTIONS = {
     "needs_work": "Needs Work",
     "in_progress": "In Progress",
     "finishing": "Finishing",
+    "final_touches": "Final Touches",
     "finished": "Finished",
     "paused": "Paused",
     "abandoned": "Abandoned",
@@ -77,7 +78,7 @@ PLANNER_GOAL_TYPE_OPTIONS = {
 }
 PLANNER_GOAL_PERIOD_OPTIONS = {"week", "month"}
 PLANNER_GOAL_SCOPE_OPTIONS = {"all", "project_type", "category", "project"}
-ACTIVE_PROJECT_STATUSES = {"idea", "in_progress", "finishing"}
+ACTIVE_PROJECT_STATUSES = {"idea", "in_progress", "finishing", "final_touches"}
 LEGACY_CATEGORY_KEYS = [
     "c4milo",
     "production",

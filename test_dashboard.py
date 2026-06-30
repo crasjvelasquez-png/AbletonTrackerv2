@@ -288,7 +288,7 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(stats["recent"][0]["project_note"], "")
 
     def test_set_project_metadata_accepts_all_planner_statuses_and_types(self):
-        statuses = {"idea", "needs_work", "in_progress", "finishing", "finished", "paused", "abandoned"}
+        statuses = {"idea", "needs_work", "in_progress", "finishing", "final_touches", "finished", "paused", "abandoned"}
         types = {"personal", "client", "other"}
 
         self.assertEqual(set(dashboard.PROJECT_STATUS_OPTIONS), statuses)
@@ -979,9 +979,11 @@ class DashboardPlannerGoalTests(unittest.TestCase):
         stale = datetime.combine(today - timedelta(days=8), datetime.min.time())
         self._insert_session("Recent Active", recent, 1800)
         self._insert_session("Stale Active", stale, 1800)
+        self._insert_session("Final Touches Active", recent, 1800)
         self._insert_session("Finished Project", recent, 1800)
         dashboard.set_project_metadata("Recent Active", "in_progress", "personal")
         dashboard.set_project_metadata("Stale Active", "finishing", "personal")
+        dashboard.set_project_metadata("Final Touches Active", "final_touches", "personal")
         dashboard.set_project_metadata("Finished Project", "finished", "personal")
 
         goal = dashboard.create_planner_goal(
@@ -989,9 +991,9 @@ class DashboardPlannerGoalTests(unittest.TestCase):
         )
 
         progress = goal["goal"]["progress"]
-        self.assertEqual(progress["current_value"], 1.0)
-        self.assertEqual(progress["target_value"], 2.0)
-        self.assertEqual(progress["total_active_projects"], 2)
+        self.assertEqual(progress["current_value"], 2.0)
+        self.assertEqual(progress["target_value"], 3.0)
+        self.assertEqual(progress["total_active_projects"], 3)
 
     def test_stats_include_planner_goals_and_goal_changes_invalidate_etag(self):
         before = dashboard._compute_data_etag()

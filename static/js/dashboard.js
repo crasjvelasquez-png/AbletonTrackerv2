@@ -2033,16 +2033,26 @@ function openProjectTasks(projectName) {
   const modal = document.getElementById('taskModal');
   const projectLabel = document.getElementById('taskModalProject');
   const closeBtn = document.getElementById('taskModalClose');
-  const doneBtn = document.getElementById('taskModalDone');
+  const closeFooterBtn = document.getElementById('taskModalCloseBtn');
+  const saveBtn = document.getElementById('taskModalDone');
   const form = document.getElementById('taskForm');
   const planningForm = document.getElementById('projectPlanningForm');
   const titleInput = document.getElementById('taskTitleInput');
   const priorityInput = document.getElementById('taskPriorityInput');
   const addBtn = document.getElementById('taskAddButton');
   const toggle = document.getElementById('taskToggleCompleted');
+  const notesTextarea = document.getElementById('projectNotesTextarea');
   if (!modal || !projectName) return;
-  doneBtn.disabled = false;
-  doneBtn.textContent = 'Save & Close';
+
+  let isDirty = false;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Save';
+
+  const markDirty = () => {
+    isDirty = true;
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+  };
 
   if (projectTaskModalState?.close) projectTaskModalState.close();
   projectLabel.textContent = projectName;
@@ -2060,11 +2070,15 @@ function openProjectTasks(projectName) {
   const close = () => {
     modal.classList.remove('show');
     closeBtn.removeEventListener('click', close);
-    doneBtn.removeEventListener('click', onDone);
+    if (closeFooterBtn) closeFooterBtn.removeEventListener('click', close);
+    saveBtn.removeEventListener('click', onSave);
     modal.removeEventListener('click', onBackdrop);
     document.removeEventListener('keydown', onKey);
     form.removeEventListener('submit', onSubmit);
     planningForm?.removeEventListener('submit', onPlanningSubmit);
+    planningForm?.removeEventListener('input', markDirty);
+    planningForm?.removeEventListener('change', markDirty);
+    notesTextarea?.removeEventListener('input', markDirty);
     toggle?.removeEventListener('click', toggleCompleted);
     if (_projectNotesCleanup) {
       _projectNotesCleanup();
@@ -2101,13 +2115,8 @@ function openProjectTasks(projectName) {
   };
   const onPlanningSubmit = async event => {
     event.preventDefault();
-    try {
-      await saveProjectPlanning(projectName);
-      toast(`Updated ${projectName}`);
-      await load();
-      refreshProjectPlanningForm(projectName);
-    } catch (error) {
-      toast(error.message || 'Failed to save project planning');
+    if (isDirty) {
+      await onSave();
     }
   };
 
@@ -2115,19 +2124,21 @@ function openProjectTasks(projectName) {
   _projectNotesCleanup = _notes ? _notes.cleanup : null;
   const _saveNotes = _notes ? _notes.save : null;
 
-  const onDone = async () => {
-    doneBtn.disabled = true;
-    doneBtn.textContent = 'Saving\u2026';
+  const onSave = async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving\u2026';
     try {
       await saveProjectPlanning(projectName);
+      if (_saveNotes) await _saveNotes();
       toast(`Updated ${projectName}`);
       await load();
       refreshProjectPlanningForm(projectName);
-      if (_saveNotes) await _saveNotes();
-      close();
+      isDirty = false;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saved';
     } catch(error) {
-      doneBtn.disabled = false;
-      doneBtn.textContent = 'Save & Close';
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
       toast(error.message || 'Failed to save');
     }
   };
@@ -2135,11 +2146,15 @@ function openProjectTasks(projectName) {
   projectTaskModalState = { close, showCompleted: false };
   modal.classList.add('show');
   closeBtn.addEventListener('click', close);
-  doneBtn.addEventListener('click', onDone);
+  if (closeFooterBtn) closeFooterBtn.addEventListener('click', close);
+  saveBtn.addEventListener('click', onSave);
   modal.addEventListener('click', onBackdrop);
   document.addEventListener('keydown', onKey);
   form.addEventListener('submit', onSubmit);
   planningForm?.addEventListener('submit', onPlanningSubmit);
+  planningForm?.addEventListener('input', markDirty);
+  planningForm?.addEventListener('change', markDirty);
+  notesTextarea?.addEventListener('input', markDirty);
   toggle?.addEventListener('click', toggleCompleted);
   refreshProjectTaskModal(projectName);
   titleInput.focus();
@@ -3299,8 +3314,8 @@ function plannerFocusItems(projects, goals = []) {
     const days = daysSinceTimestamp(project.last_seen);
     const isRecentPersonal = project.type === 'personal' && days != null && days <= 3;
     const isClient = project.type === 'client';
-    const isFinishing = project.status === 'finishing';
-    const isFinishCandidate = project.type === 'personal' && ['in_progress', 'finishing'].includes(project.status || '') && days != null && days <= 7;
+    const isFinishing = project.status === 'finishing' || project.status === 'final_touches';
+    const isFinishCandidate = project.type === 'personal' && ['in_progress', 'finishing', 'final_touches'].includes(project.status || '') && days != null && days <= 7;
     const deadlineReasons = projectDeadlineReasons(project);
     if (isFinishCandidate) {
       plannerAddSuggestion(items, seen, {
@@ -3311,7 +3326,7 @@ function plannerFocusItems(projects, goals = []) {
         meta: `${fmt.dur(project.total_seconds || 0)} tracked · ${lastWorkedLabel(project)}`,
         score: 68 + (isFinishing ? 24 : 10) + Math.max(0, 10 - days) + Math.min(openCount * 5, 18),
         reasons: [
-          { label: isFinishing ? 'Finishing' : 'In progress', className: 'is-finishing' },
+          { label: project.status === 'final_touches' ? 'Final Touches' : isFinishing ? 'Finishing' : 'In progress', className: 'is-finishing' },
           { label: days === 0 ? 'Worked today' : `Worked ${days}d ago`, className: 'is-momentum' },
           ...(openCount ? [{ label: `${openCount} open task${openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
           ...plannerGoalReasonPills(goals, project),
@@ -3328,7 +3343,7 @@ function plannerFocusItems(projects, goals = []) {
       score: (isClient ? 48 : 0) + (isFinishing ? 34 : 0) + (isRecentPersonal ? 24 : 0) + Math.min(openCount * 6, 24) + (deadlineReasons.length ? 22 : 0),
       reasons: [
         ...(isClient ? [{ label: 'Client', className: 'is-client' }] : []),
-        ...(isFinishing ? [{ label: 'Finishing', className: 'is-finishing' }] : []),
+        ...(isFinishing ? [{ label: project.status === 'final_touches' ? 'Final Touches' : 'Finishing', className: 'is-finishing' }] : []),
         ...(isRecentPersonal ? [{ label: 'Personal momentum', className: 'is-momentum' }] : []),
         ...(openCount ? [{ label: `${openCount} open task${openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
         ...deadlineReasons.slice(0, 2),
@@ -3438,7 +3453,7 @@ async function updateProjectPinned(project, pinned) {
 }
 
 function todayFocusProjects(projects) {
-  const activeStatuses = new Set(['idea', 'needs_work', 'in_progress', 'finishing']);
+  const activeStatuses = new Set(['idea', 'needs_work', 'in_progress', 'finishing', 'final_touches']);
   const candidates = (projects || [])
     .filter(project => activeStatuses.has(project.status || ''))
     .filter(project => !!project.due_date);
@@ -3450,7 +3465,7 @@ function todayFocusProjects(projects) {
     const bRecent = daysSinceTimestamp(b.last_seen);
     if ((aRecent ?? 99999) !== (bRecent ?? 99999)) return (aRecent ?? 99999) - (bRecent ?? 99999);
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-    const statusWeight = { finishing: 0, in_progress: 1, needs_work: 2, idea: 3 };
+    const statusWeight = { finishing: 0, final_touches: 0, in_progress: 1, needs_work: 2, idea: 3 };
     const aStatus = statusWeight[a.status || ''] ?? 9;
     const bStatus = statusWeight[b.status || ''] ?? 9;
     if (aStatus !== bStatus) return aStatus - bStatus;
@@ -3692,7 +3707,7 @@ function renderPlanner(data) {
     let emptyHtml = '';
     if (value === '') {
       emptyHtml = '<div class="board-empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>Drag projects here or set status</div>';
-    } else if (value === 'finishing') {
+    } else if (value === 'finishing' || value === 'final_touches') {
       emptyHtml = '<div class="board-empty-hint">Move projects here when they are close to done</div>';
     } else {
       emptyHtml = '<div class="board-empty-hint">No projects</div>';
