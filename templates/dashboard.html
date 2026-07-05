@@ -1393,6 +1393,11 @@ header{
   transition:opacity .2s ease, transform .25s cubic-bezier(.2,.8,.3,1);
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast-action{
+  margin-left:12px;padding:4px 9px;border:1px solid rgba(255,255,255,.38);border-radius:8px;
+  background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;
+}
+.toast-action:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 
 .modal-backdrop{
   position:fixed;inset:0;background:var(--modal-backdrop);
@@ -1652,6 +1657,28 @@ select.project-planning-input{
 .project-planning-input:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
+.date-control{position:relative}
+.date-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}
+.date-trigger svg{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.8;flex:0 0 auto}
+.date-trigger-placeholder{color:var(--ink-4)}
+.tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:264px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 96%,#000);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
+.tracker-calendar[hidden]{display:none}
+.tracker-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tracker-calendar-month{font-size:13px;font-weight:800;letter-spacing:.01em;color:var(--ink)}
+.tracker-calendar-nav{display:flex;gap:4px}
+.tracker-calendar-nav button{width:26px;height:26px;border:1px solid var(--border);border-radius:7px;background:var(--control-bg);color:var(--ink-3);font-size:16px;line-height:1;cursor:pointer}
+.tracker-calendar-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.tracker-calendar-week,.tracker-calendar-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.tracker-calendar-week span{padding:3px 0 5px;text-align:center;font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--ink-4)}
+.tracker-calendar-day{position:relative;aspect-ratio:1;border:0;border-radius:8px;background:transparent;color:var(--ink-2);font:inherit;font-size:11px;font-weight:650;cursor:pointer}
+.tracker-calendar-day:hover{background:var(--control-bg);color:var(--ink)}
+.tracker-calendar-day.is-outside{color:var(--ink-4);opacity:.45}
+.tracker-calendar-day.is-today::after{content:"";position:absolute;left:50%;bottom:3px;width:3px;height:3px;border-radius:50%;background:var(--accent);transform:translateX(-50%)}
+.tracker-calendar-day.is-selected{background:var(--accent);color:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+.tracker-calendar-day.is-selected::after{background:#fff}
+.tracker-calendar-foot{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)}
+.tracker-calendar-foot button{border:0;background:transparent;color:var(--ink-4);font-size:10px;font-weight:750;cursor:pointer;padding:3px}
+.tracker-calendar-foot button:hover{color:var(--accent)}
 .task-form{
   display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:10px;
   align-items:center;padding:12px;border:1px solid var(--border);
@@ -2561,27 +2588,37 @@ tbody tr:hover .row-note{opacity:1}
 }
 .notes-merge-unmerge-btn:hover{background:var(--danger-soft);border-color:rgba(255,59,48,.28);color:var(--danger)}
 .notes-merge-empty{font-size:13px;color:var(--ink-4);padding:10px 0}
-.notes-merge-into-wrap{
-  display:flex;gap:8px;align-items:center;
+.notes-merge-target{color:var(--ink);text-transform:none;letter-spacing:0}
+.notes-merge-picker{display:grid;gap:9px}
+.notes-merge-search{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:13px;outline:none;
 }
-.notes-merge-into-select{
-  flex:1;min-width:0;padding:8px 12px;border:1px solid var(--border);border-radius:10px;
-  background:var(--surface);color:var(--ink);font-size:13px;
-  font-family:var(--font-body);outline:none;
-  transition:border-color .15s ease,box-shadow .15s ease;
-  appearance:none;-webkit-appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 10px center;
-  padding-right:30px;
+.notes-merge-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.notes-merge-selection-summary{display:flex;align-items:center;justify-content:space-between;color:var(--ink-4);font-size:12px}
+.notes-merge-selection-summary button{border:0;background:none;color:var(--accent);font:inherit;font-weight:650;cursor:pointer}
+.notes-merge-project-list{
+  display:grid;gap:5px;max-height:240px;overflow:auto;padding:5px;
+  border:1px solid var(--border);border-radius:12px;background:var(--control-bg);
 }
-.notes-merge-into-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.notes-merge-project-row{
+  display:grid;grid-template-columns:22px minmax(0,1fr);align-items:center;gap:9px;
+  min-height:44px;padding:7px 10px;border:1px solid transparent;border-radius:9px;
+  background:var(--surface);color:var(--ink);font-size:13px;cursor:pointer;
+}
+.notes-merge-project-row:hover{background:var(--control-bg-strong)}
+.notes-merge-project-row.is-selected{border-color:var(--accent);background:var(--accent-soft)}
+.notes-merge-project-row:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.notes-merge-project-row input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.notes-merge-project-row span{overflow-wrap:anywhere}
 .notes-merge-into-btn{
-  padding:8px 16px;border-radius:10px;border:none;
+  justify-self:end;padding:9px 16px;border-radius:10px;border:none;
   background:var(--accent);color:#fff;font-size:13px;font-weight:600;
   cursor:pointer;transition:opacity .15s ease;white-space:nowrap;
 }
 .notes-merge-into-btn:hover{opacity:.88}
 .notes-merge-into-btn:disabled{opacity:.4;cursor:not-allowed}
+.merge-confirm-list{max-height:180px;overflow:auto;margin:10px 0;padding-left:22px;text-align:left}
 
 .proj-badge{
   display:inline-flex;align-items:center;gap:8px;
@@ -2788,7 +2825,7 @@ select.planner-goal-input{
 .planner-pill.is-due-soon{color:#b36b00;border-color:rgba(255,159,10,.32);background:rgba(255,159,10,.10)}
 .planner-pill.is-delivered{color:var(--live);border-color:rgba(52,199,89,.24);background:rgba(52,199,89,.09)}
 .planner-pill.is-priority{color:var(--ink);border-color:var(--border-strong)}
-.planner-pill.is-task{color:var(--danger);border-color:rgba(255,59,48,.22);background:var(--danger-soft)}
+.planner-pill.is-task{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .planner-pill.is-momentum{color:#0f7a55;border-color:rgba(15,122,85,.24);background:rgba(15,122,85,.09)}
 .planner-pill.is-goal{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
 .planner-action-label{
@@ -3323,7 +3360,14 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
           </div>
           <div class="project-planning-field">
             <label for="projectDueDateInput">Due Date</label>
-            <input class="project-planning-input" id="projectDueDateInput" type="date">
+            <div class="date-control" id="projectDueDateControl">
+              <input id="projectDueDateInput" type="hidden">
+              <button class="project-planning-input date-trigger" id="projectDueDateTrigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+                <span class="date-trigger-placeholder">Set date</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2"></rect><path d="M6.5 2.5v4M13.5 2.5v4M3 8.5h14"></path></svg>
+              </button>
+              <div class="tracker-calendar" id="projectDueDateCalendar" role="dialog" aria-label="Choose due date" hidden></div>
+            </div>
           </div>
           <div class="project-planning-field">
             <label for="projectPinnedInput">Pinned</label>
@@ -4977,12 +5021,24 @@ function setStoredGoalHours(storageKey, hours) {
 
 // ── Toast ──
 let toastTimer = null;
-function toast(msg){
+function toast(msg, action = null){
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  t.replaceChildren(document.createTextNode(msg));
+  if (action && action.label && typeof action.onClick === 'function') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      clearTimeout(toastTimer);
+      await action.onClick();
+    }, { once: true });
+    t.appendChild(button);
+  }
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 7000 : 2400);
 }
 
 // ── Confirm ──
@@ -5323,6 +5379,68 @@ async function refreshProjectTaskModal(projectName) {
   }
 }
 
+const projectDatePickerState = { view: new Date(), selected: '' };
+
+function formatProjectDate(value) {
+  if (!value) return 'Set date';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(year, month - 1, day));
+}
+
+function setProjectDueDate(value) {
+  const input = document.getElementById('projectDueDateInput');
+  const trigger = document.getElementById('projectDueDateTrigger');
+  if (!input || !trigger) return;
+  input.value = value;
+  projectDatePickerState.selected = value;
+  const label = trigger.querySelector('span');
+  label.textContent = formatProjectDate(value);
+  label.classList.toggle('date-trigger-placeholder', !value);
+}
+
+function renderProjectDatePicker() {
+  const calendar = document.getElementById('projectDueDateCalendar');
+  if (!calendar) return;
+  const view = projectDatePickerState.view;
+  const year = view.getFullYear(), month = view.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - first.getDay());
+  const today = new Date();
+  const iso = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  const days = Array.from({length:42}, (_, index) => {
+    const date = new Date(start); date.setDate(start.getDate() + index);
+    const value = iso(date);
+    return `<button class="tracker-calendar-day${date.getMonth() !== month ? ' is-outside' : ''}${value === iso(today) ? ' is-today' : ''}${value === projectDatePickerState.selected ? ' is-selected' : ''}" type="button" data-date="${value}">${date.getDate()}</button>`;
+  }).join('');
+  calendar.innerHTML = `<div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-month="-1" aria-label="Previous month">‹</button><button type="button" data-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day=>`<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div><div class="tracker-calendar-foot"><button type="button" data-date="">Clear</button><button type="button" data-today>Today</button></div>`;
+}
+
+function closeProjectDatePicker() {
+  const calendar = document.getElementById('projectDueDateCalendar');
+  const trigger = document.getElementById('projectDueDateTrigger');
+  if (calendar) calendar.hidden = true;
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('projectDueDateTrigger')?.addEventListener('click', event => {
+  event.stopPropagation();
+  const calendar = document.getElementById('projectDueDateCalendar');
+  const selected = document.getElementById('projectDueDateInput')?.value;
+  if (selected) { const [y,m] = selected.split('-').map(Number); projectDatePickerState.view = new Date(y,m-1,1); }
+  calendar.hidden = !calendar.hidden;
+  event.currentTarget.setAttribute('aria-expanded', String(!calendar.hidden));
+  if (!calendar.hidden) renderProjectDatePicker();
+});
+document.getElementById('projectDueDateCalendar')?.addEventListener('click', event => {
+  event.stopPropagation();
+  const monthButton = event.target.closest('[data-month]');
+  if (monthButton) { projectDatePickerState.view.setMonth(projectDatePickerState.view.getMonth() + Number(monthButton.dataset.month)); renderProjectDatePicker(); return; }
+  if (event.target.closest('[data-today]')) { const now = new Date(); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); closeProjectDatePicker(); return; }
+  const dayButton = event.target.closest('[data-date]');
+  if (dayButton) { setProjectDueDate(dayButton.dataset.date); closeProjectDatePicker(); }
+});
+document.addEventListener('click', closeProjectDatePicker);
+
 function refreshProjectPlanningForm(projectName) {
   const project = findProjectByName(projectName) || { project_name: projectName };
   const categoryInput = document.getElementById('projectCategoryInput');
@@ -5339,7 +5457,7 @@ function refreshProjectPlanningForm(projectName) {
   statusInput.innerHTML = PROJECT_STATUS_OPTIONS
     .map(([value, label]) => `<option value="${value}" ${(project.status || '') === value ? 'selected' : ''}>${escapeHtml(label)}</option>`)
     .join('');
-  dueInput.value = project.due_date || '';
+  setProjectDueDate(project.due_date || '');
   pinnedInput.checked = !!project.pinned;
   if (summary) {
     const bits = [
@@ -5537,8 +5655,8 @@ function openProjectTasks(projectName) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving\u2026';
     try {
-      await saveProjectPlanning(projectName);
-      if (_saveNotes) await _saveNotes();
+      const metadata = await saveProjectPlanning(projectName);
+      if (_saveNotes) await _saveNotes(metadata);
       toast(`Updated ${projectName}`);
       await load();
       refreshProjectPlanningForm(projectName);
@@ -5773,19 +5891,22 @@ function setupProjectInlineNotes(projectName) {
     }
   }
 
-  async function onSave() {
+  async function onSave(savedMetadata = null) {
     if (!textarea) return;
     const val = textarea.value.trim();
     if (currentMode === 'global') {
       currentProjectNote = val;
       const proj = findProjectByName(projectName) || { project_name: projectName };
+      const metadata = savedMetadata || {};
       await postJson('/api/project-metadata', {
         project_name: projectName,
-        status: proj.status || '',
-        type: proj.type || '',
-        priority: proj.priority || '',
-        due_date: proj.due_date || '',
-        pinned: !!proj.pinned,
+        status: metadata.status ?? (proj.status || ''),
+        type: metadata.type ?? (proj.type || ''),
+        priority: metadata.priority ?? (proj.priority || ''),
+        due_date: metadata.due_date ?? (proj.due_date || ''),
+        hard_deadline: metadata.hard_deadline ?? (proj.hard_deadline || ''),
+        turn_in_date: metadata.turn_in_date ?? (proj.turn_in_date || ''),
+        pinned: metadata.pinned ?? !!proj.pinned,
         project_note: val,
       });
     } else {

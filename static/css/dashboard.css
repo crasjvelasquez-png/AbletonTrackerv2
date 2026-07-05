@@ -2661,7 +2661,7 @@ select.planner-goal-input{
 .planner-pill.is-due-soon{color:#b36b00;border-color:rgba(255,159,10,.32);background:rgba(255,159,10,.10)}
 .planner-pill.is-delivered{color:var(--live);border-color:rgba(52,199,89,.24);background:rgba(52,199,89,.09)}
 .planner-pill.is-priority{color:var(--ink);border-color:var(--border-strong)}
-.planner-pill.is-task{color:var(--danger);border-color:rgba(255,59,48,.22);background:var(--danger-soft)}
+.planner-pill.is-task{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .planner-pill.is-momentum{color:#0f7a55;border-color:rgba(15,122,85,.24);background:rgba(15,122,85,.09)}
 .planner-pill.is-goal{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
 .planner-action-label{

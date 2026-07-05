@@ -1568,12 +1568,24 @@ function setStoredGoalHours(storageKey, hours) {
 
 // ── Toast ──
 let toastTimer = null;
-function toast(msg){
+function toast(msg, action = null){
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  t.replaceChildren(document.createTextNode(msg));
+  if (action && action.label && typeof action.onClick === 'function') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      clearTimeout(toastTimer);
+      await action.onClick();
+    }, { once: true });
+    t.appendChild(button);
+  }
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 7000 : 2400);
 }
 
 // ── Confirm ──
@@ -2833,7 +2845,7 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
     try {
       const [aliasData, projectListData] = await Promise.all([
         getJson(`/api/project-aliases?project=${encodeURIComponent(currentProjectName)}`),
-        getJson('/api/project-list'),
+        getJson('/api/project-list?sort=recent'),
       ]);
       const aliases = aliasData.aliases || [];
       const allProjects = (projectListData || []).map(p => typeof p === 'string' ? p : p.project_name).filter(Boolean);
@@ -2859,49 +2871,88 @@ function openNotesPopup({ sessionIds, projectName, notes, startTimes, endTimes, 
       }
       html += '</div>';
 
-      // Section 2: Merge another project into this one
+      // Section 2: Merge multiple projects into this one
       html += '<div class="notes-merge-section">';
-      html += '<div class="notes-merge-section-title">Merge another project here</div>';
+      html += `<div class="notes-merge-section-title">Merge into <span class="notes-merge-target">${escapeHtml(currentProjectName)}</span></div>`;
       if (otherProjects.length === 0) {
         html += '<div class="notes-merge-empty">No other projects available.</div>';
       } else {
-        html += '<div class="notes-merge-into-wrap">';
-        html += '<select class="notes-merge-into-select" id="notesMergeSelect">';
-        html += '<option value="">Choose a project\u2026</option>';
+        html += '<div class="notes-merge-picker">';
+        html += '<input class="notes-merge-search" id="notesMergeSearch" type="search" autocomplete="off" placeholder="Search projects…" aria-label="Search projects to merge">';
+        html += '<div class="notes-merge-selection-summary"><span id="notesMergeCount">0 selected</span><button id="notesMergeClear" type="button" hidden>Clear</button></div>';
+        html += '<div class="notes-merge-project-list" id="notesMergeProjectList" role="group" aria-label="Projects available to merge">';
         otherProjects.forEach(p => {
-          html += `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`;
+          html += `<label class="notes-merge-project-row" data-project-name="${escapeHtml(p.toLocaleLowerCase())}">
+            <input type="checkbox" value="${escapeHtml(p)}">
+            <span>${escapeHtml(p)}</span>
+          </label>`;
         });
-        html += '</select>';
-        html += '<button class="notes-merge-into-btn" id="notesMergeConfirmBtn" type="button" disabled>Merge</button>';
+        html += '</div>';
+        html += '<button class="notes-merge-into-btn" id="notesMergeConfirmBtn" type="button" disabled>Merge selected</button>';
         html += '</div>';
       }
       html += '</div>';
 
       mergeBody.innerHTML = html;
 
-      // Bind select enable button
-      const mergeSelect = mergeBody.querySelector('#notesMergeSelect');
+      // Bind searchable multi-select list
+      const mergeSearch = mergeBody.querySelector('#notesMergeSearch');
+      const mergeList = mergeBody.querySelector('#notesMergeProjectList');
+      const mergeCount = mergeBody.querySelector('#notesMergeCount');
+      const mergeClear = mergeBody.querySelector('#notesMergeClear');
       const mergeConfirmBtn = mergeBody.querySelector('#notesMergeConfirmBtn');
-      if (mergeSelect && mergeConfirmBtn) {
-        mergeSelect.addEventListener('change', () => {
-          mergeConfirmBtn.disabled = !mergeSelect.value;
+      if (mergeList && mergeConfirmBtn) {
+        const selectedProjects = () => Array.from(mergeList.querySelectorAll('input:checked')).map(input => input.value);
+        const updateSelection = () => {
+          const count = selectedProjects().length;
+          mergeCount.textContent = `${count} selected`;
+          mergeClear.hidden = count === 0;
+          mergeConfirmBtn.disabled = count === 0;
+          mergeList.querySelectorAll('.notes-merge-project-row').forEach(row => {
+            row.classList.toggle('is-selected', row.querySelector('input').checked);
+          });
+        };
+        mergeList.addEventListener('change', updateSelection);
+        mergeSearch.addEventListener('input', () => {
+          const query = mergeSearch.value.trim().toLocaleLowerCase();
+          mergeList.querySelectorAll('.notes-merge-project-row').forEach(row => {
+            row.hidden = Boolean(query) && !row.dataset.projectName.includes(query);
+          });
+        });
+        mergeClear.addEventListener('click', () => {
+          mergeList.querySelectorAll('input:checked').forEach(input => { input.checked = false; });
+          updateSelection();
+          mergeSearch.focus();
         });
         mergeConfirmBtn.addEventListener('click', async () => {
-          const aliasName = mergeSelect.value;
-          if (!aliasName) return;
+          const selected = selectedProjects();
+          if (!selected.length) return;
+          const projectList = selected.map(name => `<li><code>${escapeHtml(name)}</code></li>`).join('');
           const ok = await confirmDialog({
-            title: 'Merge <em>project?</em>',
-            body: `All sessions, notes, and tasks from <code>${escapeHtml(aliasName)}</code> will be combined into <code>${escapeHtml(currentProjectName)}</code>.<br><br>You can undo this later with the Unmerge button.`,
-            confirmLabel: 'Merge',
+            title: `Merge ${selected.length} <em>project${selected.length === 1 ? '' : 's'}?</em>`,
+            body: `Merge these projects into <code>${escapeHtml(currentProjectName)}</code>:<ul class="merge-confirm-list">${projectList}</ul>Sessions, notes, tasks, and time will be combined.`,
+            confirmLabel: 'Merge selected',
           });
           if (!ok) return;
           try {
-            await postJson('/api/merge-projects', { canonical_name: currentProjectName, aliases: [aliasName] });
-            toast(`Merged \u201c${aliasName}\u201d into \u201c${currentProjectName}\u201d`);
+            const result = await postJson('/api/merge-projects', { canonical_name: currentProjectName, aliases: selected });
             await load();
             renderMergeTab();
+            toast(`Merged ${result.merged_count} project${result.merged_count === 1 ? '' : 's'} into ${currentProjectName}`, {
+              label: 'Undo',
+              onClick: async () => {
+                try {
+                  await postJson('/api/unmerge-projects', { aliases: result.aliases });
+                  toast(`Restored ${result.aliases.length} project${result.aliases.length === 1 ? '' : 's'}`);
+                  await load();
+                  renderMergeTab();
+                } catch (e) {
+                  toast(e.message || 'Failed to undo merge');
+                }
+              },
+            });
           } catch (e) {
-            toast('Failed to merge project');
+            toast(e.message || 'Failed to merge projects');
           }
         });
       }

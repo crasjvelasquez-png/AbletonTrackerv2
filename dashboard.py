@@ -2547,6 +2547,30 @@ def get_project_list() -> list[str]:
         return projects
 
 
+def get_project_list_recent() -> list[dict]:
+    """Return canonical projects ordered by their most recent session."""
+    if not DB_PATH.exists():
+        return []
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
+                   MAX(COALESCE(s.last_seen_time, s.start_time, 0)) AS last_active
+            FROM sessions s
+            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+            WHERE s.project_name IS NOT NULL
+              AND TRIM(s.project_name) != ''
+            GROUP BY COALESCE(pa.canonical_name, s.project_name)
+            ORDER BY last_active DESC, LOWER(project_name) ASC
+            """
+        ).fetchall()
+        return [
+            {"project_name": row["project_name"], "last_active": row["last_active"]}
+            for row in rows
+        ]
+
+
 def get_project_aliases(project_name: str) -> dict:
     """Return alias information for a project (which projects are merged into it)."""
     if not DB_PATH.exists():
@@ -6374,7 +6398,7 @@ setInterval(tickSessionTimer, 1_000);
 
 def merge_projects(canonical_name: str, aliases: list) -> dict:
     canonical_name = (canonical_name or "").strip()
-    if not canonical_name or not aliases:
+    if not canonical_name or not isinstance(aliases, list) or not aliases:
         return {"error": "Target project and at least one project to merge are required."}
     if not DB_PATH.exists():
         return {"error": "No data."}
@@ -6382,23 +6406,57 @@ def merge_projects(canonical_name: str, aliases: list) -> dict:
     with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         try:
+            normalized_aliases = [(alias or "").strip() for alias in aliases]
+            if any(not alias for alias in normalized_aliases):
+                return {"error": "Project names cannot be empty."}
+            if canonical_name in normalized_aliases:
+                return {"error": "A project cannot be merged into itself."}
+            if len(set(normalized_aliases)) != len(normalized_aliases):
+                return {"error": "Duplicate projects were selected."}
+
+            names = [canonical_name, *normalized_aliases]
+            placeholders = ",".join("?" for _ in names)
+            existing = {
+                row[0]
+                for row in conn.execute(
+                    f"SELECT DISTINCT project_name FROM sessions WHERE project_name IN ({placeholders})",
+                    names,
+                ).fetchall()
+            }
+            missing = [name for name in names if name not in existing]
+            if missing:
+                return {"error": f"Project not found: {missing[0]}"}
+
+            mapped = conn.execute(
+                f"SELECT alias_name FROM project_aliases WHERE alias_name IN ({','.join('?' for _ in normalized_aliases)})",
+                normalized_aliases,
+            ).fetchall()
+            if mapped:
+                return {"error": f"Project is already merged: {mapped[0][0]}"}
+
+            target_is_alias = conn.execute(
+                "SELECT 1 FROM project_aliases WHERE alias_name = ?", (canonical_name,)
+            ).fetchone()
+            if target_is_alias:
+                return {"error": "The destination project is already merged into another project."}
+
             conn.execute("BEGIN")
-            for alias in aliases:
-                alias = (alias or "").strip()
-                if not alias or alias == canonical_name:
-                    continue
+            for alias in normalized_aliases:
                 conn.execute(
                     """
                     INSERT INTO project_aliases (alias_name, canonical_name)
                     VALUES (?, ?)
-                    ON CONFLICT(alias_name) DO UPDATE SET
-                        canonical_name = excluded.canonical_name
                     """,
                     (alias, canonical_name)
                 )
             conn.commit()
             _cache_clear("project_list")
-            return {"ok": True}
+            return {
+                "ok": True,
+                "canonical_name": canonical_name,
+                "aliases": normalized_aliases,
+                "merged_count": len(normalized_aliases),
+            }
         except Exception as e:
             conn.rollback()
             return {"error": str(e)}
@@ -6423,6 +6481,42 @@ def unmerge_project(alias_name: str) -> dict:
             conn.commit()
             _cache_clear("project_list")
             return {"ok": True, "removed": alias_name}
+        except Exception as e:
+            conn.rollback()
+            return {"error": str(e)}
+
+
+def unmerge_projects(alias_names: list) -> dict:
+    """Atomically restore several aliases as independent projects."""
+    if not isinstance(alias_names, list) or not alias_names:
+        return {"error": "At least one alias is required."}
+    normalized = [(name or "").strip() for name in alias_names]
+    if any(not name for name in normalized) or len(set(normalized)) != len(normalized):
+        return {"error": "Aliases must be unique, non-empty project names."}
+    if not DB_PATH.exists():
+        return {"error": "No data."}
+
+    with db_connection() as conn:
+        try:
+            placeholders = ",".join("?" for _ in normalized)
+            found = {
+                row[0]
+                for row in conn.execute(
+                    f"SELECT alias_name FROM project_aliases WHERE alias_name IN ({placeholders})",
+                    normalized,
+                ).fetchall()
+            }
+            missing = [name for name in normalized if name not in found]
+            if missing:
+                return {"error": f"Alias not found: {missing[0]}"}
+            conn.execute("BEGIN")
+            conn.execute(
+                f"DELETE FROM project_aliases WHERE alias_name IN ({placeholders})",
+                normalized,
+            )
+            conn.commit()
+            _cache_clear("project_list")
+            return {"ok": True, "removed": normalized, "removed_count": len(normalized)}
         except Exception as e:
             conn.rollback()
             return {"error": str(e)}
@@ -6533,7 +6627,8 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-list":
-            self._json(get_project_list())
+            sort_value = parse_qs(parsed.query).get("sort", [""])[0]
+            self._json(get_project_list_recent() if sort_value == "recent" else get_project_list())
         elif parsed.path == "/api/project-aliases":
             project = parse_qs(parsed.query).get("project", [""])[0]
             if not project:
@@ -6655,6 +6750,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "request body is required"}, status=400)
                 return
             result = unmerge_project(payload.get("alias_name", ""))
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/unmerge-projects":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = unmerge_projects(payload.get("aliases", []))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/delete-session":
             try:

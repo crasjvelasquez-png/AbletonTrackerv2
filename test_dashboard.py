@@ -1920,5 +1920,98 @@ class ConsolidateSessionsTests(unittest.TestCase):
         self.assertAlmostEqual(x_row["end_time"], x2_end)
 
 
+class MultiProjectMergeTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                tracker.Path(str(self.db_path) + suffix).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert_project(self, name, last_seen):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions
+                    (project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name, last_seen - 60, last_seen, last_seen, 60, f"note-{name}", '[{"text":"task","done":false}]'),
+            )
+            conn.commit()
+
+    def _aliases(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            return conn.execute(
+                "SELECT alias_name, canonical_name FROM project_aliases ORDER BY alias_name"
+            ).fetchall()
+
+    def test_merges_multiple_projects_and_returns_summary(self):
+        for index, name in enumerate(("Song", "Song v1", "Song mix"), 1):
+            self._insert_project(name, index * 100)
+
+        result = dashboard.merge_projects("Song", ["Song v1", "Song mix"])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["merged_count"], 2)
+        self.assertEqual(result["aliases"], ["Song v1", "Song mix"])
+        self.assertEqual(self._aliases(), [("Song mix", "Song"), ("Song v1", "Song")])
+
+    def test_batch_unmerge_is_atomic(self):
+        for name in ("Song", "Song v1", "Song mix"):
+            self._insert_project(name, 100)
+        dashboard.merge_projects("Song", ["Song v1", "Song mix"])
+
+        failed = dashboard.unmerge_projects(["Song v1", "Missing"])
+        self.assertIn("error", failed)
+        self.assertEqual(len(self._aliases()), 2)
+
+        result = dashboard.unmerge_projects(["Song v1", "Song mix"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["removed_count"], 2)
+        self.assertEqual(self._aliases(), [])
+
+    def test_rejects_invalid_group_without_partial_merge(self):
+        for name in ("Song", "Song v1", "Song mix"):
+            self._insert_project(name, 100)
+
+        self.assertIn("error", dashboard.merge_projects("Song", ["Song v1", "Missing"]))
+        self.assertEqual(self._aliases(), [])
+        self.assertIn("error", dashboard.merge_projects("Song", ["Song v1", "Song v1"]))
+        self.assertEqual(self._aliases(), [])
+        self.assertIn("error", dashboard.merge_projects("Song", ["Song"]))
+        self.assertEqual(self._aliases(), [])
+
+    def test_rejects_already_merged_alias_without_overwriting(self):
+        for name in ("Song", "Other", "Song v1", "Song mix"):
+            self._insert_project(name, 100)
+        dashboard.merge_projects("Other", ["Song v1"])
+
+        result = dashboard.merge_projects("Song", ["Song mix", "Song v1"])
+
+        self.assertIn("error", result)
+        self.assertEqual(self._aliases(), [("Song v1", "Other")])
+
+    def test_recent_project_list_orders_by_latest_activity(self):
+        self._insert_project("Old", 100)
+        self._insert_project("Newest", 300)
+        self._insert_project("Middle", 200)
+
+        projects = dashboard.get_project_list_recent()
+
+        self.assertEqual([item["project_name"] for item in projects], ["Newest", "Middle", "Old"])
+
+
 if __name__ == "__main__":
     unittest.main()
