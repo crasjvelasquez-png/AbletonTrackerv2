@@ -55,6 +55,9 @@ NON_PROJECT_TITLE_PATTERNS = [
     r"^save live set as$",
     r"^collect all and save$",
     r"^manage files$",
+    # Generic accessibility/UI labels exposed as transient Live window titles.
+    r"^tooltip$",
+    r"^missing value$",
 ]
 _NON_PROJECT_TITLE_RES = [re.compile(p, re.IGNORECASE) for p in NON_PROJECT_TITLE_PATTERNS]
 _WHITESPACE_RE = re.compile(r"\s+")

@@ -436,6 +436,10 @@ class ParseProjectTitleTests(unittest.TestCase):
     def test_rejects_plugin_like_bare_titles_with_slashes(self):
         self.assertIsNone(tracker.parse_project_title("VocAlign 6 Pro AU/14-harmony 3 R"))
 
+    def test_rejects_transient_accessibility_labels(self):
+        self.assertIsNone(tracker.parse_project_title("tooltip"))
+        self.assertIsNone(tracker.parse_project_title("missing value"))
+
 
 class GetProjectNameTests(unittest.TestCase):
     def test_switches_to_single_bare_title_when_current_project_changes(self):
@@ -494,6 +498,8 @@ class PhantomCleanupTests(unittest.TestCase):
                 [
                     ("Export Audio...", 2, 61),
                     ("VocAlign 6 Pro AU/14-harmony 3 R", 2, 61),
+                    ("tooltip", 2, 61),
+                    ("missing value", 2, 61),
                     ("Real Song", 2, 61),
                     ("Untitled", 2, 61),
                     ("Export Audio...", None, 0),
@@ -501,10 +507,10 @@ class PhantomCleanupTests(unittest.TestCase):
             )
             conn.commit()
 
-        self.assertEqual(tracker.count_phantom_sessions(), 2)
+        self.assertEqual(tracker.count_phantom_sessions(), 4)
         result = tracker.cleanup_phantom_sessions()
 
-        self.assertEqual(result["deleted"], 2)
+        self.assertEqual(result["deleted"], 4)
         self.assertEqual(tracker.count_phantom_sessions(), 0)
 
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:

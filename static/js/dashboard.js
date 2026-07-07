@@ -3723,12 +3723,17 @@ function renderPlanner(data) {
             <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(project.project_name || 'Untitled')}</span>
           </div>
           <div class="board-card-meta">
-            <strong>${escapeHtml(projectDueDateText(project))}</strong>
-            ${categoryPill(project)}
+            <div class="board-card-meta-left">
+              <span class="board-card-due" title="Due date">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                ${escapeHtml(projectDueDateText(project))}
+              </span>
+              ${categoryPill(project)}
+            </div>
+            <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
+            </button>
           </div>
-          <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
-          </button>
         </div>
       </div>
     `;
@@ -4818,7 +4823,7 @@ function renderWeeklyTargetCard(target) {
     weekEnd: model.weekEnd,
   });
   if (requiredContext) {
-    requiredContext.textContent = model.isCurrentWeek ? 'This week' : humanWeeklyTargetLabel(model.weekStart);
+    requiredContext.textContent = weekStartDayName();
   }
 
   mount.innerHTML = `

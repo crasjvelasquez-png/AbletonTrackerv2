@@ -5692,10 +5692,10 @@ function render(data) {
         <div class="chart-wrap"><div id="dailyGoalCard"></div></div>
       </div>
       <div class="chart-card target-card">
-        <div class="section-head">
-          <h3 class="section-title">Weekly <em>Target</em></h3>
-          <div class="section-meta">
-            <span>This Week</span>
+          <div class="section-head">
+            <h3 class="section-title">Weekly <em>Target</em></h3>
+            <div class="section-meta">
+            <span>${weekStartDayName()}</span>
             <strong>${fmt.dur(summary.week_seconds || 0)}</strong>
             <span class="section-meta-note" id="weeklyGoalRemaining"></span>
           </div>
