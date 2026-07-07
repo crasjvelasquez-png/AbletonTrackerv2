@@ -600,6 +600,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
             progress_percent INTEGER NOT NULL DEFAULT 0,
             pinned       INTEGER NOT NULL DEFAULT 0,
             project_note TEXT NOT NULL DEFAULT '',
+            board_order  INTEGER NOT NULL DEFAULT 0,
             updated_at   INTEGER NOT NULL
         )
         """
@@ -617,6 +618,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         "progress_percent": "INTEGER NOT NULL DEFAULT 0",
         "pinned": "INTEGER NOT NULL DEFAULT 0",
         "project_note": "TEXT NOT NULL DEFAULT ''",
+        "board_order": "INTEGER NOT NULL DEFAULT 0",
     }
     for column, definition in metadata_columns.items():
         if column not in existing_columns:
@@ -959,7 +961,7 @@ def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note
+        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
         FROM project_metadata
         """
     ).fetchall()
@@ -987,6 +989,7 @@ def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
             "progress_percent": row["progress_percent"] or 0,
             "pinned": bool(row["pinned"]),
             "project_note": row["project_note"] or "",
+            "board_order": row["board_order"] or 0,
         }
     return metadata
 
@@ -1900,7 +1903,7 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note
+            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
             FROM project_metadata
             WHERE project_name = ?
             """,
@@ -1959,6 +1962,7 @@ def set_project_metadata(
                 normalized_progress,
                 normalized_pinned,
                 normalized_project_note,
+                existing["board_order"] if existing else 0,
             )
         ):
             cur = conn.execute(
@@ -1984,6 +1988,7 @@ def set_project_metadata(
                     "progress_percent": 0,
                     "pinned": False,
                     "project_note": "",
+                    "board_order": 0,
                 },
             }
 
@@ -2038,8 +2043,51 @@ def set_project_metadata(
                 "progress_percent": normalized_progress,
                 "pinned": normalized_pinned,
                 "project_note": normalized_project_note,
+                "board_order": existing["board_order"] if existing else 0,
             },
         }
+
+
+def reorder_project_board(project_name: str, status: str | None, ordered_projects: object) -> dict:
+    normalized_name = (project_name or "").strip()
+    normalized_status = (status or "").strip()
+    if not normalized_name:
+        return {"error": "Project name is required."}
+    if not isinstance(ordered_projects, list):
+        return {"error": "ordered_projects must be a list."}
+    names = [str(name).strip() for name in ordered_projects]
+    if any(not name for name in names) or len(names) != len(set(names)):
+        return {"error": "ordered_projects must contain unique project names."}
+    if normalized_name not in names:
+        return {"error": "Moved project is missing from ordered_projects."}
+
+    with db_connection() as conn:
+        statuses = get_project_status_options(conn)
+        if normalized_status and normalized_status not in statuses:
+            return {"error": "Unknown project status."}
+        known = {
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT project_name FROM sessions UNION SELECT project_name FROM project_metadata"
+            ).fetchall()
+        }
+        if any(name not in known for name in names):
+            return {"error": "Unknown project in board order."}
+        now = int(time.time())
+        for position, name in enumerate(names, start=1):
+            conn.execute(
+                """
+                INSERT INTO project_metadata (project_name, status, board_order, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(project_name) DO UPDATE SET
+                    status = excluded.status,
+                    board_order = excluded.board_order,
+                    updated_at = excluded.updated_at
+                """,
+                (name, normalized_status, position, now),
+            )
+        conn.commit()
+    return {"ok": True, "project_name": normalized_name, "status": normalized_status, "ordered_projects": names}
 
 
 def set_project_category(project_name: str, category_key: str | None) -> dict:
@@ -2497,9 +2545,9 @@ def _compute_data_etag(month_value: str = "") -> str:
         pm = conn.execute(
             """
             SELECT COUNT(*), MAX(rowid), MAX(updated_at),
-                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note, '|')
+                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note || ':' || board_order, '|')
             FROM (
-                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, updated_at
+                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, board_order, updated_at
                 FROM project_metadata
                 ORDER BY project_name
             )
@@ -2951,6 +2999,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 project["progress_percent"] = metadata.get("progress_percent", 0)
                 project["pinned"] = metadata.get("pinned", False)
                 project["project_note"] = metadata.get("project_note", "")
+                project["board_order"] = metadata.get("board_order", 0)
                 project.update(_project_deadline_summary(metadata, today))
                 project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
@@ -3014,6 +3063,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                         "progress_percent": metadata.get("progress_percent", 0),
                         "pinned": metadata.get("pinned", False),
                         "project_note": metadata.get("project_note", ""),
+                        "board_order": metadata.get("board_order", 0),
                         "deadline_state": deadline_summary["deadline_state"],
                         "deadline_label": deadline_summary["deadline_label"],
                         "deadline_reasons": deadline_summary["deadline_reasons"],
@@ -6824,6 +6874,21 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("progress_percent"),
                 payload.get("pinned"),
                 payload.get("project_note"),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-board/reorder":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = reorder_project_board(
+                payload.get("project_name", ""),
+                payload.get("status"),
+                payload.get("ordered_projects"),
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/artists":

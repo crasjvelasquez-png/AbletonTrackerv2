@@ -1661,7 +1661,7 @@ select.project-planning-input{
 .date-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}
 .date-trigger svg{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.8;flex:0 0 auto}
 .date-trigger-placeholder{color:var(--ink-4)}
-.tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:264px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 96%,#000);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
+.tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:264px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 78%,transparent);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
 .tracker-calendar[hidden]{display:none}
 .tracker-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .tracker-calendar-month{font-size:13px;font-weight:800;letter-spacing:.01em;color:var(--ink)}
@@ -1677,8 +1677,10 @@ select.project-planning-input{
 .tracker-calendar-day.is-selected{background:var(--accent);color:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
 .tracker-calendar-day.is-selected::after{background:#fff}
 .tracker-calendar-foot{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)}
-.tracker-calendar-foot button{border:0;background:transparent;color:var(--ink-4);font-size:10px;font-weight:750;cursor:pointer;padding:3px}
-.tracker-calendar-foot button:hover{color:var(--accent)}
+.tracker-calendar-foot button{border:0;background:transparent;color:var(--ink-4);font-size:10px;font-weight:750;cursor:pointer;padding:5px 8px;border-radius:7px}
+.tracker-calendar-foot button:hover{color:var(--accent);background:var(--control-bg)}
+.tracker-calendar-foot [data-date=""]{border:1px solid color-mix(in srgb,#ff5b62 28%,var(--border));background:color-mix(in srgb,#ff5b62 9%,transparent);color:#ff767c}
+.tracker-calendar-foot [data-date=""]:hover{border-color:color-mix(in srgb,#ff5b62 55%,var(--border));background:color-mix(in srgb,#ff5b62 16%,transparent);color:#ff9196}
 .task-form{
   display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:10px;
   align-items:center;padding:12px;border:1px solid var(--border);
@@ -2833,7 +2835,7 @@ select.planner-goal-input{
 }
 .planner-board-column{
   border:1px solid var(--border);border-radius:18px;background:var(--control-bg);
-  padding:14px;display:grid;gap:10px;align-content:start;
+  padding:14px;display:grid;gap:10px;align-content:start;width:300px;min-width:300px;
   background-color: var(--status-bg, var(--control-bg)) !important;
   transition: all 0.2s ease-in-out;
 }
@@ -2975,6 +2977,8 @@ select.planner-goal-input{
   min-width:0;min-height:0;height:24px;padding:3px 8px;border-radius:10px;gap:6px;font-size:11px;line-height:1;
 }
 .planner-board-project .category-pill-swatch{width:7px;height:7px}
+.planner-board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding:2px 2px 14px;scroll-snap-type:x proximity}
+.planner-board-column{scroll-snap-align:start}
 .board-pin{
   width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
   border:1px solid var(--border);border-radius:10px;background:var(--control-bg);
@@ -5435,9 +5439,9 @@ document.getElementById('projectDueDateCalendar')?.addEventListener('click', eve
   event.stopPropagation();
   const monthButton = event.target.closest('[data-month]');
   if (monthButton) { projectDatePickerState.view.setMonth(projectDatePickerState.view.getMonth() + Number(monthButton.dataset.month)); renderProjectDatePicker(); return; }
-  if (event.target.closest('[data-today]')) { const now = new Date(); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); closeProjectDatePicker(); return; }
+  if (event.target.closest('[data-today]')) { const now = new Date(); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); return; }
   const dayButton = event.target.closest('[data-date]');
-  if (dayButton) { setProjectDueDate(dayButton.dataset.date); closeProjectDatePicker(); }
+  if (dayButton) { setProjectDueDate(dayButton.dataset.date); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); }
 });
 document.addEventListener('click', closeProjectDatePicker);
 
@@ -5605,6 +5609,7 @@ function openProjectTasks(projectName) {
     planningForm?.removeEventListener('submit', onPlanningSubmit);
     planningForm?.removeEventListener('input', markDirty);
     planningForm?.removeEventListener('change', markDirty);
+    document.getElementById('projectDueDateInput')?.removeEventListener('change', onDueDateChange);
     notesTextarea?.removeEventListener('input', markDirty);
     toggle?.removeEventListener('click', toggleCompleted);
     if (_projectNotesCleanup) {
@@ -5670,6 +5675,9 @@ function openProjectTasks(projectName) {
     }
   };
 
+  const dueInput = document.getElementById('projectDueDateInput');
+  const onDueDateChange = () => { void onSave(); };
+
   projectTaskModalState = { close, showCompleted: false };
   modal.classList.add('show');
   closeBtn.addEventListener('click', close);
@@ -5681,6 +5689,7 @@ function openProjectTasks(projectName) {
   planningForm?.addEventListener('submit', onPlanningSubmit);
   planningForm?.addEventListener('input', markDirty);
   planningForm?.addEventListener('change', markDirty);
+  dueInput?.addEventListener('change', onDueDateChange);
   notesTextarea?.addEventListener('input', markDirty);
   toggle?.addEventListener('click', toggleCompleted);
   refreshProjectTaskModal(projectName);
@@ -6851,10 +6860,9 @@ async function updateProjectPinned(project, pinned) {
 }
 
 function todayFocusProjects(projects) {
-  const activeStatuses = new Set(['idea', 'needs_work', 'in_progress', 'finishing', 'final_touches']);
   const candidates = (projects || [])
-    .filter(project => activeStatuses.has(project.status || ''))
-    .filter(project => !!project.due_date);
+    .filter(project => !isTerminalProjectStatus(project.status || ''))
+    .filter(project => !!project.due_date || !!project.pinned);
   const sortFocusGroup = group => group.slice().sort((a, b) => {
     const aDelta = projectDueDelta(a);
     const bDelta = projectDueDelta(b);
@@ -7063,16 +7071,13 @@ function renderPlanner(data) {
       : dueClass === 'is-due-soon' ? 'is-due-soon' : '';
     
     return `
-      <div class="planner-board-project ${terminalClass}" draggable="true" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
+      <div class="planner-board-project ${terminalClass}" draggable="${boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
         <div class="board-card-header">
           <div class="board-card-title-wrap">
             <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
             <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(project.project_name || 'Untitled')}</span>
           </div>
-          <div class="board-card-meta">
-            <strong>${escapeHtml(projectDueDateText(project))}</strong>
-            ${categoryPill(project)}
-          </div>
+          <div class="board-card-meta">${categoryPill(project)}</div>
           <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
           </button>
@@ -7134,8 +7139,6 @@ function renderPlanner(data) {
     `;
   };
 
-  let boardSort = localStorage.getItem('boardSortKey') || 'recent';
-
   let boardProjects = projects.filter(p => {
     if (boardSearchQuery && !(p.project_name || '').toLowerCase().includes(boardSearchQuery.toLowerCase())) return false;
     if (boardTypeFilter && p.type !== boardTypeFilter) return false;
@@ -7143,15 +7146,10 @@ function renderPlanner(data) {
   });
 
   boardProjects.sort((a, b) => {
-    if (boardSort === 'name') return String(a.project_name).localeCompare(String(b.project_name));
-    if (boardSort === 'time') return (b.total_seconds || 0) - (a.total_seconds || 0);
-    if (boardSort === 'priority') {
-      const weights = { high: 3, normal: 2, low: 1, '': 0 };
-      const wa = weights[a.priority || ''] || 0;
-      const wb = weights[b.priority || ''] || 0;
-      if (wa !== wb) return wb - wa;
-    }
-    // Default to recent
+    const aOrder = Number(a.board_order || 0);
+    const bOrder = Number(b.board_order || 0);
+    if (aOrder && bOrder && aOrder !== bOrder) return aOrder - bOrder;
+    if (aOrder !== bOrder) return aOrder ? -1 : 1;
     return (b.last_seen || 0) - (a.last_seen || 0);
   });
 
@@ -7193,12 +7191,6 @@ function renderPlanner(data) {
             `).join('')}
             ${boardTypeFilter ? `<button type="button" class="board-filter-chip" data-filter-type="">Clear</button>` : ''}
           </div>
-          <select class="board-sort-control" id="boardSortControl">
-            <option value="recent" ${boardSort === 'recent' ? 'selected' : ''}>Recent first</option>
-            <option value="name" ${boardSort === 'name' ? 'selected' : ''}>Name A&rarr;Z</option>
-            <option value="time" ${boardSort === 'time' ? 'selected' : ''}>Most time</option>
-            <option value="priority" ${boardSort === 'priority' ? 'selected' : ''}>Priority</option>
-          </select>
           ${hiddenStatusOptions.length ? `
             <details class="hidden-lanes-control">
               <summary>Hidden lanes</summary>
@@ -7209,7 +7201,7 @@ function renderPlanner(data) {
           ` : ''}
         </div>
         <div class="planner-board">
-          ${unsortedProjects.length ? renderBoardColumn({ value: '', label: 'Unsorted', projects: unsortedProjects }) : ''}
+          ${renderBoardColumn({ value: '', label: 'Unsorted', projects: unsortedProjects })}
           ${statusGroups.map(renderBoardColumn).join('')}
         </div>
       </details>
@@ -7225,7 +7217,6 @@ function renderPlanner(data) {
 function bindProjectBoard(data) {
   const searchInput = document.getElementById('boardSearchInput');
   const filterChips = document.querySelectorAll('[data-filter-type]');
-  const sortControl = document.getElementById('boardSortControl');
   
   if (searchInput) {
     searchInput.addEventListener('input', () => {
@@ -7247,13 +7238,6 @@ function bindProjectBoard(data) {
       renderPlanner(data);
     });
   });
-
-  if (sortControl) {
-    sortControl.addEventListener('change', () => {
-      localStorage.setItem('boardSortKey', sortControl.value);
-      renderPlanner(data);
-    });
-  }
 
   document.querySelectorAll('[data-open-project]').forEach(trigger => {
     trigger.addEventListener('click', event => {
@@ -7368,6 +7352,7 @@ function bindProjectBoard(data) {
       }
     });
     col.addEventListener('drop', async (e) => {
+      e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
       col.classList.remove('drag-over');
       
@@ -7376,28 +7361,28 @@ function bindProjectBoard(data) {
       
       if (dragSrcEl && projectName) {
         const currentStatus = dragSrcEl.dataset.currentStatus || '';
-        if (currentStatus !== newStatus) {
-          const project = (data.projects || []).find(p => p.project_name === decodeURIComponent(projectName));
-          if (project) {
-            try {
-              if (isTerminalProjectStatus(newStatus)) {
-                const ok = await confirmTerminalProjectMove(decodeURIComponent(projectName), newStatus);
-                if (!ok) return false;
-              }
-              toast(`Moving ${decodeURIComponent(projectName)}...`);
-              await postJson('/api/project-metadata', {
-                project_name: decodeURIComponent(projectName),
-                status: newStatus,
-                type: project.type || '',
-                priority: project.priority || '',
-                due_date: project.due_date || '',
-                pinned: !!project.pinned,
-                project_note: project.project_note || '',
-              });
-              load();
-            } catch (error) {
-              toast(error.message || 'Failed to move project');
+        const decodedName = decodeURIComponent(projectName);
+        const project = (data.projects || []).find(p => p.project_name === decodedName);
+        if (project) {
+          try {
+            if (currentStatus !== newStatus && isTerminalProjectStatus(newStatus)) {
+              const ok = await confirmTerminalProjectMove(decodedName, newStatus);
+              if (!ok) return false;
             }
+            const cards = [...col.querySelectorAll('.planner-board-project')].filter(card => card !== dragSrcEl);
+            const before = cards.find(card => e.clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2);
+            const orderedProjects = cards.map(card => decodeURIComponent(card.dataset.projectName || ''));
+            const insertAt = before ? orderedProjects.indexOf(decodeURIComponent(before.dataset.projectName || '')) : orderedProjects.length;
+            orderedProjects.splice(insertAt, 0, decodedName);
+            toast(`${currentStatus === newStatus ? 'Reordering' : 'Moving'} ${decodedName}...`);
+            await postJson('/api/project-board/reorder', {
+              project_name: decodedName,
+              status: newStatus,
+              ordered_projects: orderedProjects,
+            });
+            load();
+          } catch (error) {
+            toast(error.message || 'Failed to move project');
           }
         }
       }

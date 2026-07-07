@@ -304,6 +304,35 @@ class DashboardProjectMetadataTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(result["metadata"]["type"], project_type)
 
+    def test_reorder_project_board_persists_lane_order_and_status(self):
+        for name in ("First", "Second", "Moved"):
+            self._insert_session(name)
+            dashboard.set_project_metadata(name, "idea", "personal")
+
+        result = dashboard.reorder_project_board(
+            "Moved", "in_progress", ["Second", "Moved", "First"]
+        )
+
+        self.assertTrue(result["ok"])
+        stats = {project["project_name"]: project for project in dashboard.get_stats()["projects"]}
+        self.assertEqual(stats["Moved"]["status"], "in_progress")
+        self.assertEqual(stats["Second"]["status"], "in_progress")
+        self.assertEqual(stats["First"]["status"], "in_progress")
+        self.assertEqual(stats["Second"]["board_order"], 1)
+        self.assertEqual(stats["Moved"]["board_order"], 2)
+        self.assertEqual(stats["First"]["board_order"], 3)
+
+    def test_reorder_project_board_rejects_invalid_payload_without_changes(self):
+        self._insert_session("Known")
+        dashboard.set_project_metadata("Known", "idea", "personal")
+
+        result = dashboard.reorder_project_board("Known", "in_progress", ["Known", "Missing"])
+
+        self.assertEqual(result["error"], "Unknown project in board order.")
+        stats = {project["project_name"]: project for project in dashboard.get_stats()["projects"]}
+        self.assertEqual(stats["Known"]["status"], "idea")
+        self.assertEqual(stats["Known"]["board_order"], 0)
+
     def test_set_project_metadata_rejects_unknown_values(self):
         bad_status = dashboard.set_project_metadata("Planner Song", "active", "personal")
         bad_type = dashboard.set_project_metadata("Planner Song", "idea", "track")
