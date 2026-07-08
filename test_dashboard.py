@@ -322,6 +322,50 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(stats["Moved"]["board_order"], 2)
         self.assertEqual(stats["First"]["board_order"], 3)
 
+    def test_project_folder_create_membership_and_delete_preserve_projects(self):
+        self._insert_session("Song A")
+        self._insert_session("Song B")
+        created = dashboard.save_project_folder({
+            "name": "EP One", "status": "in_progress", "type": "personal",
+            "priority": "high", "due_date": "2026-08-01", "note": "Finish the EP.",
+        })
+        self.assertTrue(created["ok"])
+        folder_id = created["folder"]["id"]
+
+        membership = dashboard.set_project_folder_members(folder_id, ["Song B", "Song A"])
+        self.assertTrue(membership["ok"])
+        folder = dashboard.get_stats()["project_folders"][0]
+        self.assertEqual(folder["name"], "EP One")
+        self.assertEqual(folder["status"], "in_progress")
+        self.assertEqual([item["project_name"] for item in folder["members"]], ["Song B", "Song A"])
+        self.assertFalse(folder["pinned"])
+
+        deleted = dashboard.delete_project_folder(folder_id)
+        self.assertTrue(deleted["ok"])
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["project_folders"], [])
+        self.assertEqual({project["project_name"] for project in stats["projects"]}, {"Song A", "Song B"})
+
+    def test_project_can_belong_to_only_one_folder(self):
+        self._insert_session("Shared Song")
+        first = dashboard.save_project_folder({"name": "First"})["folder"]["id"]
+        second = dashboard.save_project_folder({"name": "Second"})["folder"]["id"]
+        dashboard.set_project_folder_members(first, ["Shared Song"])
+        dashboard.set_project_folder_members(second, ["Shared Song"])
+
+        folders = {folder["name"]: folder for folder in dashboard.get_project_folders()}
+        self.assertEqual(folders["First"]["members"], [])
+        self.assertEqual([item["project_name"] for item in folders["Second"]["members"]], ["Shared Song"])
+
+    def test_project_folder_changes_invalidate_data_etag(self):
+        before = dashboard._compute_data_etag()
+        folder_id = dashboard.save_project_folder({"name": "Album"})["folder"]["id"]
+        after_create = dashboard._compute_data_etag()
+        dashboard.save_project_folder({"id": folder_id, "name": "Album", "status": "idea"})
+        after_update = dashboard._compute_data_etag()
+        self.assertNotEqual(before, after_create)
+        self.assertNotEqual(after_create, after_update)
+
     def test_reorder_project_board_rejects_invalid_payload_without_changes(self):
         self._insert_session("Known")
         dashboard.set_project_metadata("Known", "idea", "personal")

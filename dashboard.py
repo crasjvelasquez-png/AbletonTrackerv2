@@ -644,6 +644,37 @@ def ensure_project_tasks_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_project_folders_tables(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_folders (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            status        TEXT NOT NULL DEFAULT '',
+            type          TEXT NOT NULL DEFAULT '',
+            priority      TEXT NOT NULL DEFAULT '',
+            due_date      TEXT NOT NULL DEFAULT '',
+            hard_deadline TEXT NOT NULL DEFAULT '',
+            turn_in_date  TEXT NOT NULL DEFAULT '',
+            note          TEXT NOT NULL DEFAULT '',
+            board_order   INTEGER NOT NULL DEFAULT 0,
+            created_at    INTEGER NOT NULL,
+            updated_at    INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_folder_members (
+            project_name TEXT PRIMARY KEY,
+            folder_id    INTEGER NOT NULL REFERENCES project_folders(id) ON DELETE CASCADE,
+            sort_order   INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_folder_members_folder ON project_folder_members(folder_id, sort_order)")
+
+
 def ensure_planner_goals_table(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -848,6 +879,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_project_category_table(conn)
     ensure_project_metadata_table(conn)
     ensure_project_tasks_table(conn)
+    ensure_project_folders_tables(conn)
     ensure_planner_goals_table(conn)
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
@@ -1879,6 +1911,139 @@ def delete_planner_goal(goal_id) -> dict:
         return {"ok": True, "deleted": cur.rowcount, "id": normalized_id}
 
 
+def get_project_folders(conn: sqlite3.Connection | None = None) -> list[dict]:
+    if conn is None:
+        with db_connection() as owned_conn:
+            return get_project_folders(owned_conn)
+    conn.row_factory = sqlite3.Row
+    folders = [dict(row) for row in conn.execute("SELECT * FROM project_folders ORDER BY board_order, id").fetchall()]
+    members = conn.execute(
+        "SELECT folder_id, project_name, sort_order FROM project_folder_members ORDER BY folder_id, sort_order, project_name COLLATE NOCASE"
+    ).fetchall()
+    by_folder: dict[int, list[dict]] = {}
+    for row in members:
+        by_folder.setdefault(row["folder_id"], []).append({"project_name": row["project_name"], "sort_order": row["sort_order"]})
+    for folder in folders:
+        folder["members"] = by_folder.get(folder["id"], [])
+        folder["member_count"] = len(folder["members"])
+        folder["is_folder"] = True
+        folder["project_name"] = folder["name"]
+        folder["project_note"] = folder["note"]
+        folder["pinned"] = False
+    return folders
+
+
+def save_project_folder(payload: dict) -> dict:
+    try:
+        folder_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError):
+        return {"error": "Invalid folder id."}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return {"error": "Folder name is required."}
+    if len(name) > 180:
+        return {"error": "Folder name must be 180 characters or fewer."}
+    with db_connection() as conn:
+        statuses = get_project_status_options(conn)
+        types = get_project_type_options(conn)
+        status = str(payload.get("status") or "").strip()
+        folder_type = str(payload.get("type") or "").strip()
+        priority = str(payload.get("priority") or "").strip()
+        dates = [str(payload.get(key) or "").strip() for key in ("due_date", "hard_deadline", "turn_in_date")]
+        if status and status not in statuses:
+            return {"error": "Unknown project status."}
+        if folder_type and folder_type not in types:
+            return {"error": "Unknown project type."}
+        if priority and priority not in PROJECT_PRIORITY_OPTIONS:
+            return {"error": "Unknown project priority."}
+        try:
+            for value in dates:
+                if value:
+                    datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            return {"error": "Folder dates must be empty or YYYY-MM-DD."}
+        note = str(payload.get("note") or "").strip()
+        if len(note) > 3000:
+            return {"error": "Folder notes must be 3000 characters or fewer."}
+        now = int(time.time())
+        try:
+            if folder_id:
+                cur = conn.execute(
+                    "UPDATE project_folders SET name=?, status=?, type=?, priority=?, due_date=?, hard_deadline=?, turn_in_date=?, note=?, updated_at=? WHERE id=?",
+                    (name, status, folder_type, priority, *dates, note, now, folder_id),
+                )
+                if cur.rowcount < 1:
+                    return {"error": "Folder not found."}
+            else:
+                cur = conn.execute(
+                    "INSERT INTO project_folders(name,status,type,priority,due_date,hard_deadline,turn_in_date,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (name, status, folder_type, priority, *dates, note, now, now),
+                )
+                folder_id = cur.lastrowid
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return {"error": "A folder with that name already exists."}
+        folder = next(item for item in get_project_folders(conn) if item["id"] == folder_id)
+        return {"ok": True, "folder": folder}
+
+
+def set_project_folder_members(folder_id: object, projects: object) -> dict:
+    try:
+        normalized_id = int(folder_id)
+    except (TypeError, ValueError):
+        return {"error": "Folder id is required."}
+    if not isinstance(projects, list):
+        return {"error": "projects must be a list."}
+    names = [str(name).strip() for name in projects]
+    if any(not name for name in names) or len(names) != len(set(names)):
+        return {"error": "projects must contain unique project names."}
+    with db_connection() as conn:
+        if not conn.execute("SELECT 1 FROM project_folders WHERE id=?", (normalized_id,)).fetchone():
+            return {"error": "Folder not found."}
+        known = {row[0] for row in conn.execute("SELECT DISTINCT project_name FROM sessions UNION SELECT project_name FROM project_metadata")}
+        if any(name not in known for name in names):
+            return {"error": "Unknown project."}
+        conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
+        for order, name in enumerate(names, 1):
+            conn.execute(
+                "INSERT INTO project_folder_members(project_name,folder_id,sort_order) VALUES(?,?,?) ON CONFLICT(project_name) DO UPDATE SET folder_id=excluded.folder_id, sort_order=excluded.sort_order",
+                (name, normalized_id, order),
+            )
+        conn.commit()
+    return {"ok": True, "folder_id": normalized_id, "projects": names}
+
+
+def delete_project_folder(folder_id: object) -> dict:
+    try:
+        normalized_id = int(folder_id)
+    except (TypeError, ValueError):
+        return {"error": "Folder id is required."}
+    with db_connection() as conn:
+        conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
+        cur = conn.execute("DELETE FROM project_folders WHERE id=?", (normalized_id,))
+        conn.execute("DELETE FROM project_tasks WHERE project_name=?", (f"__folder__{normalized_id}",))
+        conn.commit()
+    return {"ok": True, "deleted": cur.rowcount}
+
+
+def reorder_project_folder(folder_id: object, status: str | None, ordered_folders: object) -> dict:
+    try:
+        normalized_id = int(folder_id)
+        ids = [int(value) for value in ordered_folders]
+    except (TypeError, ValueError):
+        return {"error": "Invalid folder order."}
+    if normalized_id not in ids or len(ids) != len(set(ids)):
+        return {"error": "Invalid folder order."}
+    normalized_status = (status or "").strip()
+    with db_connection() as conn:
+        if normalized_status and normalized_status not in get_project_status_options(conn):
+            return {"error": "Unknown project status."}
+        for order, value in enumerate(ids, 1):
+            conn.execute("UPDATE project_folders SET board_order=?, status=?, updated_at=? WHERE id=?", (order, normalized_status, int(time.time()), value))
+        conn.commit()
+    return {"ok": True}
+
+
 def set_project_metadata(
     project_name: str,
     status: str | None,
@@ -2575,8 +2740,10 @@ def _compute_data_etag(month_value: str = "") -> str:
             )
             """
         ).fetchone()
+        pf = conn.execute("SELECT COUNT(*), MAX(id), MAX(updated_at), GROUP_CONCAT(id || ':' || name || ':' || status || ':' || board_order, '|') FROM project_folders").fetchone()
+        pfm = conn.execute("SELECT COUNT(*), GROUP_CONCAT(project_name || ':' || folder_id || ':' || sort_order, '|') FROM project_folder_members").fetchone()
         dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
-        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{dm}|{month_value}"
+        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -3103,6 +3270,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "phantom_closed_count": phantom_closed_count,
                 },
                 "projects": project_rows,
+                "project_folders": get_project_folders(conn),
                 "year_daily": [dict(r) for r in year_daily],
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
@@ -6852,6 +7020,38 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_name", ""),
                 payload.get("category_key"),
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-folders/save":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = save_project_folder(payload or {})
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-folders/members":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = set_project_folder_members((payload or {}).get("folder_id"), (payload or {}).get("projects"))
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-folders/delete":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = delete_project_folder((payload or {}).get("folder_id"))
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-folders/reorder":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = reorder_project_folder((payload or {}).get("folder_id"), (payload or {}).get("status"), (payload or {}).get("ordered_folders"))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-metadata":
             try:

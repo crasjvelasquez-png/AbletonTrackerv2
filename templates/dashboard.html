@@ -3003,6 +3003,12 @@ select.planner-goal-input{
 .planner-board-project.is-dragging{
   opacity:0.5;border:1px dashed var(--border-strong);
 }
+.planner-board-project.is-folder{border-style:dashed;background:color-mix(in srgb,var(--surface) 88%,var(--accent) 12%)}
+.folder-card-icon{width:15px;height:12px;border:1.5px solid currentColor;border-radius:2px;position:relative;color:var(--ink-3)}
+.folder-card-icon:before{content:'';position:absolute;left:1px;top:-4px;width:7px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0}
+.folder-members-list{display:grid;gap:6px;max-height:230px;overflow:auto;margin-top:8px}
+.folder-member-row{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.folder-member-row input{margin:0}.folder-member-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .planner-board-column.drag-over{
   background:var(--surface-hover);
   border-color:var(--accent);
@@ -3422,6 +3428,28 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
       <button class="btn secondary" id="taskModalCloseBtn" type="button">Close</button>
       <button class="btn primary" id="taskModalDone" type="button" disabled>Save</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="folderModal">
+  <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="folderModalTitle">
+    <div class="category-modal-head"><div><h3 id="folderModalTitle">Folder</h3><div class="category-modal-kicker" id="folderModalKicker">Organize projects</div></div><button class="category-close" id="folderModalClose" type="button" aria-label="Close folder">×</button></div>
+    <div class="task-modal-body">
+      <form class="project-planning-form" id="folderForm">
+        <div class="project-planning-grid">
+          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderNameInput">Name</label><input class="project-planning-input" id="folderNameInput" maxlength="180" required></div>
+          <div class="project-planning-field"><label for="folderStatusInput">Status</label><select class="project-planning-input" id="folderStatusInput"></select></div>
+          <div class="project-planning-field"><label for="folderTypeInput">Type</label><select class="project-planning-input" id="folderTypeInput"></select></div>
+          <div class="project-planning-field"><label for="folderPriorityInput">Priority</label><select class="project-planning-input" id="folderPriorityInput"><option value="">No priority</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></div>
+          <div class="project-planning-field"><label for="folderDueInput">Due Date</label><input class="project-planning-input" id="folderDueInput" type="date"></div>
+          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderNoteInput">Global Notes</label><textarea class="notes-textarea" id="folderNoteInput" maxlength="3000" style="min-height:80px"></textarea></div>
+          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderProjectSearch">Projects</label><input class="project-planning-input" id="folderProjectSearch" type="search" placeholder="Search projects…"><div class="folder-members-list" id="folderMembersList"></div></div>
+        </div>
+      </form>
+      <form class="task-form" id="folderTaskForm"><input class="task-input" id="folderTaskInput" maxlength="180" placeholder="Add a folder task"><button class="btn small" type="submit">Add</button></form>
+      <div class="task-list" id="folderTaskList"></div>
+    </div>
+    <div class="modal-actions"><button class="btn danger" id="folderDeleteBtn" type="button">Delete</button><button class="btn secondary" id="folderCancelBtn" type="button">Cancel</button><button class="btn primary" id="folderSaveBtn" type="button">Save</button></div>
   </div>
 </div>
 
@@ -7031,10 +7059,94 @@ function renderPlannerGoalRows(goals) {
   }).join('')}</div>`;
 }
 
+let activeFolderModalId = null;
+let activeFolderMembers = [];
+
+function folderTaskKey(id) { return `__folder__${id}`; }
+
+async function refreshFolderTasks(id) {
+  const list = document.getElementById('folderTaskList');
+  if (!list || !id) { if (list) list.innerHTML = ''; return; }
+  const result = await getJson(`/api/project-tasks?project=${encodeURIComponent(folderTaskKey(id))}`);
+  const tasks = result.tasks || [];
+  list.innerHTML = tasks.length ? tasks.map(task => `<div class="task-row"><label class="task-check"><input type="checkbox" data-folder-task-toggle="${task.id}" ${task.status === 'done' ? 'checked' : ''}></label><div class="task-title">${escapeHtml(task.title)}</div><button class="task-delete" type="button" data-folder-task-delete="${task.id}">×</button></div>`).join('') : '<div class="task-empty">No folder tasks yet.</div>';
+  list.querySelectorAll('[data-folder-task-toggle]').forEach(input => input.addEventListener('change', async () => { await postJson('/api/project-tasks/update', { id: input.dataset.folderTaskToggle, status: input.checked ? 'done' : 'open' }); refreshFolderTasks(id); }));
+  list.querySelectorAll('[data-folder-task-delete]').forEach(button => button.addEventListener('click', async () => { await postJson('/api/project-tasks/delete', { id: button.dataset.folderTaskDelete }); refreshFolderTasks(id); }));
+}
+
+function renderFolderMemberPicker(folder, query = '') {
+  const list = document.getElementById('folderMembersList');
+  if (!list) return;
+  const selected = new Map(activeFolderMembers.map((name, index) => [name, index]));
+  const projects = [...(latestDashboardData?.projects || [])].filter(project => !query || (project.project_name || '').toLowerCase().includes(query.toLowerCase()));
+  projects.sort((a, b) => (selected.has(a.project_name) ? selected.get(a.project_name) : 100000) - (selected.has(b.project_name) ? selected.get(b.project_name) : 100000) || a.project_name.localeCompare(b.project_name));
+  list.innerHTML = projects.map(project => `<label class="folder-member-row" draggable="${selected.has(project.project_name)}" data-folder-project="${encodeURIComponent(project.project_name)}"><input type="checkbox" ${selected.has(project.project_name) ? 'checked' : ''}><span>${escapeHtml(project.project_name)}</span>${selected.has(project.project_name) ? '<small>⋮⋮</small>' : ''}</label>`).join('');
+  list.querySelectorAll('.folder-member-row input').forEach(input => input.addEventListener('change', () => {
+    const name = decodeURIComponent(input.closest('[data-folder-project]').dataset.folderProject);
+    activeFolderMembers = input.checked ? [...activeFolderMembers.filter(item => item !== name), name] : activeFolderMembers.filter(item => item !== name);
+    renderFolderMemberPicker(folder, query);
+  }));
+  let dragged = null;
+  list.querySelectorAll('.folder-member-row[draggable="true"]').forEach(row => {
+    row.addEventListener('dragstart', () => { dragged = row; });
+    row.addEventListener('dragover', event => { event.preventDefault(); if (dragged && dragged !== row) list.insertBefore(dragged, row); });
+    row.addEventListener('dragend', () => { activeFolderMembers = [...list.querySelectorAll('.folder-member-row input:checked')].map(input => decodeURIComponent(input.closest('[data-folder-project]').dataset.folderProject)); });
+  });
+}
+
+function openFolderModal(folder = null) {
+  const modal = document.getElementById('folderModal');
+  activeFolderModalId = folder?.id || null;
+  activeFolderMembers = (folder?.members || []).map(member => member.project_name);
+  document.getElementById('folderNameInput').value = folder?.name || '';
+  document.getElementById('folderStatusInput').innerHTML = PROJECT_STATUS_OPTIONS.map(([value,label]) => `<option value="${value}" ${value === (folder?.status || '') ? 'selected' : ''}>${escapeHtml(label || 'Unsorted')}</option>`).join('');
+  document.getElementById('folderTypeInput').innerHTML = PROJECT_TYPE_OPTIONS.map(([value,label]) => `<option value="${value}" ${value === (folder?.type || '') ? 'selected' : ''}>${escapeHtml(label || 'No type')}</option>`).join('');
+  document.getElementById('folderPriorityInput').value = folder?.priority || '';
+  document.getElementById('folderDueInput').value = folder?.due_date || '';
+  document.getElementById('folderNoteInput').value = folder?.note || '';
+  document.getElementById('folderProjectSearch').value = '';
+  document.getElementById('folderDeleteBtn').hidden = !folder;
+  renderFolderMemberPicker(folder || { members: [] });
+  refreshFolderTasks(activeFolderModalId);
+  modal.classList.add('show');
+  document.getElementById('folderNameInput').focus();
+}
+
+function closeFolderModal() { document.getElementById('folderModal')?.classList.remove('show'); activeFolderModalId = null; activeFolderMembers = []; }
+
+document.getElementById('folderModalClose')?.addEventListener('click', closeFolderModal);
+document.getElementById('folderCancelBtn')?.addEventListener('click', closeFolderModal);
+document.getElementById('folderProjectSearch')?.addEventListener('input', event => {
+  const folder = (latestDashboardData?.project_folders || []).find(item => item.id === activeFolderModalId) || { members: [] };
+  renderFolderMemberPicker(folder, event.target.value);
+});
+document.getElementById('folderSaveBtn')?.addEventListener('click', async () => {
+  const name = document.getElementById('folderNameInput').value.trim();
+  if (!name) return document.getElementById('folderNameInput').focus();
+  try {
+    const result = await postJson('/api/project-folders/save', { id: activeFolderModalId, name, status: document.getElementById('folderStatusInput').value, type: document.getElementById('folderTypeInput').value, priority: document.getElementById('folderPriorityInput').value, due_date: document.getElementById('folderDueInput').value, note: document.getElementById('folderNoteInput').value });
+    const folderId = result.folder.id;
+    await postJson('/api/project-folders/members', { folder_id: folderId, projects: activeFolderMembers });
+    closeFolderModal(); await load(); toast('Folder saved');
+  } catch (error) { toast(error.message || 'Failed to save folder'); }
+});
+document.getElementById('folderDeleteBtn')?.addEventListener('click', async () => {
+  if (!activeFolderModalId) return;
+  const ok = await confirmDialog({ title: 'Delete folder?', body: 'Projects will return to their existing lanes. No project or session data will be deleted.', confirmLabel: 'Delete folder' });
+  if (!ok) return;
+  await postJson('/api/project-folders/delete', { folder_id: activeFolderModalId }); closeFolderModal(); await load();
+});
+document.getElementById('folderTaskForm')?.addEventListener('submit', async event => {
+  event.preventDefault(); if (!activeFolderModalId) return toast('Save the folder before adding tasks');
+  const input = document.getElementById('folderTaskInput'); const title = input.value.trim(); if (!title) return;
+  await postJson('/api/project-tasks', { project_name: folderTaskKey(activeFolderModalId), title, priority: 'normal' }); input.value = ''; refreshFolderTasks(activeFolderModalId);
+});
+
 function renderPlanner(data) {
   const plannerEl = document.getElementById('appPlanner');
   if (!plannerEl) return;
   const projects = Array.isArray(data.projects) ? data.projects : [];
+  const folders = Array.isArray(data.project_folders) ? data.project_folders : [];
   const plannerGoals = Array.isArray(data.planner_goals) ? data.planner_goals : [];
   const activeProjects = plannerActiveProjects(projects);
   const openTasks = plannerOpenTasks(projects);
@@ -7119,6 +7231,9 @@ function renderPlanner(data) {
   };
 
   const renderBoardProject = (project, index) => {
+    if (project.is_folder) {
+      return `<div class="planner-board-project is-folder" draggable="${boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-folder="${project.id}" data-folder-id="${project.id}" data-current-status="${escapeHtml(project.status || '')}"><div class="board-card-header"><div class="board-card-title-wrap"><span class="folder-card-icon"></span><span class="board-card-title">${escapeHtml(project.name)}</span></div><div class="board-card-meta"><div class="board-card-meta-left"><span>${project.member_count} project${project.member_count === 1 ? '' : 's'}</span>${project.due_date ? `<span class="board-card-due">${escapeHtml(projectDueDateText(project))}</span>` : ''}</div></div></div></div>`;
+    }
     const encodedProject = encodeURIComponent(project.project_name || '');
     const dueClass = projectDuePillClass(project);
     const terminalClass = project.deadline_state === 'overdue' || projectDueDelta(project) < 0
@@ -7199,7 +7314,8 @@ function renderPlanner(data) {
     `;
   };
 
-  let boardProjects = projects.filter(p => {
+  const folderedProjects = new Set(folders.flatMap(folder => (folder.members || []).map(member => member.project_name)));
+  let boardProjects = projects.filter(project => !folderedProjects.has(project.project_name)).concat(folders).filter(p => {
     if (boardSearchQuery && !(p.project_name || '').toLowerCase().includes(boardSearchQuery.toLowerCase())) return false;
     if (boardTypeFilter && p.type !== boardTypeFilter) return false;
     return true;
@@ -7243,6 +7359,7 @@ function renderPlanner(data) {
         </summary>
         <div class="board-toolbar">
           <input type="text" class="board-search" id="boardSearchInput" placeholder="Search projects…" value="${escapeHtml(boardSearchQuery)}">
+          <button type="button" class="btn small" id="newFolderBtn">New Folder</button>
           <div class="board-filters">
             ${PROJECT_TYPE_OPTIONS.filter(([val]) => val).map(([val, label]) => `
               <button type="button" class="board-filter-chip ${boardTypeFilter === val ? 'is-active' : ''}" data-filter-type="${val}">
@@ -7277,6 +7394,12 @@ function renderPlanner(data) {
 function bindProjectBoard(data) {
   const searchInput = document.getElementById('boardSearchInput');
   const filterChips = document.querySelectorAll('[data-filter-type]');
+  document.getElementById('newFolderBtn')?.addEventListener('click', () => openFolderModal());
+  document.querySelectorAll('[data-open-folder]').forEach(card => card.addEventListener('click', event => {
+    if (card.classList.contains('is-dragging')) return;
+    const folder = (data.project_folders || []).find(item => item.id === Number(card.dataset.openFolder));
+    if (folder) openFolderModal(folder);
+  }));
   
   if (searchInput) {
     searchInput.addEventListener('input', () => {
@@ -7366,7 +7489,7 @@ function bindProjectBoard(data) {
       dragSrcEl = card;
       card.classList.add('is-dragging');
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', card.dataset.projectName);
+      e.dataTransfer.setData('text/plain', card.dataset.folderId ? `folder:${card.dataset.folderId}` : `project:${card.dataset.projectName}`);
     });
     card.addEventListener('dragend', () => {
       card.classList.remove('is-dragging');
@@ -7396,11 +7519,24 @@ function bindProjectBoard(data) {
       if (e.stopPropagation) e.stopPropagation();
       col.classList.remove('drag-over');
       
-      const projectName = e.dataTransfer.getData('text/plain');
+      const draggedValue = e.dataTransfer.getData('text/plain');
       const newStatus = col.dataset.plannerStatus;
       
-      if (dragSrcEl && projectName) {
+      if (dragSrcEl && draggedValue) {
         const currentStatus = dragSrcEl.dataset.currentStatus || '';
+        if (draggedValue.startsWith('folder:')) {
+          const folderId = Number(draggedValue.slice(7));
+          const folder = (data.project_folders || []).find(item => item.id === folderId);
+          if (!folder) return false;
+          const cards = [...col.querySelectorAll('[data-folder-id]')].filter(card => card !== dragSrcEl);
+          const before = cards.find(card => e.clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2);
+          const orderedFolders = cards.map(card => Number(card.dataset.folderId));
+          orderedFolders.splice(before ? orderedFolders.indexOf(Number(before.dataset.folderId)) : orderedFolders.length, 0, folderId);
+          try { await postJson('/api/project-folders/reorder', { folder_id: folderId, status: newStatus, ordered_folders: orderedFolders }); await load(); }
+          catch (error) { toast(error.message || 'Failed to move folder'); }
+          return false;
+        }
+        const projectName = draggedValue.slice(8);
         const decodedName = decodeURIComponent(projectName);
         const project = (data.projects || []).find(p => p.project_name === decodedName);
         if (project) {
