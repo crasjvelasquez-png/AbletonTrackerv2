@@ -2893,7 +2893,6 @@ select.planner-goal-input{
   scroll-snap-align:start;
 }
 .planner-board-head{
-  position:sticky;top:68px;z-index:4;
   min-height:42px;margin:0 -10px;padding:8px 10px;
   border-bottom:1px solid var(--border);border-radius:11px 11px 0 0;
   background:var(--control-bg);color:var(--ink-2) !important;

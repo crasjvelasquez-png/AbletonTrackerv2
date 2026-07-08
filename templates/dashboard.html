@@ -3060,7 +3060,6 @@ select.planner-goal-input{
   scroll-snap-align:start;
 }
 .planner-board-head{
-  position:sticky;top:68px;z-index:4;
   min-height:42px;margin:0 -10px;padding:8px 10px;
   border-bottom:1px solid var(--border);border-radius:11px 11px 0 0;
   background:var(--control-bg);color:var(--ink-2) !important;
@@ -3071,6 +3070,9 @@ select.planner-goal-input{
   background:var(--status-color,var(--ink-4));flex:0 0 auto;
 }
 .planner-board-head > span:first-of-type{margin-right:auto}
+.lane-color-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.lane-color-setting{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--control-bg);font-size:12px;font-weight:700;color:var(--ink-2)}
+.lane-color-setting input[type="color"]{width:30px;height:30px;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
 .planner-board-count{
   padding:2px 6px;border-color:var(--border) !important;
   background:var(--surface) !important;color:var(--ink-4) !important;
@@ -3661,6 +3663,26 @@ async function hydrateUiScaleSetting() {
   } catch (_) {}
 }
 
+const DEFAULT_LANE_HEADER_COLORS = {
+  '': '#8e8e93', idea: '#ff9500', needs_work: '#ffcc00', in_progress: '#007aff',
+  finishing: '#af52de', finished: '#34c759', paused: '#8e8e93', abandoned: '#ff3b30'
+};
+let LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS};
+
+async function hydrateLaneHeaderColors() {
+  try {
+    const res = await fetch('/api/app-settings');
+    const settings = await res.json();
+    const saved = JSON.parse(settings?.lane_header_colors || '{}');
+    if (saved && typeof saved === 'object') LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS, ...saved};
+  } catch (_) {}
+  if (latestDashboardData && activeView === 'planner') renderPlanner(latestDashboardData);
+}
+window.applyLaneHeaderColors = colors => {
+  LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS, ...(colors || {})};
+  if (latestDashboardData && activeView === 'planner') renderPlanner(latestDashboardData);
+};
+
 function syncCategoryOptions(options) {
   CATEGORY_OPTIONS = Array.isArray(options) ? options : [];
   CATEGORY_BY_KEY = Object.fromEntries(CATEGORY_OPTIONS.map(option => [option.key, option]));
@@ -3865,6 +3887,7 @@ systemTheme.addEventListener('change', () => {
 });
 applyStoredTheme();
 hydrateUiScaleSetting();
+hydrateLaneHeaderColors();
 document.getElementById('navDashboard').addEventListener('click', () => setActiveView('dashboard'));
 document.getElementById('navPlanner').addEventListener('click', () => setActiveView('planner'));
 document.getElementById('navSettings').addEventListener('click', () => setActiveView('settings'));
@@ -7347,7 +7370,7 @@ function renderPlanner(data) {
     }
 
     return `
-      <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}">
+      <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}" style="--status-color:${LANE_HEADER_COLORS[value] || DEFAULT_LANE_HEADER_COLORS[value] || '#8e8e93'}">
         <div class="planner-board-head">
           <span>${escapeHtml(label)}</span>
           <div>

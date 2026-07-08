@@ -26,6 +26,7 @@
     { name: 'Sunday',    abbrev: 'Sun', jsDay: 0 },
   ];
   let currentWeekStartDay = null;
+  let currentLaneHeaderColors = {};
 
   let inited = false;
   let lastData = null;
@@ -1205,6 +1206,48 @@
     }
   }
 
+  function laneOptions() {
+    const configured = lastData && Array.isArray(lastData.project_status_options)
+      ? lastData.project_status_options
+      : [['idea', 'Idea'], ['needs_work', 'Needs Work'], ['in_progress', 'In Progress'], ['finishing', 'Finishing'], ['finished', 'Finished'], ['paused', 'Paused'], ['abandoned', 'Abandoned']];
+    return [['', 'Unsorted'], ...configured.filter(option => Array.isArray(option) && option[0])];
+  }
+
+  function renderLaneColorSettings() {
+    const mount = $('[data-lane-color-settings]', $('[data-settings-root]'));
+    if (!mount) return;
+    const defaults = { '': '#8e8e93', idea: '#ff9500', needs_work: '#ffcc00', in_progress: '#007aff', finishing: '#af52de', finished: '#34c759', paused: '#8e8e93', abandoned: '#ff3b30' };
+    mount.innerHTML = laneOptions().map(([key, label]) => `
+      <label class="lane-color-setting">
+        <span>${window.escapeHtml(label)}</span>
+        <input type="color" value="${currentLaneHeaderColors[key] || defaults[key] || '#8e8e93'}" data-lane-color-key="${window.escapeHtml(key)}" aria-label="${window.escapeHtml(label)} lane color">
+      </label>
+    `).join('');
+  }
+
+  async function loadLaneHeaderColors() {
+    try {
+      const res = await fetch('/api/app-settings');
+      const data = await res.json();
+      currentLaneHeaderColors = JSON.parse(data?.lane_header_colors || '{}');
+    } catch (_) { currentLaneHeaderColors = {}; }
+    renderLaneColorSettings();
+  }
+
+  function bindLaneColorSettings(root) {
+    const mount = $('[data-lane-color-settings]', root);
+    if (!mount) return;
+    mount.addEventListener('change', async event => {
+      const input = event.target.closest('[data-lane-color-key]');
+      if (!input) return;
+      currentLaneHeaderColors[input.dataset.laneColorKey] = input.value;
+      window.applyLaneHeaderColors?.(currentLaneHeaderColors);
+      try {
+        await window.postJson('/api/app-settings', { key: 'lane_header_colors', value: JSON.stringify(currentLaneHeaderColors) });
+      } catch (_) { window.toast('Failed to save lane color'); }
+    });
+  }
+
   function bindWidgetControls(root) {
     const heatmapToggle = $('[data-widget-toggle="heatmap"]', root);
     const rhythmToggle = $('[data-widget-toggle="rhythm"]', root);
@@ -1461,8 +1504,10 @@
     bindProjectOptionsDelegation(root);
     bindMergeDelegation(root);
     bindScaleControl(root);
+    bindLaneColorSettings(root);
     syncThemePicker();
     loadUiScale();
+    loadLaneHeaderColors();
     refreshGoals();
     loadWeekStartDay();
     loadCondenseGap();
@@ -1479,6 +1524,7 @@
       renderArtists(lastData);
       renderProjectOptions(lastData);
       renderMergeProjects(lastData);
+      renderLaneColorSettings();
     }
     syncThemePicker();
     // Don't refetch goals on every dashboard data change — they update when the user
