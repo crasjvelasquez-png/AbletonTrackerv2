@@ -1875,12 +1875,27 @@ select.project-planning-input{
   font-size:12px;font-weight:700;color:var(--ink-2);
   transition:border-color .18s ease, background .18s ease, color .18s ease, box-shadow .18s ease;
 }
+.color-picker-button[aria-expanded="true"]{color:var(--ink);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .color-picker-button:hover{
   color:var(--ink);border-color:var(--border-strong);
 }
 .color-input{
-  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+  position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;
 }
+.color-popover{position:fixed;z-index:1200;width:min(300px,calc(100vw - 24px));padding:14px;border:1px solid var(--border-strong);border-radius:18px;background:var(--surface);box-shadow:0 18px 48px rgba(0,0,0,.24);display:grid;gap:12px}
+.color-popover[hidden]{display:none}
+.color-popover-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.color-popover-title{font-size:13px;font-weight:700;color:var(--ink)}
+.color-popover-close{width:28px;height:28px;border:0;border-radius:9px;background:var(--control-bg);color:var(--ink-3);cursor:pointer;font-size:18px;line-height:1}
+.color-saturation{position:relative;height:150px;border-radius:12px;cursor:crosshair;touch-action:none;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(var(--picker-hue,260) 100% 50%));box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
+.color-saturation-thumb{position:absolute;width:16px;height:16px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,50%);left:calc(var(--picker-saturation,70) * 1%);bottom:calc(var(--picker-value,90) * 1%);box-shadow:0 1px 5px rgba(0,0,0,.55);pointer-events:none}
+.color-hue{width:100%;height:18px;margin:0;appearance:none;border-radius:999px;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);cursor:pointer}
+.color-hue::-webkit-slider-thumb{appearance:none;width:20px;height:20px;border:2px solid #fff;border-radius:50%;background:hsl(var(--picker-hue,260) 100% 50%);box-shadow:0 1px 5px rgba(0,0,0,.45)}
+.color-hex-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
+.color-hex-input{width:100%;height:40px;border:1px solid var(--border);border-radius:12px;background:var(--control-bg);padding:0 12px;color:var(--ink);font:13px var(--font-mono);text-transform:uppercase}
+.color-hex-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.color-hex-input.is-invalid{border-color:#ff453a}
+.color-error{grid-column:1 / -1;min-height:14px;font-size:11px;color:#ff453a}
 .color-presets{
   display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;
 }
@@ -3720,11 +3735,11 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
             class="color-input"
             ${inputId ? `id="${inputId}"` : ''}
             name="color"
-            type="color"
+            type="hidden"
             value="${safeValue}"
             ${disabled ? 'disabled' : ''}
           >
-          <span>Browse</span>
+          <span>Choose</span>
         </label>
       </div>
       ${showPresets ? `<div class="color-presets" role="list" aria-label="Suggested colors">
@@ -3739,8 +3754,26 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
           ></button>
         `).join('')}
       </div>` : ''}
+      <div class="color-popover" role="dialog" aria-label="Choose category color" hidden>
+        <div class="color-popover-head"><span class="color-popover-title">Choose color</span><button class="color-popover-close" type="button" aria-label="Close color picker">×</button></div>
+        <div class="color-saturation" role="slider" tabindex="0" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100"><span class="color-saturation-thumb"></span></div>
+        <input class="color-hue" type="range" min="0" max="360" value="260" aria-label="Hue">
+        <div class="color-hex-row"><input class="color-hex-input" type="text" maxlength="7" spellcheck="false" aria-label="Hex color"><span class="color-preview" data-popover-preview></span><span class="color-error" role="status" aria-live="polite"></span></div>
+      </div>
     </div>
   `;
+}
+
+function hsvToHex(h, s, v) {
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return `#${[f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+function hexToHsv(hex) {
+  const [r,g,b] = [1,3,5].map(i => parseInt(hex.slice(i,i+2),16) / 255), max = Math.max(r,g,b), min = Math.min(r,g,b), d = max-min;
+  let h = 0;
+  if (d) h = max === r ? 60 * (((g-b)/d)%6) : max === g ? 60 * ((b-r)/d+2) : 60 * ((r-g)/d+4);
+  return { h:(h+360)%360, s:max ? d/max : 0, v:max };
 }
 
 function bindColorField(root) {
@@ -3750,19 +3783,54 @@ function bindColorField(root) {
   const preview = field.querySelector('[data-color-preview]');
   const valueLabel = field.querySelector('[data-color-value]');
   const presets = Array.from(field.querySelectorAll('[data-color-preset]'));
+  const trigger = field.querySelector('.color-picker-button');
+  const popover = field.querySelector('.color-popover');
+  const close = field.querySelector('.color-popover-close');
+  const saturation = field.querySelector('.color-saturation');
+  const hue = field.querySelector('.color-hue');
+  const hex = field.querySelector('.color-hex-input');
+  const error = field.querySelector('.color-error');
+  const popoverPreview = field.querySelector('[data-popover-preview]');
   if (!input || !preview || !valueLabel) return;
 
-  const sync = nextValue => {
+  let hsv = hexToHsv(input.value);
+  let lastValid = input.value;
+
+  const sync = (nextValue, updateHsv = true) => {
     const color = normalizeHexColor(nextValue) || '#7C5CFF';
+    lastValid = color;
+    if (updateHsv) hsv = hexToHsv(color);
     input.value = color;
     preview.style.setProperty('--color-value', color);
+    popoverPreview?.style.setProperty('--color-value', color);
     valueLabel.textContent = color;
+    if (hex) { hex.value = color; hex.classList.remove('is-invalid'); }
+    if (error) error.textContent = '';
+    if (popover) { popover.style.setProperty('--picker-hue', hsv.h); popover.style.setProperty('--picker-saturation', hsv.s * 100); popover.style.setProperty('--picker-value', hsv.v * 100); }
+    if (hue) hue.value = String(Math.round(hsv.h));
     presets.forEach(button => {
       button.classList.toggle('is-active', button.dataset.colorPreset === color);
+      button.setAttribute('aria-pressed', button.dataset.colorPreset === color ? 'true' : 'false');
     });
   };
 
-  input.addEventListener('input', event => sync(event.target.value));
+  const dismiss = (returnFocus = false) => { if (popover?.hidden) return; popover.hidden = true; trigger?.setAttribute('aria-expanded','false'); if (returnFocus) trigger?.focus(); };
+  const position = () => { const r = trigger.getBoundingClientRect(), w = Math.min(300, innerWidth-24), left = Math.max(12, Math.min(r.right-w, innerWidth-w-12)); popover.style.left=`${left}px`; popover.style.top=`${Math.min(r.bottom+8, innerHeight-popover.offsetHeight-12)}px`; };
+  trigger?.setAttribute('aria-expanded','false');
+  trigger?.addEventListener('click', event => { event.preventDefault(); document.querySelectorAll('.color-popover:not([hidden])').forEach(p => { if (p !== popover) p.closest('[data-color-field]')?.querySelector('.color-picker-button')?.setAttribute('aria-expanded','false'); p.hidden=true; }); popover.hidden=false; trigger.setAttribute('aria-expanded','true'); position(); hex?.focus(); });
+  close?.addEventListener('click', () => dismiss(true));
+  document.addEventListener('pointerdown', event => { if (!field.contains(event.target)) dismiss(false); });
+  field.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); dismiss(true); } });
+  window.addEventListener('resize', () => { if (!popover?.hidden) position(); });
+
+  const setSv = event => { const r=saturation.getBoundingClientRect(); hsv.s=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width)); hsv.v=Math.max(0,Math.min(1,(r.bottom-event.clientY)/r.height)); sync(hsvToHex(hsv.h,hsv.s,hsv.v),false); };
+  saturation?.addEventListener('pointerdown', event => { saturation.setPointerCapture(event.pointerId); setSv(event); });
+  saturation?.addEventListener('pointermove', event => { if (saturation.hasPointerCapture(event.pointerId)) setSv(event); });
+  saturation?.addEventListener('keydown', event => { const step=event.shiftKey?.05:.01; if (event.key==='ArrowLeft') hsv.s-=step; else if(event.key==='ArrowRight') hsv.s+=step; else if(event.key==='ArrowDown') hsv.v-=step; else if(event.key==='ArrowUp') hsv.v+=step; else return; event.preventDefault(); hsv.s=Math.max(0,Math.min(1,hsv.s)); hsv.v=Math.max(0,Math.min(1,hsv.v)); sync(hsvToHex(hsv.h,hsv.s,hsv.v),false); });
+  hue?.addEventListener('input', event => { hsv.h=Number(event.target.value); sync(hsvToHex(hsv.h,hsv.s,hsv.v),false); });
+  const commitHex = () => { const color=normalizeHexColor(hex.value); if(color) sync(color); else { hex.value=lastValid; hex.classList.add('is-invalid'); error.textContent='Enter a 6-digit hex color.'; } };
+  hex?.addEventListener('blur', commitHex);
+  hex?.addEventListener('keydown', event => { if(event.key==='Enter'){ event.preventDefault(); commitHex(); } });
   presets.forEach(button => {
     button.addEventListener('click', () => sync(button.dataset.colorPreset));
   });

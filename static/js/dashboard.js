@@ -151,11 +151,11 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
             class="color-input"
             ${inputId ? `id="${inputId}"` : ''}
             name="color"
-            type="color"
+            type="hidden"
             value="${safeValue}"
             ${disabled ? 'disabled' : ''}
           >
-          <span>Browse</span>
+          <span>Choose</span>
         </label>
       </div>
       ${showPresets ? `<div class="color-presets" role="list" aria-label="Suggested colors">
@@ -170,8 +170,26 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
           ></button>
         `).join('')}
       </div>` : ''}
+      <div class="color-popover" role="dialog" aria-label="Choose category color" hidden>
+        <div class="color-popover-head"><span class="color-popover-title">Choose color</span><button class="color-popover-close" type="button" aria-label="Close color picker">×</button></div>
+        <div class="color-saturation" role="slider" tabindex="0" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100"><span class="color-saturation-thumb"></span></div>
+        <input class="color-hue" type="range" min="0" max="360" value="260" aria-label="Hue">
+        <div class="color-hex-row"><input class="color-hex-input" type="text" maxlength="7" spellcheck="false" aria-label="Hex color"><span class="color-preview" data-popover-preview></span><span class="color-error" role="status" aria-live="polite"></span></div>
+      </div>
     </div>
   `;
+}
+
+function hsvToHex(h, s, v) {
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return `#${[f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+function hexToHsv(hex) {
+  const [r,g,b] = [1,3,5].map(i => parseInt(hex.slice(i,i+2),16) / 255), max = Math.max(r,g,b), min = Math.min(r,g,b), d = max-min;
+  let h = 0;
+  if (d) h = max === r ? 60 * (((g-b)/d)%6) : max === g ? 60 * ((b-r)/d+2) : 60 * ((r-g)/d+4);
+  return { h:(h+360)%360, s:max ? d/max : 0, v:max };
 }
 
 function bindColorField(root) {
@@ -181,19 +199,39 @@ function bindColorField(root) {
   const preview = field.querySelector('[data-color-preview]');
   const valueLabel = field.querySelector('[data-color-value]');
   const presets = Array.from(field.querySelectorAll('[data-color-preset]'));
+  const trigger = field.querySelector('.color-picker-button');
+  const popover = field.querySelector('.color-popover');
+  const close = field.querySelector('.color-popover-close');
+  const saturation = field.querySelector('.color-saturation');
+  const hue = field.querySelector('.color-hue');
+  const hex = field.querySelector('.color-hex-input');
+  const error = field.querySelector('.color-error');
+  const popoverPreview = field.querySelector('[data-popover-preview]');
   if (!input || !preview || !valueLabel) return;
+  let hsv = hexToHsv(input.value), lastValid = input.value;
 
-  const sync = nextValue => {
+  const sync = (nextValue, updateHsv = true) => {
     const color = normalizeHexColor(nextValue) || '#7C5CFF';
+    lastValid=color; if(updateHsv) hsv=hexToHsv(color);
     input.value = color;
     preview.style.setProperty('--color-value', color);
+    popoverPreview?.style.setProperty('--color-value',color);
     valueLabel.textContent = color;
+    if(hex){hex.value=color;hex.classList.remove('is-invalid')} if(error)error.textContent='';
+    if(popover){popover.style.setProperty('--picker-hue',hsv.h);popover.style.setProperty('--picker-saturation',hsv.s*100);popover.style.setProperty('--picker-value',hsv.v*100)} if(hue)hue.value=String(Math.round(hsv.h));
     presets.forEach(button => {
       button.classList.toggle('is-active', button.dataset.colorPreset === color);
+      button.setAttribute('aria-pressed',button.dataset.colorPreset===color?'true':'false');
     });
   };
 
-  input.addEventListener('input', event => sync(event.target.value));
+  const dismiss=(focus=false)=>{if(popover?.hidden)return;popover.hidden=true;trigger?.setAttribute('aria-expanded','false');if(focus)trigger?.focus()};
+  const position=()=>{const r=trigger.getBoundingClientRect(),w=Math.min(300,innerWidth-24),left=Math.max(12,Math.min(r.right-w,innerWidth-w-12));popover.style.left=`${left}px`;popover.style.top=`${Math.min(r.bottom+8,innerHeight-popover.offsetHeight-12)}px`};
+  trigger?.setAttribute('aria-expanded','false'); trigger?.addEventListener('click',event=>{event.preventDefault();document.querySelectorAll('.color-popover:not([hidden])').forEach(p=>{if(p!==popover)p.closest('[data-color-field]')?.querySelector('.color-picker-button')?.setAttribute('aria-expanded','false');p.hidden=true});popover.hidden=false;trigger.setAttribute('aria-expanded','true');position();hex?.focus()});
+  close?.addEventListener('click',()=>dismiss(true)); document.addEventListener('pointerdown',event=>{if(!field.contains(event.target))dismiss(false)}); field.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();dismiss(true)}}); window.addEventListener('resize',()=>{if(!popover?.hidden)position()});
+  const setSv=event=>{const r=saturation.getBoundingClientRect();hsv.s=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width));hsv.v=Math.max(0,Math.min(1,(r.bottom-event.clientY)/r.height));sync(hsvToHex(hsv.h,hsv.s,hsv.v),false)};
+  saturation?.addEventListener('pointerdown',event=>{saturation.setPointerCapture(event.pointerId);setSv(event)}); saturation?.addEventListener('pointermove',event=>{if(saturation.hasPointerCapture(event.pointerId))setSv(event)}); saturation?.addEventListener('keydown',event=>{const step=event.shiftKey?.05:.01;if(event.key==='ArrowLeft')hsv.s-=step;else if(event.key==='ArrowRight')hsv.s+=step;else if(event.key==='ArrowDown')hsv.v-=step;else if(event.key==='ArrowUp')hsv.v+=step;else return;event.preventDefault();hsv.s=Math.max(0,Math.min(1,hsv.s));hsv.v=Math.max(0,Math.min(1,hsv.v));sync(hsvToHex(hsv.h,hsv.s,hsv.v),false)}); hue?.addEventListener('input',event=>{hsv.h=Number(event.target.value);sync(hsvToHex(hsv.h,hsv.s,hsv.v),false)});
+  const commitHex=()=>{const color=normalizeHexColor(hex.value);if(color)sync(color);else{hex.value=lastValid;hex.classList.add('is-invalid');error.textContent='Enter a 6-digit hex color.'}}; hex?.addEventListener('blur',commitHex);hex?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commitHex()}});
   presets.forEach(button => {
     button.addEventListener('click', () => sync(button.dataset.colorPreset));
   });
