@@ -7,6 +7,7 @@ Start here. This is the repo-specific, compact source of truth for future coding
 - **Targeted Reading:** Use `grep -n` to find line numbers first, then use `sed` or targeted tool calls to read only the necessary blocks (max 200 lines at a time).
 - **No Redundant Verification:** Do not run `ls` or `cat` to verify a file exists after you have just edited it. Trust your internal state.
 - **Concise Responses:** Skip preambles and "I have updated the file" summaries. Only provide the code or the confirmation.
+- **Commit-Ready Handoff:** At the end of every implementation-plan execution, include a concise `Summary title` and `Description` that the user can paste into GitHub when committing. The title should describe the completed change in one line; the description should briefly list the implementation and validation performed.
 - **Testing:** Only run `build_app.py` or specific tracking tests when logic changes. Do not run for CSS/UI-only tweaks.
 
 ## What This Is
