@@ -13,7 +13,6 @@ const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
 const CATEGORY_COLOR_PRESETS = [
   '#FF6B6B', '#FF9F43', '#FFD166', '#7BD389',
   '#3EC1D3', '#4D96FF', '#7C5CFF', '#C77DFF',
-  '#F15BB5', '#6D6875', '#A3A380', '#F28482',
 ];
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
@@ -146,17 +145,7 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
           <span class="color-summary-label">Current color</span>
           <strong class="color-summary-value" data-color-value>${safeValue}</strong>
         </div>
-        <label class="color-picker-button">
-          <input
-            class="color-input"
-            ${inputId ? `id="${inputId}"` : ''}
-            name="color"
-            type="hidden"
-            value="${safeValue}"
-            ${disabled ? 'disabled' : ''}
-          >
-          <span>Choose</span>
-        </label>
+        <input class="color-input" ${inputId ? `id="${inputId}"` : ''} name="color" type="hidden" value="${safeValue}" ${disabled ? 'disabled' : ''}>
       </div>
       ${showPresets ? `<div class="color-presets" role="list" aria-label="Suggested colors">
         ${CATEGORY_COLOR_PRESETS.map(color => `
@@ -170,6 +159,11 @@ function renderColorField({ inputId = '', value = '#7C5CFF', disabled = false, s
           ></button>
         `).join('')}
       </div>` : ''}
+      <button class="color-picker-button" type="button" ${disabled ? 'disabled' : ''}>
+        <span class="color-picker-button-swatch" data-custom-color-swatch style="--color-value:${safeValue}"></span>
+        <span>Custom color</span>
+        <span class="color-picker-button-chevron" aria-hidden="true">›</span>
+      </button>
       <div class="color-popover" role="dialog" aria-label="Choose category color" hidden>
         <div class="color-popover-head"><span class="color-popover-title">Choose color</span><button class="color-popover-close" type="button" aria-label="Close color picker">×</button></div>
         <div class="color-saturation" role="slider" tabindex="0" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100"><span class="color-saturation-thumb"></span></div>
@@ -207,6 +201,7 @@ function bindColorField(root) {
   const hex = field.querySelector('.color-hex-input');
   const error = field.querySelector('.color-error');
   const popoverPreview = field.querySelector('[data-popover-preview]');
+  const customSwatch = field.querySelector('[data-custom-color-swatch]');
   if (!input || !preview || !valueLabel) return;
   let hsv = hexToHsv(input.value), lastValid = input.value;
 
@@ -216,6 +211,7 @@ function bindColorField(root) {
     input.value = color;
     preview.style.setProperty('--color-value', color);
     popoverPreview?.style.setProperty('--color-value',color);
+    customSwatch?.style.setProperty('--color-value',color);
     valueLabel.textContent = color;
     if(hex){hex.value=color;hex.classList.remove('is-invalid')} if(error)error.textContent='';
     if(popover){popover.style.setProperty('--picker-hue',hsv.h);popover.style.setProperty('--picker-saturation',hsv.s*100);popover.style.setProperty('--picker-value',hsv.v*100)} if(hue)hue.value=String(Math.round(hsv.h));

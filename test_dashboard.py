@@ -287,6 +287,38 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertEqual(stats["recent"][0]["pinned"], False)
         self.assertEqual(stats["recent"][0]["project_note"], "")
 
+    def test_project_display_name_preserves_tracked_project_identity(self):
+        self._insert_session("Actual File Name")
+
+        result = dashboard.set_project_metadata(
+            "Actual File Name", "in_progress", "personal", display_name="Friendly Name"
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["project_name"], "Actual File Name")
+        self.assertEqual(result["metadata"]["display_name"], "Friendly Name")
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["projects"][0]["project_name"], "Actual File Name")
+        self.assertEqual(stats["projects"][0]["display_name"], "Friendly Name")
+        self.assertEqual(stats["recent"][0]["project_name"], "Actual File Name")
+        self.assertEqual(stats["recent"][0]["display_name"], "Friendly Name")
+
+    def test_project_display_name_defaults_to_project_name_and_blank_resets_it(self):
+        self._insert_session("Actual File Name")
+
+        initial = dashboard.get_stats()["projects"][0]
+        self.assertEqual(initial["display_name"], "Actual File Name")
+
+        dashboard.set_project_metadata(
+            "Actual File Name", "in_progress", "personal", display_name="Friendly Name"
+        )
+        reset = dashboard.set_project_metadata(
+            "Actual File Name", None, None, display_name="   "
+        )
+
+        self.assertEqual(reset["metadata"]["display_name"], "Actual File Name")
+        self.assertEqual(dashboard.get_stats()["projects"][0]["display_name"], "Actual File Name")
+
     def test_set_project_metadata_accepts_all_planner_statuses_and_types(self):
         statuses = {"idea", "needs_work", "in_progress", "finishing", "final_touches", "finished", "paused", "abandoned"}
         types = {"personal", "client", "other"}
@@ -464,7 +496,7 @@ class DashboardProjectMetadataTests(unittest.TestCase):
             }
             row = conn.execute(
                 """
-                SELECT priority, due_date, hard_deadline, turn_in_date, pinned, project_note
+                SELECT display_name, priority, due_date, hard_deadline, turn_in_date, pinned, project_note
                 FROM project_metadata
                 WHERE project_name = ?
                 """,
@@ -472,12 +504,14 @@ class DashboardProjectMetadataTests(unittest.TestCase):
             ).fetchone()
 
         self.assertIn("priority", columns)
+        self.assertIn("display_name", columns)
+        self.assertEqual(row[0], "")
         self.assertIn("due_date", columns)
         self.assertIn("hard_deadline", columns)
         self.assertIn("turn_in_date", columns)
         self.assertIn("pinned", columns)
         self.assertIn("project_note", columns)
-        self.assertEqual(row, ("", "", "", "", 0, ""))
+        self.assertEqual(row, ("", "", "", "", "", 0, ""))
 
     def test_project_deadline_states_are_exposed_in_stats(self):
         today = date.today()

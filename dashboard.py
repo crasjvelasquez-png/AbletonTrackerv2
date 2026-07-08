@@ -590,6 +590,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS project_metadata (
             project_name TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL DEFAULT '',
             status       TEXT NOT NULL DEFAULT '',
             type         TEXT NOT NULL DEFAULT '',
             priority     TEXT NOT NULL DEFAULT '',
@@ -610,6 +611,7 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         for row in conn.execute("PRAGMA table_info(project_metadata)").fetchall()
     }
     metadata_columns = {
+        "display_name": "TEXT NOT NULL DEFAULT ''",
         "priority": "TEXT NOT NULL DEFAULT ''",
         "due_date": "TEXT NOT NULL DEFAULT ''",
         "hard_deadline": "TEXT NOT NULL DEFAULT ''",
@@ -993,7 +995,7 @@ def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
+        SELECT project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
         FROM project_metadata
         """
     ).fetchall()
@@ -1008,6 +1010,7 @@ def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
         hard_deadline = row["hard_deadline"] if _is_valid_date_string(row["hard_deadline"]) else ""
         turn_in_date = row["turn_in_date"] if _is_valid_date_string(row["turn_in_date"]) else ""
         metadata[row["project_name"]] = {
+            "display_name": (row["display_name"] or "").strip() or row["project_name"],
             "status": status,
             "status_label": status_options.get(status, ""),
             "type": project_type,
@@ -2056,6 +2059,7 @@ def set_project_metadata(
     progress_percent: int | None = 0,
     pinned: bool | int | str | None = None,
     project_note: str | None = None,
+    display_name: str | None = None,
 ) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
@@ -2068,12 +2072,20 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
+            SELECT display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
             FROM project_metadata
             WHERE project_name = ?
             """,
             (normalized_name,),
         ).fetchone()
+        normalized_display_name = (
+            (existing["display_name"] or "").strip() if display_name is None and existing
+            else str(display_name or "").strip()
+        )
+        if not normalized_display_name or normalized_display_name == normalized_name:
+            normalized_display_name = ""
+        if len(normalized_display_name) > 180:
+            return {"error": "Display name must be 180 characters or fewer."}
         normalized = _normalize_project_metadata_fields(
             existing["status"] if status is None and existing else status,
             existing["type"] if project_type is None and existing else project_type,
@@ -2127,6 +2139,7 @@ def set_project_metadata(
                 normalized_progress,
                 normalized_pinned,
                 normalized_project_note,
+                normalized_display_name,
                 existing["board_order"] if existing else 0,
             )
         ):
@@ -2141,6 +2154,7 @@ def set_project_metadata(
                 "project_name": normalized_name,
                 "metadata": {
                     "status": "",
+                    "display_name": normalized_name,
                     "status_label": "",
                     "type": "",
                     "type_label": "",
@@ -2160,10 +2174,11 @@ def set_project_metadata(
         conn.execute(
             """
             INSERT INTO project_metadata (
-                project_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, updated_at
+                project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             ON CONFLICT(project_name) DO UPDATE SET
+                display_name = excluded.display_name,
                 status = excluded.status,
                 type = excluded.type,
                 priority = excluded.priority,
@@ -2178,6 +2193,7 @@ def set_project_metadata(
             """,
             (
                 normalized_name,
+                normalized_display_name,
                 normalized_status,
                 normalized_type,
                 normalized_priority,
@@ -2195,6 +2211,7 @@ def set_project_metadata(
             "ok": True,
             "project_name": normalized_name,
             "metadata": {
+                "display_name": normalized_display_name or normalized_name,
                 "status": normalized_status,
                 "status_label": get_project_status_options(conn).get(normalized_status, ""),
                 "type": normalized_type,
@@ -3154,6 +3171,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 project["category_color"] = category["color"] if category else None
                 metadata = project_metadata.get(project["project_name"], {})
                 project["status"] = metadata.get("status", "")
+                project["display_name"] = metadata.get("display_name", project["project_name"])
                 project["status_label"] = metadata.get("status_label", "")
                 project["type"] = metadata.get("type", "")
                 project["type_label"] = metadata.get("type_label", "")
@@ -3203,6 +3221,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 recent_rows.append(
                     {
                         "project_name": row["project_name"],
+                        "display_name": metadata.get("display_name", row["project_name"]),
                         "start_time": row["start_time"],
                         "end_time": row["end_time"],
                         "active_seconds": row["active_seconds"],
@@ -7074,6 +7093,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("progress_percent"),
                 payload.get("pinned"),
                 payload.get("project_note"),
+                payload.get("display_name"),
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-board/reorder":
