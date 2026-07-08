@@ -2991,13 +2991,6 @@ select.planner-goal-input{
 .planner-board-project .category-pill-swatch{width:7px;height:7px}
 .planner-board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding:2px 2px 14px;scroll-snap-type:x proximity}
 .planner-board-column{scroll-snap-align:start}
-.board-pin{
-  width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
-  border:1px solid var(--border);border-radius:10px;background:var(--control-bg);
-  color:var(--ink-4);cursor:pointer;flex:0 0 auto;
-}
-.board-pin:hover{background:var(--surface-hover);color:var(--ink)}
-.board-pin.is-pinned{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
 .focus-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .focus-slot{min-height:88px}
 .focus-slot.is-empty{border-style:dashed;color:var(--ink-4);align-content:center}
@@ -6921,18 +6914,6 @@ async function confirmTerminalProjectMove(projectName, status) {
   });
 }
 
-async function updateProjectPinned(project, pinned) {
-  return postJson('/api/project-metadata', {
-    project_name: project.project_name,
-    status: project.status || '',
-    type: project.type || '',
-    priority: project.priority || '',
-    due_date: project.due_date || '',
-    pinned,
-    project_note: project.project_note || '',
-  });
-}
-
 function todayFocusProjects(projects) {
   const candidates = (projects || [])
     .filter(project => !isTerminalProjectStatus(project.status || ''))
@@ -7159,9 +7140,6 @@ function renderPlanner(data) {
               </span>
               ${categoryPill(project)}
             </div>
-            <button class="board-pin ${project.pinned ? 'is-pinned' : ''}" type="button" data-pin-project="${encodedProject}" aria-label="${project.pinned ? 'Unpin project' : 'Pin project'}" title="${project.pinned ? 'Unpin' : 'Pin'}">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="${project.pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M5 17h14"/><path d="M7 10h10"/><path d="M9 10V4h6v6"/><path d="M8 17l2-7h4l2 7"/></svg>
-            </button>
           </div>
         </div>
       </div>
@@ -7323,30 +7301,10 @@ function bindProjectBoard(data) {
 
   document.querySelectorAll('[data-open-project]').forEach(trigger => {
     trigger.addEventListener('click', event => {
-      const pinButton = event.target.closest('[data-pin-project]');
       const categoryButton = event.target.closest('[data-category-trigger]');
-      if (pinButton || categoryButton) return;
+      if (categoryButton) return;
       const projectName = decodeURIComponent(trigger.dataset.openProject || '');
       if (projectName) openProjectTasks(projectName);
-    });
-  });
-
-  document.querySelectorAll('[data-pin-project]').forEach(button => {
-    button.addEventListener('click', async event => {
-      event.stopPropagation();
-      const projectName = decodeURIComponent(button.dataset.pinProject || '');
-      const project = (data.projects || []).find(p => p.project_name === projectName);
-      if (!project) return;
-      button.disabled = true;
-      try {
-        await updateProjectPinned(project, !project.pinned);
-        toast(project.pinned ? `Unpinned ${projectName}` : `Pinned ${projectName}`);
-        load();
-      } catch (error) {
-        toast(error.message || 'Failed to update pin');
-      } finally {
-        button.disabled = false;
-      }
     });
   });
 
