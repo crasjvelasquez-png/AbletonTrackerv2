@@ -1618,10 +1618,12 @@ header{
   margin-top:18px;display:flex;justify-content:flex-end;
 }
 .task-modal{
-  max-width:640px;
+  max-width:640px;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;
+  overflow:hidden;
 }
 .task-modal-body{
-  display:grid;gap:14px;margin-bottom:18px;
+  display:grid;gap:14px;margin-bottom:18px;overflow-y:auto;min-height:0;
+  padding-right:4px;
 }
 .project-planning-form{
   display:grid;gap:12px;padding:14px;border:1px solid var(--border);
@@ -3394,8 +3396,10 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
             <div class="inline-notes-toggle" id="projectNotesToggle" style="display:flex;gap:4px;margin-bottom:6px;padding:3px;background:var(--control-bg);border-radius:9px;border:1px solid var(--border)">
               <button class="notes-mode-btn is-active" id="projectGlobalBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
               <button class="notes-mode-btn" id="projectSessionBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
+              <button class="notes-mode-btn" id="projectMergeBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Merge</button>
             </div>
             <textarea class="notes-textarea" id="projectNotesTextarea" maxlength="3000" placeholder="" style="min-height:70px;max-height:140px"></textarea>
+            <div class="notes-merge-body" id="projectMergeBody"></div>
             <div id="projectNotesSessionInfo" style="display:none;font-size:11px;color:var(--ink-4);margin-top:4px;line-height:1.4"></div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
               <div class="notes-nav" id="projectNotesNav" aria-label="Navigate session entries" hidden>
@@ -5711,6 +5715,8 @@ function setupProjectInlineNotes(projectName) {
   const toggle = document.getElementById('projectNotesToggle');
   const globalBtn = document.getElementById('projectGlobalBtn');
   const sessionBtn = document.getElementById('projectSessionBtn');
+  const mergeBtn = document.getElementById('projectMergeBtn');
+  const mergeBody = document.getElementById('projectMergeBody');
   const textarea = document.getElementById('projectNotesTextarea');
   const sessionInfo = document.getElementById('projectNotesSessionInfo');
   const nav = document.getElementById('projectNotesNav');
@@ -5823,22 +5829,13 @@ function setupProjectInlineNotes(projectName) {
   }
 
   function setModeButtons() {
-    if (!globalBtn || !sessionBtn) return;
-    if (currentMode === 'global') {
-      globalBtn.classList.add('is-active');
-      sessionBtn.classList.remove('is-active');
-      globalBtn.style.background = 'var(--surface)';
-      globalBtn.style.color = 'var(--ink)';
-      sessionBtn.style.background = 'transparent';
-      sessionBtn.style.color = 'var(--ink-3)';
-    } else {
-      sessionBtn.classList.add('is-active');
-      globalBtn.classList.remove('is-active');
-      sessionBtn.style.background = 'var(--surface)';
-      sessionBtn.style.color = 'var(--ink)';
-      globalBtn.style.background = 'transparent';
-      globalBtn.style.color = 'var(--ink-3)';
-    }
+    [globalBtn, sessionBtn, mergeBtn].forEach(function(btn) {
+      if (!btn) return;
+      const active = btn === (currentMode === 'global' ? globalBtn : currentMode === 'session' ? sessionBtn : mergeBtn);
+      btn.classList.toggle('is-active', active);
+      btn.style.background = active ? 'var(--surface)' : 'transparent';
+      btn.style.color = active ? 'var(--ink)' : 'var(--ink-3)';
+    });
   }
 
   function updateTextarea(mode) {
@@ -5885,6 +5882,67 @@ function setupProjectInlineNotes(projectName) {
     updateTextarea(mode);
     currentMode = mode;
     setModeButtons();
+    const merging = mode === 'merge';
+    textarea.style.display = merging ? 'none' : '';
+    if (mergeBody) mergeBody.classList.toggle('is-active', merging);
+    if (sessionInfo) sessionInfo.style.display = 'none';
+    if (nav) nav.hidden = true;
+    if (charCount) charCount.style.display = merging ? 'none' : '';
+    if (merging) renderProjectMerge();
+  }
+
+  async function renderProjectMerge() {
+    if (!mergeBody) return;
+    mergeBody.innerHTML = '<div class="notes-merge-empty">Loading…</div>';
+    try {
+      const results = await Promise.all([
+        getJson('/api/project-aliases?project=' + encodeURIComponent(projectName)),
+        getJson('/api/project-list?sort=recent'),
+      ]);
+      const aliases = results[0].aliases || [];
+      const projects = (results[1] || []).map(p => typeof p === 'string' ? p : p.project_name).filter(Boolean);
+      const available = projects.filter(p => p !== projectName && !aliases.includes(p));
+      let html = '<div class="notes-merge-section"><div class="notes-merge-section-title">Merged into this project</div>';
+      html += aliases.length ? '<div class="notes-merge-alias-list">' + aliases.map(alias => '<div class="notes-merge-alias-row"><span class="notes-merge-alias-name">' + escapeHtml(alias) + '</span><button class="notes-merge-unmerge-btn" data-project-unmerge="' + escapeHtml(alias) + '" type="button">Unmerge</button></div>').join('') + '</div>' : '<div class="notes-merge-empty">No projects merged yet.</div>';
+      html += '</div><div class="notes-merge-section"><div class="notes-merge-section-title">Merge into <span class="notes-merge-target">' + escapeHtml(projectName) + '</span></div>';
+      if (available.length) {
+        html += '<div class="notes-merge-picker"><input class="notes-merge-search" type="search" autocomplete="off" placeholder="Search projects…" aria-label="Search projects to merge"><div class="notes-merge-project-list" role="group" aria-label="Projects available to merge">' + available.map(name => '<label class="notes-merge-project-row" data-project-name="' + escapeHtml(name.toLocaleLowerCase()) + '"><input type="checkbox" value="' + escapeHtml(name) + '"><span>' + escapeHtml(name) + '</span></label>').join('') + '</div><button class="notes-merge-into-btn" type="button" disabled>Merge selected</button></div>';
+      } else html += '<div class="notes-merge-empty">No other projects available.</div>';
+      html += '</div>';
+      mergeBody.innerHTML = html;
+      const list = mergeBody.querySelector('.notes-merge-project-list');
+      const confirmBtn = mergeBody.querySelector('.notes-merge-into-btn');
+      const search = mergeBody.querySelector('.notes-merge-search');
+      if (list && confirmBtn) {
+        list.addEventListener('change', function() {
+          confirmBtn.disabled = !list.querySelector('input:checked');
+          list.querySelectorAll('.notes-merge-project-row').forEach(row => row.classList.toggle('is-selected', row.querySelector('input').checked));
+        });
+        search.addEventListener('input', function() {
+          const query = search.value.trim().toLocaleLowerCase();
+          list.querySelectorAll('.notes-merge-project-row').forEach(row => { row.hidden = !!query && !row.dataset.projectName.includes(query); });
+        });
+        confirmBtn.addEventListener('click', async function() {
+          const selected = Array.from(list.querySelectorAll('input:checked')).map(input => input.value);
+          if (!selected.length) return;
+          const ok = await confirmDialog({ title: 'Merge projects?', body: 'Combine <strong>' + selected.length + '</strong> project' + (selected.length === 1 ? '' : 's') + ' into <code>' + escapeHtml(projectName) + '</code>? Sessions, notes, tasks, and time will be combined.', confirmLabel: 'Merge selected' });
+          if (!ok) return;
+          try {
+            await postJson('/api/merge-projects', { canonical_name: projectName, aliases: selected });
+            toast('Projects merged into ' + projectName);
+            await load();
+            renderProjectMerge();
+          } catch(e) { toast(e.message || 'Failed to merge projects'); }
+        });
+      }
+      mergeBody.querySelectorAll('[data-project-unmerge]').forEach(button => button.addEventListener('click', async function() {
+        const alias = button.dataset.projectUnmerge;
+        const ok = await confirmDialog({ title: 'Unmerge project?', body: '<code>' + escapeHtml(alias) + '</code> will be restored as an independent project.', confirmLabel: 'Unmerge' });
+        if (!ok) return;
+        try { await postJson('/api/unmerge-project', { alias_name: alias }); await load(); renderProjectMerge(); toast('Unmerged ' + alias); }
+        catch(e) { toast(e.message || 'Failed to unmerge project'); }
+      }));
+    } catch(e) { mergeBody.innerHTML = '<div class="notes-merge-empty">Failed to load merge data.</div>'; }
   }
 
   // Initialize UI state
@@ -5912,6 +5970,7 @@ function setupProjectInlineNotes(projectName) {
 
   async function onSave(savedMetadata = null) {
     if (!textarea) return;
+    if (currentMode === 'merge') return;
     const val = textarea.value.trim();
     if (currentMode === 'global') {
       currentProjectNote = val;
@@ -5941,9 +6000,11 @@ function setupProjectInlineNotes(projectName) {
   function onNext() { openEntry(nextSessionId); }
   function onGlobalClick() { switchMode('global'); }
   function onSessionClick() { switchMode('session'); }
+  function onMergeClick() { switchMode('merge'); }
 
   if (globalBtn) globalBtn.addEventListener('click', onGlobalClick);
   if (sessionBtn) sessionBtn.addEventListener('click', onSessionClick);
+  if (mergeBtn) mergeBtn.addEventListener('click', onMergeClick);
   if (textarea) textarea.addEventListener('input', onTextareaInput);
   if (prevBtn) prevBtn.addEventListener('click', onPrev);
   if (nextBtn) nextBtn.addEventListener('click', onNext);
@@ -5963,6 +6024,7 @@ function setupProjectInlineNotes(projectName) {
     cleanup: function() {
       if (globalBtn) globalBtn.removeEventListener('click', onGlobalClick);
       if (sessionBtn) sessionBtn.removeEventListener('click', onSessionClick);
+      if (mergeBtn) mergeBtn.removeEventListener('click', onMergeClick);
       if (textarea) textarea.removeEventListener('input', onTextareaInput);
       if (prevBtn) prevBtn.removeEventListener('click', onPrev);
       if (nextBtn) nextBtn.removeEventListener('click', onNext);
@@ -6826,7 +6888,9 @@ function projectUrgencyLabel(project) {
   if (delta < 0) return 'Overdue';
   if (delta === 0) return 'Today';
   if (delta === 1) return 'Tomorrow';
-  if (delta <= 7) return 'This week';
+  if (delta <= 7) {
+    return projectDueDate(project).toLocaleDateString('en-US', { weekday: 'long' });
+  }
   return 'Upcoming';
 }
 

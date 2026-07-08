@@ -1559,10 +1559,12 @@ header{
   margin-top:18px;display:flex;justify-content:flex-end;
 }
 .task-modal{
-  max-width:640px;
+  max-width:640px;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;
+  overflow:hidden;
 }
 .task-modal-body{
-  display:grid;gap:14px;margin-bottom:18px;
+  display:grid;gap:14px;margin-bottom:18px;overflow-y:auto;min-height:0;
+  padding-right:4px;
 }
 .project-planning-form{
   display:grid;gap:12px;padding:14px;border:1px solid var(--border);

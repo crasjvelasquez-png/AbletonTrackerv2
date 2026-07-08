@@ -3460,7 +3460,9 @@ function projectUrgencyLabel(project) {
   if (delta < 0) return 'Overdue';
   if (delta === 0) return 'Today';
   if (delta === 1) return 'Tomorrow';
-  if (delta <= 7) return 'This week';
+  if (delta <= 7) {
+    return projectDueDate(project).toLocaleDateString('en-US', { weekday: 'long' });
+  }
   return 'Upcoming';
 }
 
