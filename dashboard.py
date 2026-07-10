@@ -1248,6 +1248,13 @@ def _normalize_project_task_fields(
         return {"error": "Unknown task status."}
     if normalized_priority not in PROJECT_TASK_PRIORITY_OPTIONS:
         return {"error": "Unknown task priority."}
+    if normalized_due_date:
+        try:
+            parsed_due_date = datetime.strptime(normalized_due_date, "%Y-%m-%d")
+        except ValueError:
+            return {"error": "Task due date must be a valid YYYY-MM-DD date."}
+        if parsed_due_date.strftime("%Y-%m-%d") != normalized_due_date:
+            return {"error": "Task due date must be a valid YYYY-MM-DD date."}
     try:
         normalized_sort_order = int(sort_order or 0)
     except (TypeError, ValueError):

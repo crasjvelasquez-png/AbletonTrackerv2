@@ -3786,9 +3786,9 @@ function renderPlanner(data) {
   const hiddenColumns = (() => {
     try {
       const stored = localStorage.getItem('boardHiddenColumns');
-      return stored ? JSON.parse(stored) : ['finished', 'paused', 'abandoned'];
+      return stored ? JSON.parse(stored) : ['paused', 'abandoned'];
     } catch(e) {
-      return ['finished', 'paused', 'abandoned'];
+      return ['paused', 'abandoned'];
     }
   })();
 
@@ -3983,9 +3983,9 @@ function bindProjectBoard(data) {
       const status = button.dataset.showHiddenLane;
       let hidden;
       try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
       } catch(err) {
-        hidden = ['finished', 'paused', 'abandoned'];
+        hidden = ['paused', 'abandoned'];
       }
       hidden = hidden.filter(value => value !== status);
       localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
@@ -3999,9 +3999,9 @@ function bindProjectBoard(data) {
       const status = button.dataset.hideColumn;
       let hidden;
       try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
       } catch(err) {
-        hidden = ['finished', 'paused', 'abandoned'];
+        hidden = ['paused', 'abandoned'];
       }
       if (!hidden.includes(status)) hidden.push(status);
       localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));

@@ -1684,7 +1684,7 @@ select.project-planning-input{
 .tracker-calendar-foot [data-date=""]{border:1px solid color-mix(in srgb,#ff5b62 28%,var(--border));background:color-mix(in srgb,#ff5b62 9%,transparent);color:#ff767c}
 .tracker-calendar-foot [data-date=""]:hover{border-color:color-mix(in srgb,#ff5b62 55%,var(--border));background:color-mix(in srgb,#ff5b62 16%,transparent);color:#ff9196}
 .task-form{
-  display:grid;grid-template-columns:minmax(0,1fr) 130px auto;gap:10px;
+  display:grid;grid-template-columns:minmax(0,1fr) 130px 132px auto;gap:10px;
   align-items:center;padding:12px;border:1px solid var(--border);
   border-radius:16px;background:var(--control-bg);
 }
@@ -1726,7 +1726,7 @@ select.project-planning-input{
   display:grid;gap:8px;max-height:min(46vh,380px);overflow:auto;padding-right:2px;
 }
 .task-row{
-  display:grid;grid-template-columns:auto minmax(0,1fr) 112px auto;gap:10px;align-items:center;
+  display:grid;grid-template-columns:auto minmax(0,1fr) 112px 132px auto;gap:10px;align-items:center;
   --task-priority-accent:var(--border);
   --task-priority-soft:var(--surface);
   --task-priority-ink:var(--ink-2);
@@ -1766,6 +1766,8 @@ select.project-planning-input{
   color:var(--task-priority-ink);
   background-color:rgba(16,16,18,.72);
 }
+.task-row .task-title-input,.task-row .task-date-input{min-width:0;width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);padding:6px 8px;font-size:12px}
+.task-row .task-date-input{max-width:132px}
 .task-delete{
   width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;
   color:var(--danger);font-size:16px;line-height:1;cursor:pointer;opacity:.66;
@@ -3498,6 +3500,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
           <option value="high">High</option>
           <option value="low">Low</option>
         </select>
+        <input class="task-date-input" id="taskDueDateInput" type="date" aria-label="Task due date">
         <button class="btn small" id="taskAddButton" type="submit">Add</button>
       </form>
       <div class="task-toggle-row" id="taskToggleRow">
@@ -5530,8 +5533,9 @@ function renderProjectTaskRows(tasks) {
     return `
       <div class="task-row ${priorityClass} ${done ? 'is-done' : ''}" data-task-row="${task.id}">
         <input class="task-check" type="checkbox" data-task-toggle="${task.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} ${escapeHtml(task.title)}">
-        <div class="task-title" title="${escapeHtml(task.title)}">${escapeHtml(task.title)}</div>
+        <input class="task-title-input" data-task-title="${task.id}" value="${escapeHtml(task.title)}" aria-label="Title for ${escapeHtml(task.title)}">
         ${taskPrioritySelect(task)}
+        <input class="task-date-input" data-task-due-date="${task.id}" type="date" value="${escapeHtml(task.due_date || '')}" aria-label="Due date for ${escapeHtml(task.title)}">
         <button class="task-delete" type="button" data-task-delete="${task.id}" aria-label="Delete ${escapeHtml(task.title)}">×</button>
       </div>
     `;
@@ -5698,6 +5702,25 @@ async function saveProjectPlanning(projectName) {
 }
 
 function bindProjectTaskModalRows(projectName) {
+  const bindTaskField = (selector, field) => document.querySelectorAll(selector).forEach(input => {
+    input.dataset.previousValue = input.value;
+    input.addEventListener('change', async () => {
+      const previous = input.dataset.previousValue;
+      input.disabled = true;
+      try {
+        await postJson('/api/project-tasks/update', { id: input.dataset.taskId || input.dataset.taskTitle || input.dataset.taskDueDate, [field]: input.value });
+        input.dataset.previousValue = input.value;
+        await refreshProjectTaskModal(projectName);
+        await load();
+      } catch (error) {
+        input.value = previous;
+        toast(error.message || 'Failed to update task');
+      } finally { input.disabled = false; }
+    });
+  });
+  bindTaskField('[data-task-title]', 'title');
+  bindTaskField('[data-task-due-date]', 'due_date');
+
   document.querySelectorAll('[data-task-toggle]').forEach(input => {
     input.addEventListener('change', async () => {
       input.disabled = true;
@@ -5765,6 +5788,7 @@ function openProjectTasks(projectName) {
   const planningForm = document.getElementById('projectPlanningForm');
   const titleInput = document.getElementById('taskTitleInput');
   const priorityInput = document.getElementById('taskPriorityInput');
+  const dueDateInput = document.getElementById('taskDueDateInput');
   const addBtn = document.getElementById('taskAddButton');
   const toggle = document.getElementById('taskToggleCompleted');
   const notesTextarea = document.getElementById('projectNotesTextarea');
@@ -5786,6 +5810,7 @@ function openProjectTasks(projectName) {
   projectLabel.textContent = projectName;
   titleInput.value = '';
   priorityInput.value = 'normal';
+  dueDateInput.value = '';
 
   const toggleCompleted = () => {
     const show = !(projectTaskModalState?.showCompleted ?? false);
@@ -5830,9 +5855,11 @@ function openProjectTasks(projectName) {
         project_name: projectName,
         title,
         priority: priorityInput.value || 'normal',
+        due_date: dueDateInput.value || '',
       });
       titleInput.value = '';
       priorityInput.value = 'normal';
+      dueDateInput.value = '';
       await refreshProjectTaskModal(projectName);
       await load();
       titleInput.focus();
@@ -7434,9 +7461,9 @@ function renderPlanner(data) {
   const hiddenColumns = (() => {
     try {
       const stored = localStorage.getItem('boardHiddenColumns');
-      return stored ? JSON.parse(stored) : ['finished', 'paused', 'abandoned'];
+      return stored ? JSON.parse(stored) : ['paused', 'abandoned'];
     } catch(e) {
-      return ['finished', 'paused', 'abandoned'];
+      return ['paused', 'abandoned'];
     }
   })();
 
@@ -7512,6 +7539,17 @@ function renderPlanner(data) {
         </div>
         ${renderFocus()}
       </section>
+
+      <details class="planner-panel">
+        <summary class="planner-panel-head"><div><div class="planner-panel-title">Deadline Radar</div><div class="planner-panel-meta">Client deadlines and delivery risk</div></div></summary>
+        ${renderDeadlineRadar()}
+      </details>
+
+      <details class="planner-panel">
+        <summary class="planner-panel-head"><div><div class="planner-panel-title">Planner Goals</div><div class="planner-panel-meta">Small targets alongside tracked time</div></div></summary>
+        ${renderPlannerGoalForm()}
+        ${renderPlannerGoalRows(plannerGoals)}
+      </details>
 
       <details class="planner-panel" open>
         <summary class="planner-panel-head">
@@ -7598,9 +7636,9 @@ function bindProjectBoard(data) {
       const status = button.dataset.showHiddenLane;
       let hidden;
       try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
       } catch(err) {
-        hidden = ['finished', 'paused', 'abandoned'];
+        hidden = ['paused', 'abandoned'];
       }
       hidden = hidden.filter(value => value !== status);
       localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
@@ -7614,9 +7652,9 @@ function bindProjectBoard(data) {
       const status = button.dataset.hideColumn;
       let hidden;
       try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["finished","paused","abandoned"]');
+        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
       } catch(err) {
-        hidden = ['finished', 'paused', 'abandoned'];
+        hidden = ['paused', 'abandoned'];
       }
       if (!hidden.includes(status)) hidden.push(status);
       localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
