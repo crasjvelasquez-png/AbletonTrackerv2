@@ -637,6 +637,9 @@ def ensure_project_tasks_table(conn: sqlite3.Connection) -> None:
             status       TEXT NOT NULL DEFAULT 'open',
             priority     TEXT NOT NULL DEFAULT 'normal',
             due_date     TEXT NOT NULL DEFAULT '',
+            waiting      INTEGER NOT NULL DEFAULT 0,
+            quick        INTEGER NOT NULL DEFAULT 0,
+            label        TEXT NOT NULL DEFAULT '',
             completed_at INTEGER,
             sort_order   INTEGER NOT NULL DEFAULT 0,
             created_at   INTEGER NOT NULL,
@@ -644,6 +647,17 @@ def ensure_project_tasks_table(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(project_tasks)").fetchall()
+    }
+    task_columns = {
+        "waiting": "INTEGER NOT NULL DEFAULT 0",
+        "quick": "INTEGER NOT NULL DEFAULT 0",
+        "label": "TEXT NOT NULL DEFAULT ''",
+    }
+    for column, definition in task_columns.items():
+        if column not in existing_columns:
+            conn.execute(f"ALTER TABLE project_tasks ADD COLUMN {column} {definition}")
 
 
 def ensure_project_folders_tables(conn: sqlite3.Connection) -> None:
@@ -1219,6 +1233,9 @@ def _format_project_task(row: sqlite3.Row) -> dict:
         "status": row["status"],
         "priority": row["priority"],
         "due_date": row["due_date"] or "",
+        "waiting": bool(row["waiting"]),
+        "quick": bool(row["quick"]),
+        "label": row["label"] or "",
         "completed_at": row["completed_at"],
         "sort_order": row["sort_order"],
         "created_at": row["created_at"],
@@ -1232,13 +1249,25 @@ def _normalize_project_task_fields(
     status: str | None = "open",
     priority: str | None = "normal",
     due_date: str | None = "",
+    waiting=False,
+    quick=False,
+    label: str | None = "",
     sort_order=0,
-) -> tuple[str, str, str, str, str, int] | dict:
+) -> tuple[str, str, str, str, str, int, int, str, int] | dict:
     normalized_project = (project_name or "").strip()
     normalized_title = (title or "").strip()
     normalized_status = (status or "open").strip().lower()
     normalized_priority = (priority or "normal").strip().lower()
     normalized_due_date = (due_date or "").strip()
+    normalized_label = " ".join((label or "").strip().split())
+
+    def normalize_flag(value) -> int:
+        if isinstance(value, str):
+            return 1 if value.strip().lower() in {"1", "true", "yes", "on"} else 0
+        return 1 if bool(value) else 0
+
+    normalized_waiting = normalize_flag(waiting)
+    normalized_quick = normalize_flag(quick)
 
     if not normalized_project:
         return {"error": "Project name is required."}
@@ -1255,6 +1284,8 @@ def _normalize_project_task_fields(
             return {"error": "Task due date must be a valid YYYY-MM-DD date."}
         if parsed_due_date.strftime("%Y-%m-%d") != normalized_due_date:
             return {"error": "Task due date must be a valid YYYY-MM-DD date."}
+    if len(normalized_label) > 32:
+        return {"error": "Task label must be 32 characters or fewer."}
     try:
         normalized_sort_order = int(sort_order or 0)
     except (TypeError, ValueError):
@@ -1266,6 +1297,9 @@ def _normalize_project_task_fields(
         normalized_status,
         normalized_priority,
         normalized_due_date,
+        normalized_waiting,
+        normalized_quick,
+        normalized_label,
         normalized_sort_order,
     )
 
@@ -1274,7 +1308,7 @@ def get_project_tasks(conn: sqlite3.Connection, project_name: str | None = None)
     if project_name is None:
         rows = conn.execute(
             f"""
-            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date,
+            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date, pt.waiting, pt.quick, pt.label,
                    pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
             FROM project_tasks pt
             LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
@@ -1294,7 +1328,7 @@ def get_project_tasks(conn: sqlite3.Connection, project_name: str | None = None)
 
         rows = conn.execute(
             f"""
-            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date,
+            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date, pt.waiting, pt.quick, pt.label,
                    pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
             FROM project_tasks pt
             LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
@@ -1336,26 +1370,29 @@ def create_project_task(
     priority: str | None = "normal",
     due_date: str | None = "",
     sort_order=0,
+    waiting=False,
+    quick=False,
+    label: str | None = "",
 ) -> dict:
     if not DB_PATH.exists():
         return {"error": "No data yet — start the tracker first."}
 
     normalized = _normalize_project_task_fields(
-        project_name, title, "open", priority, due_date, sort_order
+        project_name, title, "open", priority, due_date, waiting, quick, label, sort_order
     )
     if isinstance(normalized, dict):
         return normalized
-    normalized_project, normalized_title, status, normalized_priority, normalized_due_date, normalized_sort_order = normalized
+    normalized_project, normalized_title, status, normalized_priority, normalized_due_date, normalized_waiting, normalized_quick, normalized_label, normalized_sort_order = normalized
 
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.execute(
             """
             INSERT INTO project_tasks (
-                project_name, title, status, priority, due_date,
+                project_name, title, status, priority, due_date, waiting, quick, label,
                 completed_at, sort_order, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, NULL, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, strftime('%s', 'now'), strftime('%s', 'now'))
             """,
             (
                 normalized_project,
@@ -1363,13 +1400,16 @@ def create_project_task(
                 status,
                 normalized_priority,
                 normalized_due_date,
+                normalized_waiting,
+                normalized_quick,
+                normalized_label,
                 normalized_sort_order,
             ),
         )
         conn.commit()
         row = conn.execute(
             """
-            SELECT id, project_name, title, status, priority, due_date,
+            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
                    completed_at, sort_order, created_at, updated_at
             FROM project_tasks
             WHERE id = ?
@@ -1391,7 +1431,7 @@ def update_project_task(task_id, fields: dict) -> dict:
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT id, project_name, title, status, priority, due_date,
+            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
                    completed_at, sort_order, created_at, updated_at
             FROM project_tasks
             WHERE id = ?
@@ -1406,13 +1446,16 @@ def update_project_task(task_id, fields: dict) -> dict:
         status = fields.get("status", existing["status"])
         priority = fields.get("priority", existing["priority"])
         due_date = fields.get("due_date", existing["due_date"])
+        waiting = fields.get("waiting", existing["waiting"])
+        quick = fields.get("quick", existing["quick"])
+        label = fields.get("label", existing["label"])
         sort_order = fields.get("sort_order", existing["sort_order"])
         normalized = _normalize_project_task_fields(
-            project_name, title, status, priority, due_date, sort_order
+            project_name, title, status, priority, due_date, waiting, quick, label, sort_order
         )
         if isinstance(normalized, dict):
             return normalized
-        normalized_project, normalized_title, normalized_status, normalized_priority, normalized_due_date, normalized_sort_order = normalized
+        normalized_project, normalized_title, normalized_status, normalized_priority, normalized_due_date, normalized_waiting, normalized_quick, normalized_label, normalized_sort_order = normalized
         completed_at_sql = (
             "COALESCE(completed_at, strftime('%s', 'now'))"
             if normalized_status == "done"
@@ -1427,6 +1470,9 @@ def update_project_task(task_id, fields: dict) -> dict:
                 status = ?,
                 priority = ?,
                 due_date = ?,
+                waiting = ?,
+                quick = ?,
+                label = ?,
                 completed_at = {completed_at_sql},
                 sort_order = ?,
                 updated_at = strftime('%s', 'now')
@@ -1438,6 +1484,9 @@ def update_project_task(task_id, fields: dict) -> dict:
                 normalized_status,
                 normalized_priority,
                 normalized_due_date,
+                normalized_waiting,
+                normalized_quick,
+                normalized_label,
                 normalized_sort_order,
                 normalized_id,
             ),
@@ -1445,7 +1494,7 @@ def update_project_task(task_id, fields: dict) -> dict:
         conn.commit()
         row = conn.execute(
             """
-            SELECT id, project_name, title, status, priority, due_date,
+            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
                    completed_at, sort_order, created_at, updated_at
             FROM project_tasks
             WHERE id = ?
@@ -1940,6 +1989,7 @@ def get_project_folders(conn: sqlite3.Connection | None = None) -> list[dict]:
         folder["project_name"] = folder["name"]
         folder["project_note"] = folder["note"]
         folder["pinned"] = False
+        folder["project_tasks"] = get_project_tasks(conn, f"__folder__{folder['id']}")
     return folders
 
 
@@ -2745,9 +2795,9 @@ def _compute_data_etag(month_value: str = "") -> str:
         pt = conn.execute(
             """
             SELECT COUNT(*), MAX(id), MAX(updated_at),
-                   GROUP_CONCAT(id || ':' || project_name || ':' || status || ':' || priority || ':' || updated_at, '|')
+                   GROUP_CONCAT(id || ':' || project_name || ':' || status || ':' || priority || ':' || due_date || ':' || waiting || ':' || quick || ':' || label || ':' || updated_at, '|')
             FROM (
-                SELECT id, project_name, status, priority, updated_at
+                SELECT id, project_name, status, priority, due_date, waiting, quick, label, updated_at
                 FROM project_tasks
                 ORDER BY id
             )
@@ -7186,6 +7236,9 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("priority", "normal"),
                 payload.get("due_date", ""),
                 payload.get("sort_order", 0),
+                payload.get("waiting", False),
+                payload.get("quick", False),
+                payload.get("label", ""),
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-tasks/update":

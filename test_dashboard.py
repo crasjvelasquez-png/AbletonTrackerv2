@@ -766,6 +766,9 @@ class DashboardProjectTaskTests(unittest.TestCase):
                 "status",
                 "priority",
                 "due_date",
+                "waiting",
+                "quick",
+                "label",
                 "completed_at",
                 "sort_order",
                 "created_at",
@@ -785,6 +788,9 @@ class DashboardProjectTaskTests(unittest.TestCase):
         self.assertEqual(first["task"]["status"], "open")
         self.assertEqual(first["task"]["priority"], "high")
         self.assertEqual(first["task"]["due_date"], "2026-06-05")
+        self.assertFalse(first["task"]["waiting"])
+        self.assertFalse(first["task"]["quick"])
+        self.assertEqual(first["task"]["label"], "")
         self.assertIsNone(first["task"]["completed_at"])
 
         result = dashboard.get_project_tasks_response("Planner Song")
@@ -833,6 +839,9 @@ class DashboardProjectTaskTests(unittest.TestCase):
                 "title": "Record final vocal",
                 "priority": "high",
                 "due_date": "2026-06-06",
+                "waiting": True,
+                "quick": True,
+                "label": "Vocal",
                 "sort_order": 7,
             },
         )
@@ -842,6 +851,9 @@ class DashboardProjectTaskTests(unittest.TestCase):
         self.assertEqual(updated["task"]["status"], "open")
         self.assertEqual(updated["task"]["priority"], "high")
         self.assertEqual(updated["task"]["due_date"], "2026-06-06")
+        self.assertTrue(updated["task"]["waiting"])
+        self.assertTrue(updated["task"]["quick"])
+        self.assertEqual(updated["task"]["label"], "Vocal")
         self.assertEqual(updated["task"]["sort_order"], 7)
 
     def test_complete_and_reopen_project_task(self):
@@ -876,6 +888,7 @@ class DashboardProjectTaskTests(unittest.TestCase):
         created = dashboard.create_project_task("Planner Song", "Record vocals")
         bad_status = dashboard.update_project_task(created["task"]["id"], {"status": "blocked"})
         bad_update_date = dashboard.update_project_task(created["task"]["id"], {"due_date": "2026-13-01"})
+        long_label = dashboard.create_project_task("Planner Song", "Record vocals", label="x" * 33)
         missing_id = dashboard.update_project_task("nope", {"status": "done"})
         not_found = dashboard.delete_project_task(9999)
 
@@ -886,6 +899,7 @@ class DashboardProjectTaskTests(unittest.TestCase):
         self.assertEqual(bad_date_format["error"], "Task due date must be a valid YYYY-MM-DD date.")
         self.assertEqual(bad_status["error"], "Unknown task status.")
         self.assertEqual(bad_update_date["error"], "Task due date must be a valid YYYY-MM-DD date.")
+        self.assertEqual(long_label["error"], "Task label must be 32 characters or fewer.")
         self.assertEqual(missing_id["error"], "Task id is required.")
         self.assertEqual(not_found["error"], "Task not found.")
 
@@ -905,6 +919,20 @@ class DashboardProjectTaskTests(unittest.TestCase):
 
         self.assertEqual(len(stats["projects"][0]["project_tasks"]), 1)
         self.assertEqual(stats["projects"][0]["project_tasks"][0]["title"], "Arrange bridge")
+
+    def test_stats_include_folder_tasks(self):
+        folder = dashboard.save_project_folder({"name": "EP delivery"})
+        self.assertTrue(folder["ok"])
+        task = dashboard.create_project_task(
+            f"__folder__{folder['folder']['id']}", "Confirm artwork", waiting=True, quick=True, label="Admin"
+        )
+        self.assertTrue(task["ok"])
+
+        stats = dashboard.get_stats()
+        folder_row = next(item for item in stats["project_folders"] if item["id"] == folder["folder"]["id"])
+        self.assertEqual(folder_row["project_tasks"][0]["title"], "Confirm artwork")
+        self.assertTrue(folder_row["project_tasks"][0]["waiting"])
+        self.assertTrue(folder_row["project_tasks"][0]["quick"])
 
     def test_project_tasks_preserve_session_todos(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
