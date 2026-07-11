@@ -7714,12 +7714,12 @@ function renderPlanner(data) {
         ${renderFocus()}
       </section>
 
-      <details class="planner-panel">
+      <details class="planner-panel" hidden>
         <summary class="planner-panel-head"><div><div class="planner-panel-title">Deadline Radar</div><div class="planner-panel-meta">Client deadlines and delivery risk</div></div></summary>
         ${renderDeadlineRadar()}
       </details>
 
-      <details class="planner-panel">
+      <details class="planner-panel" hidden>
         <summary class="planner-panel-head"><div><div class="planner-panel-title">Planner Goals</div><div class="planner-panel-meta">Small targets alongside tracked time</div></div></summary>
         ${renderPlannerGoalForm()}
         ${renderPlannerGoalRows(plannerGoals)}
