@@ -2761,32 +2761,28 @@ details.planner-panel[open] > summary.planner-panel-head:after{
 .planner-panel-title{
   font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.02em;
 }
-.today-worklist{padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--accent) 32%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 8%,var(--control-bg)),var(--control-bg) 44%)}
-.today-worklist-head{padding:24px 24px 16px;border-left:3px solid var(--accent)}
-.today-worklist-title{font-family:var(--font-display);font-size:28px;font-weight:720;letter-spacing:-.03em;color:var(--ink)}
-.today-worklist-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:0 24px 16px}
-.today-filter-rail{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
-.today-filter-rail::-webkit-scrollbar{display:none}
-.today-filter{flex:0 0 auto;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink-3);padding:7px 11px;font-size:11px;font-weight:750;cursor:pointer}
-.today-filter:hover,.today-filter.is-active{border-color:color-mix(in srgb,var(--accent) 50%,var(--border));color:var(--accent);background:var(--accent-soft)}
-.today-quick-form{display:grid;grid-template-columns:minmax(150px,.75fr) minmax(180px,1.3fr) auto;gap:8px;padding:12px 24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--surface) 65%,transparent)}
-.today-quick-form select,.today-quick-form input{min-width:0;width:100%;border:1px solid var(--border);border-radius:9px;background:var(--control-bg);color:var(--ink);padding:8px 9px;font:inherit;font-size:12px}
-.today-task-list{display:grid}
-.today-task-row{display:grid;grid-template-columns:auto minmax(180px,1fr) minmax(96px,.45fr) minmax(72px,.3fr) minmax(0,.5fr);gap:14px;align-items:center;padding:13px 24px;border-bottom:1px solid var(--border);position:relative}
-.today-task-row:last-child{border-bottom:0}
-.today-task-row.is-overdue::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--danger)}
-.today-task-row.is-completing{opacity:.48;pointer-events:none}
-.today-task-main{min-width:0;display:grid;gap:3px}
-.today-task-owner{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.today-task-title{font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.today-task-due,.today-task-priority,.today-task-label{font-size:11px;font-weight:750;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.today-task-due.is-overdue{color:var(--danger)}
-.today-task-due.is-today{color:#bf7900}
-.today-task-priority.is-high{color:#d98600}
-.today-task-label{color:var(--accent)}
-.today-task-cues{display:flex;gap:5px;align-items:center;justify-content:flex-end;font-size:11px;font-weight:800;color:var(--ink-4)}
-.today-task-cue{color:var(--accent)}
-.today-empty{padding:24px;color:var(--ink-4);font-size:13px}
+.today-mission{--mission-tone:var(--accent);padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--mission-tone) 34%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--mission-tone) 9%,var(--control-bg)),var(--control-bg) 46%)}
+.today-mission.is-overdue{--mission-tone:var(--danger)}
+.today-mission.is-today{--mission-tone:#d89218}
+.today-mission-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:26px 26px 22px;border-left:3px solid var(--mission-tone)}
+.today-mission-kicker{font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase;color:var(--mission-tone)}
+.today-mission-title{margin-top:4px;font-family:var(--font-display);font-size:30px;font-weight:740;letter-spacing:-.035em;color:var(--ink)}
+.today-mission-summary{margin-top:5px;font-size:13px;color:var(--ink-3)}
+.today-progress{display:grid;grid-template-columns:auto 62px;gap:13px;align-items:center}.today-progress-copy{text-align:right}.today-progress-copy strong{display:block;font-family:var(--font-display);font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}.today-progress-copy span{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4)}
+.today-progress-ring{width:62px;height:62px;transform:rotate(-90deg);filter:drop-shadow(0 5px 12px color-mix(in srgb,var(--mission-tone) 20%,transparent))}.today-progress-ring circle{fill:none;stroke-width:6}.today-progress-track{stroke:color-mix(in srgb,var(--border) 70%,transparent)}.today-progress-value{stroke:var(--mission-tone);stroke-linecap:round;transition:stroke-dashoffset .75s var(--ease-spring)}
+.today-mission-body{padding:0 26px 26px;display:grid;gap:22px}.today-mission-section{display:grid;gap:9px}.today-mission-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.today-mission-section-title{font-size:11px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}.today-mission-section-count{font-size:11px;font-weight:750;color:var(--ink-4)}
+.today-task-list{display:grid;gap:8px}.today-task-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:13px;align-items:center;min-height:66px;padding:13px 15px;border:1px solid var(--border);border-radius:15px;background:color-mix(in srgb,var(--surface) 72%,transparent);position:relative;transition:transform .28s var(--ease-spring),opacity .24s ease,max-height .36s var(--ease-smooth),padding .36s ease,margin .36s ease,border-color .24s ease,box-shadow .28s ease;animation:todayTaskEnter .5s var(--ease-spring) both;animation-delay:calc(var(--mission-index,0) * 48ms)}
+.today-task-row:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--mission-tone) 32%,var(--border));box-shadow:0 10px 26px rgba(0,0,0,.06)}.today-task-row.is-start{min-height:92px;padding:18px;border-color:color-mix(in srgb,var(--mission-tone) 48%,var(--border));background:linear-gradient(120deg,color-mix(in srgb,var(--mission-tone) 13%,var(--surface)),var(--surface));animation:todayTaskEnter .55s var(--ease-spring) both,todayStartPulse 3.6s ease-in-out 1s infinite}.today-task-row.is-completing{pointer-events:none;animation:todayTaskComplete .52s var(--ease-smooth) forwards}
+.today-mission.is-settled .today-task-row:not(.is-start){animation:none}.today-mission.is-settled .today-task-row.is-start{animation:todayStartPulse 3.6s ease-in-out infinite}
+.today-task-check{appearance:none;width:22px;height:22px;border-radius:50%;border:2px solid color-mix(in srgb,var(--mission-tone) 58%,var(--border));background:var(--control-bg);cursor:pointer;display:grid;place-items:center;transition:transform .2s var(--ease-spring),background .2s ease,border-color .2s ease}.today-task-check::after{content:"";width:8px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) scale(0);transition:transform .2s var(--ease-spring)}.today-task-check:checked{background:var(--mission-tone);border-color:var(--mission-tone);transform:scale(1.12)}.today-task-check:checked::after{transform:rotate(-45deg) scale(1)}
+.today-task-main{min-width:0;display:grid;gap:4px}.today-task-owner{appearance:none;border:0;background:none;padding:0;width:max-content;max-width:100%;font:inherit;font-size:10px;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:var(--mission-tone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}.today-task-title{font-size:14px;font-weight:720;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.is-start .today-task-title{font-family:var(--font-display);font-size:19px;letter-spacing:-.015em}.today-task-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:720;color:var(--ink-4)}.today-task-reason{color:var(--mission-tone)}.today-task-label{color:var(--accent)}.today-task-rank{font-family:var(--font-display);font-size:12px;font-weight:800;color:var(--ink-4)}
+.today-clear{position:relative;overflow:hidden;display:grid;place-items:center;text-align:center;min-height:260px;padding:44px 24px}.today-clear-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:white;font-size:28px;box-shadow:0 14px 36px color-mix(in srgb,var(--accent) 34%,transparent);animation:todayClearPop .62s var(--ease-spring) both}.today-clear h2{margin:16px 0 4px;font-family:var(--font-display);font-size:27px;color:var(--ink)}.today-clear p{color:var(--ink-3);font-size:13px}.today-particle{position:absolute;left:50%;top:45%;width:7px;height:7px;border-radius:2px;background:var(--particle-color,var(--accent));animation:todayParticle 1.05s var(--ease-smooth) both;animation-delay:var(--particle-delay,0ms)}
+.today-mission.is-settled .today-particle{display:none}.today-mission.is-settled .today-clear-mark{animation:none}
+@keyframes todayTaskEnter{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes todayStartPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mission-tone) 0%,transparent)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--mission-tone) 10%,transparent),0 14px 34px color-mix(in srgb,var(--mission-tone) 14%,transparent)}}
+@keyframes todayTaskComplete{0%{opacity:1;transform:scale(1);max-height:120px}35%{opacity:1;transform:scale(1.015);background:color-mix(in srgb,var(--accent) 20%,var(--surface))}100%{opacity:0;transform:translateX(18px) scale(.98);max-height:0;min-height:0;padding-top:0;padding-bottom:0;border-width:0}}
+@keyframes todayClearPop{from{opacity:0;transform:scale(.55) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes todayParticle{from{opacity:1;transform:translate(-50%,-50%) rotate(0) translateY(0)}to{opacity:0;transform:translate(-50%,-50%) rotate(var(--particle-rotate)) translate(var(--particle-x),var(--particle-y))}}
 .planner-panel-meta{font-size:12px;color:var(--ink-4);line-height:1.35}
 .planner-focus-list,
 .planner-deadline-list,
@@ -3276,14 +3272,9 @@ select.planner-goal-input{
   .task-row{grid-template-columns:auto minmax(0,1fr) auto}
   .task-row .task-priority-select{grid-column:2 / -1}
   .task-row .task-date-input,.task-row .task-label-input,.task-row .task-flags{grid-column:2 / -1;max-width:none}
-  .today-worklist-head{padding:20px 18px 14px}
-  .today-worklist-tools{grid-template-columns:1fr;padding:0 18px 14px}
-  .today-quick-form{grid-template-columns:1fr;padding:12px 18px}
-  .today-task-row{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:12px 18px}
-  .today-task-due{grid-column:2;grid-row:2}
-  .today-task-priority{grid-column:3;grid-row:1}
-  .today-task-label{grid-column:2;grid-row:3}
-  .today-task-cues{grid-column:3;grid-row:2 / span 2;align-self:end}
+  .today-mission-head{grid-template-columns:1fr;padding:22px 20px 18px;gap:16px}
+  .today-progress{grid-template-columns:minmax(0,1fr) 54px}.today-progress-copy{text-align:left}.today-progress-ring{width:54px;height:54px}
+  .today-mission-body{padding:0 20px 22px}.today-task-row{grid-template-columns:auto minmax(0,1fr);gap:10px}.today-task-rank{display:none}
   .detail-modal-backdrop{padding:14px}
   .detail-modal-head{padding:20px 20px 16px}
   .detail-modal-body{padding:18px 20px 22px}
@@ -3373,7 +3364,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
   </div>
   <div class="header-right">
     <div class="header-nav" role="tablist" aria-label="Pages">
-      <button class="nav-tab is-active" id="navPlanner" type="button" data-view-tab="planner">Planner</button>
+      <button class="nav-tab is-active" id="navPlanner" type="button" data-view-tab="planner">Today</button>
       <button class="nav-tab" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
       <button class="nav-tab" id="navSettings" type="button" data-view-tab="settings">Settings</button>
     </div>
@@ -3509,7 +3500,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
           <div class="project-planning-field">
             <label for="projectPinnedInput">Pinned</label>
             <label class="project-planning-input" style="display:flex;align-items:center;gap:8px">
-              <input id="projectPinnedInput" type="checkbox"> Today's Focus
+              <input id="projectPinnedInput" type="checkbox"> Pin project
             </label>
           </div>
           <div class="project-planning-field" style="grid-column:1 / -1">
@@ -3636,7 +3627,9 @@ const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let latestDashboardData = null;
 let boardSearchQuery = '';
 let boardTypeFilter = '';
-let todayTaskFilter = 'today';
+let todayMissionDateKey = '';
+let todayMissionHasRendered = false;
+let todayMissionMidnightTimer = null;
 let activeView = window.location.hash === '#settings'
   ? 'settings'
   : (window.location.hash === '#dashboard' ? 'dashboard' : 'planner');
@@ -3928,11 +3921,11 @@ function updateHeaderForView() {
   document.getElementById('navSettings').classList.toggle('is-active', isSettings);
   document.getElementById('pageTitle').innerHTML = isSettings
     ? 'Workspace <em>settings</em>'
-    : (isPlanner ? 'Planner' : '<strong class="page-title-dashboard">Dashboard</strong>');
+    : (isPlanner ? 'Today' : '<strong class="page-title-dashboard">Dashboard</strong>');
   document.getElementById('pageSubtitle').innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
     : (isPlanner
-      ? 'Projects, tasks, momentum, and weekly focus'
+      ? 'Your priorities, decided by the commitments you already made'
       : `
       <span class="session-status" id="sessionStatus" data-state="live">
         <span class="session-status__text" id="sessionStatusText">Live</span>
@@ -7036,30 +7029,69 @@ function taskIsThisWeek(task) {
   return delta <= 6 - today.getDay();
 }
 
-function plannerTodayTasks(projects, folders) {
-  const items = [
-    ...(projects || []).flatMap(project => (project.project_tasks || []).filter(task => task.status !== 'done').map(task => ({ task, owner: project, ownerType: 'project', ownerName: projectDisplayName(project), pinned: !!project.pinned }))),
-    ...(folders || []).flatMap(folder => (folder.project_tasks || []).filter(task => task.status !== 'done').map(task => ({ task, owner: folder, ownerType: 'folder', ownerName: folder.name || folder.project_name || 'Folder', pinned: false }))),
-  ];
-  return items.sort((a, b) => {
-    const rank = item => {
-      const delta = taskDueDelta(item.task);
-      if (delta != null && delta < 0) return 0;
-      if (delta === 0) return 1;
-      if (item.task.priority === 'high') return 2;
-      if (item.pinned) return 3;
-      return 4;
-    };
-    const rankDiff = rank(a) - rank(b);
-    if (rankDiff) return rankDiff;
-    const aDate = a.task.due_date || '9999-12-31';
-    const bDate = b.task.due_date || '9999-12-31';
-    return aDate.localeCompare(bDate)
-      || TASK_PRIORITY_RANK(a.task.priority) - TASK_PRIORITY_RANK(b.task.priority)
-      || a.ownerName.localeCompare(b.ownerName)
-      || Number(a.task.sort_order || 0) - Number(b.task.sort_order || 0)
-      || Number(a.task.id || 0) - Number(b.task.id || 0);
+function todayMissionCategory(task) {
+  if (task?.waiting) return null;
+  const delta = taskDueDelta(task);
+  if (delta != null && delta < 0) return 'overdue';
+  if (delta === 0) return 'today';
+  if (delta != null && delta <= 7) return 'upcoming';
+  if (delta == null && task?.priority === 'high') return 'important';
+  if (delta == null && task?.quick) return 'quick';
+  return null;
+}
+
+function todayMissionReason(item) {
+  const delta = taskDueDelta(item.task);
+  if (item.category === 'overdue') {
+    const days = Math.abs(delta);
+    return `${days} day${days === 1 ? '' : 's'} overdue`;
+  }
+  if (item.category === 'today') return 'Due today';
+  if (item.category === 'upcoming') return delta === 1 ? 'Due tomorrow' : `Due in ${delta} days`;
+  if (item.category === 'important') return 'High-priority one-off';
+  return 'Quick win';
+}
+
+function taskCompletedToday(task) {
+  const completedAt = Number(task?.completed_at || 0);
+  if (!Number.isFinite(completedAt) || completedAt <= 0) return false;
+  return localDateKey(new Date(completedAt * 1000)) === localDateKey(new Date());
+}
+
+function buildTodayMission(projects, folders) {
+  const projectItems = (projects || [])
+    .filter(project => !isTerminalProjectStatus(project.status || ''))
+    .flatMap(project => (project.project_tasks || []).map(task => ({ task, owner: project, ownerType: 'project', ownerName: projectDisplayName(project), pinned: !!project.pinned })));
+  const folderItems = (folders || [])
+    .filter(folder => !isTerminalProjectStatus(folder.status || ''))
+    .flatMap(folder => (folder.project_tasks || []).map(task => ({ task, owner: folder, ownerType: 'folder', ownerName: folder.name || folder.project_name || 'Folder', pinned: false })));
+  const ranked = [...projectItems, ...folderItems]
+    .map(item => ({ ...item, category: todayMissionCategory(item.task) }))
+    .filter(item => item.category);
+  const categoryRank = { overdue: 0, today: 1, upcoming: 2, important: 3, quick: 4 };
+  ranked.sort((a, b) => {
+    const categoryDiff = categoryRank[a.category] - categoryRank[b.category];
+    if (categoryDiff) return categoryDiff;
+    const dateDiff = String(a.task.due_date || '9999-12-31').localeCompare(String(b.task.due_date || '9999-12-31'));
+    if (dateDiff) return dateDiff;
+    const priorityDiff = TASK_PRIORITY_RANK(a.task.priority) - TASK_PRIORITY_RANK(b.task.priority);
+    if (priorityDiff) return priorityDiff;
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    const orderDiff = Number(a.task.sort_order || 0) - Number(b.task.sort_order || 0);
+    if (orderDiff) return orderDiff;
+    const createdDiff = Number(a.task.created_at || 0) - Number(b.task.created_at || 0);
+    if (createdDiff) return createdDiff;
+    return Number(a.task.id || 0) - Number(b.task.id || 0);
   });
+  const open = ranked.filter(item => item.task.status !== 'done');
+  const completed = ranked.filter(item => item.task.status === 'done' && taskCompletedToday(item.task));
+  return {
+    open,
+    completed,
+    start: open[0] || null,
+    upNext: open.slice(1).filter(item => ['overdue', 'today', 'upcoming'].includes(item.category)),
+    ifTime: open.slice(1).filter(item => ['important', 'quick'].includes(item.category)),
+  };
 }
 
 function daysSinceTimestamp(timestamp) {
@@ -7256,7 +7288,7 @@ function isTerminalProjectStatus(status) {
 async function confirmTerminalProjectMove(projectName, status) {
   return confirmDialog({
     title: `Move to <em>${escapeHtml(projectStatusLabel(status))}</em>?`,
-    body: `This removes <code>${escapeHtml(projectName)}</code> from Today's Focus until you move it back to an active status.`,
+    body: `This removes <code>${escapeHtml(projectName)}</code> from the active Today and Project Board workflow until you move it back.`,
     confirmLabel: 'Move project',
   });
 }
@@ -7485,82 +7517,37 @@ function renderPlanner(data) {
       return days == null || days >= 7;
     })
     .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
-  const focusProjects = todayFocusProjects(projects);
   const deadlineProjects = plannerDeadlineProjects(projects);
-  const todayTasks = plannerTodayTasks(projects, folders);
+  const todayMission = buildTodayMission(projects, folders);
 
-  const renderTodayWorklist = () => {
-    const filters = [
-      ['today', 'Today'], ['overdue', 'Overdue'], ['week', 'This Week'],
-      ['high', 'High Priority'], ['waiting', 'Waiting'], ['quick', 'Quick'],
-    ];
-    const visible = todayTasks.filter(item => {
-      const delta = taskDueDelta(item.task);
-      if (todayTaskFilter === 'overdue') return delta != null && delta < 0;
-      if (todayTaskFilter === 'week') return taskIsThisWeek(item.task);
-      if (todayTaskFilter === 'high') return item.task.priority === 'high';
-      if (todayTaskFilter === 'waiting') return !!item.task.waiting;
-      if (todayTaskFilter === 'quick') return !!item.task.quick;
-      return delta != null && delta <= 0;
-    });
-    const projectOptions = projects.slice().sort((a, b) => projectDisplayName(a).localeCompare(projectDisplayName(b)));
-    return `
-      <section class="planner-panel today-worklist">
-        <div class="today-worklist-head"><div class="today-worklist-title">Today</div></div>
-        <div class="today-worklist-tools"><div class="today-filter-rail" role="tablist" aria-label="Today task filters">${filters.map(([value, label]) => `<button type="button" class="today-filter ${todayTaskFilter === value ? 'is-active' : ''}" data-today-filter="${value}" aria-pressed="${todayTaskFilter === value}">${label}</button>`).join('')}</div></div>
-        <form class="today-quick-form" id="todayQuickTaskForm">
-          <select id="todayQuickTaskProject" required aria-label="Project"><option value="">Choose project</option>${projectOptions.map(project => `<option value="${escapeHtml(project.project_name)}">${escapeHtml(projectDisplayName(project))}</option>`).join('')}</select>
-          <input id="todayQuickTaskTitle" maxlength="180" placeholder="Add task" autocomplete="off" required aria-label="Task title">
-          <button class="btn small" type="submit">Add</button>
-        </form>
-        <div class="today-task-list">${visible.length ? visible.map(item => {
-          const state = taskDueState(item.task);
-          const cues = [item.task.quick ? '<span class="today-task-cue">Quick</span>' : '', item.task.waiting ? '<span>Waiting</span>' : ''].filter(Boolean).join('');
-          return `<div class="today-task-row ${state === 'overdue' ? 'is-overdue' : ''}" data-today-task-row="${item.task.id}">
-            <input class="task-check" type="checkbox" data-today-task-complete="${item.task.id}" aria-label="Complete ${escapeHtml(item.task.title)}">
-            <div class="today-task-main"><div class="today-task-owner">${escapeHtml(item.ownerName)}${item.ownerType === 'folder' ? ' · Folder' : ''}</div><div class="today-task-title">${escapeHtml(item.task.title)}</div></div>
-            <div class="today-task-due ${state === 'overdue' ? 'is-overdue' : state === 'today' ? 'is-today' : ''}">${escapeHtml(taskDueLabel(item.task))}</div>
-            <div class="today-task-priority ${item.task.priority === 'high' ? 'is-high' : ''}">${escapeHtml(priorityLabel(item.task.priority))}</div>
-            <div class="today-task-cues">${item.task.label ? `<span class="today-task-label">${escapeHtml(item.task.label)}</span>` : ''}${cues}</div>
-          </div>`;
-        }).join('') : '<div class="today-empty">No matching open tasks.</div>'}</div>
-      </section>`;
+  const renderMissionTask = (item, index, isStart = false) => {
+    const ownerValue = item.ownerType === 'folder' ? String(item.owner.id || '') : encodeURIComponent(item.owner.project_name || '');
+    return `<div class="today-task-row ${isStart ? 'is-start' : ''}" style="--mission-index:${index}" data-today-task-row="${item.task.id}">
+      <input class="today-task-check" type="checkbox" data-today-task-complete="${item.task.id}" aria-label="Complete ${escapeHtml(item.task.title)}">
+      <div class="today-task-main">
+        <button class="today-task-owner" type="button" data-today-owner-type="${item.ownerType}" data-today-owner="${ownerValue}">${escapeHtml(item.ownerName)}${item.ownerType === 'folder' ? ' · Folder' : ''}</button>
+        <div class="today-task-title">${escapeHtml(item.task.title)}</div>
+        <div class="today-task-meta"><span class="today-task-reason">${escapeHtml(todayMissionReason(item))}</span>${item.task.priority !== 'normal' ? `<span>${escapeHtml(priorityLabel(item.task.priority))}</span>` : ''}${item.task.label ? `<span class="today-task-label">${escapeHtml(item.task.label)}</span>` : ''}</div>
+      </div>
+      <div class="today-task-rank">${isStart ? 'NOW' : String(index + 1).padStart(2, '0')}</div>
+    </div>`;
   };
 
-  const renderFocus = () => {
-    const slots = [0, 1, 2].map(index => {
-      const project = focusProjects[index];
-      if (!project) {
-        return `
-          <div class="planner-focus-row focus-slot is-empty">
-            <div class="planner-row-main">
-              <div class="focus-rank">#${index + 1}</div>
-              <div class="planner-row-title"><span class="planner-row-name">No project</span></div>
-              <div class="planner-row-meta">Add a due date or pin a project</div>
-            </div>
-          </div>
-        `;
-      }
-      const reasons = [
-        { label: projectDueDateText(project), className: projectDuePillClass(project) },
-        ...(project.pinned ? [{ label: 'Pinned', className: 'is-goal' }] : []),
-        ...(projectTaskSummary(project).openCount ? [{ label: `${projectTaskSummary(project).openCount} open task${projectTaskSummary(project).openCount !== 1 ? 's' : ''}`, className: 'is-task' }] : []),
-      ];
-      return `
-      <div class="planner-focus-row focus-slot" data-open-project="${encodeURIComponent(project.project_name || '')}">
-        <div class="planner-row-main">
-          <div class="focus-rank">#${index + 1}</div>
-          <div class="planner-row-title">
-            <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
-            <span class="planner-row-name" title="${escapeHtml(project.project_name)}">${escapeHtml(projectDisplayName(project))}</span>
-          </div>
-          <div class="planner-row-meta">${escapeHtml(projectStatusLabel(project.status) || 'No status')} · ${escapeHtml(lastWorkedLabel(project))}</div>
-          ${plannerReasonPills(reasons)}
-        </div>
-      </div>
-      `;
-    });
-    return `<div class="focus-slots">${slots.join('')}</div>`;
+  const renderMissionSection = (title, items, indexOffset) => items.length ? `<section class="today-mission-section"><div class="today-mission-section-head"><div class="today-mission-section-title">${title}</div><div class="today-mission-section-count">${items.length}</div></div><div class="today-task-list">${items.map((item, index) => renderMissionTask(item, indexOffset + index)).join('')}</div></section>` : '';
+  const renderClearState = () => {
+    const particles = Array.from({ length: 12 }, (_, index) => `<i class="today-particle" style="--particle-x:${Math.round(Math.cos(index / 12 * Math.PI * 2) * (70 + index % 3 * 18))}px;--particle-y:${Math.round(Math.sin(index / 12 * Math.PI * 2) * (62 + index % 4 * 12))}px;--particle-rotate:${120 + index * 37}deg;--particle-delay:${index * 22}ms;--particle-color:${index % 3 === 0 ? 'var(--accent)' : index % 3 === 1 ? '#d89218' : '#7bd389'}"></i>`).join('');
+    return `<div class="today-clear">${particles}<div><div class="today-clear-mark">✓</div><h2>Today is clear</h2><p>You handled every commitment that needed your attention.</p></div></div>`;
+  };
+  const renderTodayMission = () => {
+    const remaining = todayMission.open.length;
+    const completed = todayMission.completed.length;
+    const total = remaining + completed;
+    const percent = total ? Math.round(completed / total * 100) : 100;
+    const circumference = 2 * Math.PI * 25;
+    const offset = circumference * (1 - percent / 100);
+    const stateClass = todayMission.start?.category === 'overdue' ? 'is-overdue' : todayMission.start?.category === 'today' ? 'is-today' : '';
+    const missionBody = todayMission.start ? `<div class="today-mission-body"><section class="today-mission-section"><div class="today-mission-section-head"><div class="today-mission-section-title">Start Here</div><div class="today-mission-section-count">Most consequential</div></div>${renderMissionTask(todayMission.start, 0, true)}</section>${renderMissionSection('Up Next', todayMission.upNext, 1)}${renderMissionSection("If There's Time", todayMission.ifTime, 1 + todayMission.upNext.length)}</div>` : renderClearState();
+    return `<section class="planner-panel today-mission ${stateClass}"><div class="today-mission-head"><div><div class="today-mission-kicker">Automatic daily mission</div><div class="today-mission-title">What matters today</div><div class="today-mission-summary">${remaining ? `${remaining} commitment${remaining === 1 ? ' needs' : 's need'} your attention` : 'Nothing is competing for your attention'}</div></div><div class="today-progress"><div class="today-progress-copy"><strong data-today-progress-count>${percent}%</strong><span>${completed} complete · ${remaining} left</span></div><svg class="today-progress-ring" viewBox="0 0 60 60" aria-label="${percent}% of today's mission complete"><circle class="today-progress-track" cx="30" cy="30" r="25"></circle><circle class="today-progress-value" cx="30" cy="30" r="25" stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}" data-progress-offset="${offset}"></circle></svg></div></div>${missionBody}</section>`;
   };
 
   const renderDeadlineRadar = () => {
@@ -7704,15 +7691,7 @@ function renderPlanner(data) {
 
   plannerEl.innerHTML = `
     <div class="planner-shell">
-      ${renderTodayWorklist()}
-      <section class="planner-panel">
-        <div class="planner-panel-head">
-          <div>
-            <div class="planner-panel-title">Today's Focus</div>
-          </div>
-        </div>
-        ${renderFocus()}
-      </section>
+      ${renderTodayMission()}
 
       <details class="planner-panel" hidden>
         <summary class="planner-panel-head"><div><div class="planner-panel-title">Deadline Radar</div><div class="planner-panel-meta">Client deadlines and delivery risk</div></div></summary>
@@ -7767,34 +7746,36 @@ function renderPlanner(data) {
 }
 
 function bindTodayWorklist(data) {
-  document.querySelectorAll('[data-today-filter]').forEach(button => button.addEventListener('click', () => {
-    todayTaskFilter = button.dataset.todayFilter || 'today';
-    renderPlanner(data);
+  const currentDateKey = localDateKey(new Date());
+  const shouldAnimateEntrance = !todayMissionHasRendered || todayMissionDateKey !== currentDateKey;
+  document.querySelector('.today-mission')?.classList.toggle('is-settled', !shouldAnimateEntrance);
+  todayMissionHasRendered = true;
+  todayMissionDateKey = currentDateKey;
+  const progressValue = document.querySelector('.today-progress-value');
+  if (progressValue) requestAnimationFrame(() => progressValue.setAttribute('stroke-dashoffset', progressValue.dataset.progressOffset || '0'));
+  clearTimeout(todayMissionMidnightTimer);
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+  todayMissionMidnightTimer = setTimeout(() => {
+    todayMissionHasRendered = false;
+    if (latestDashboardData && activeView === 'planner') renderPlanner(latestDashboardData);
+  }, nextMidnight - now);
+  document.querySelectorAll('[data-today-owner]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.todayOwnerType === 'folder') {
+      const folder = (data.project_folders || []).find(item => item.id === Number(button.dataset.todayOwner));
+      if (folder) openFolderModal(folder);
+      return;
+    }
+    const projectName = decodeURIComponent(button.dataset.todayOwner || '');
+    if (projectName) openProjectTasks(projectName);
   }));
-  const form = document.getElementById('todayQuickTaskForm');
-  form?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const project = document.getElementById('todayQuickTaskProject');
-    const title = document.getElementById('todayQuickTaskTitle');
-    const submit = form.querySelector('button[type="submit"]');
-    if (!project?.value) { project?.focus(); return; }
-    if (!title?.value.trim()) { title?.focus(); return; }
-    if (submit) submit.disabled = true;
-    try {
-      await postJson('/api/project-tasks', { project_name: project.value, title: title.value.trim(), priority: 'normal' });
-      title.value = '';
-      await load();
-      document.getElementById('todayQuickTaskTitle')?.focus();
-    } catch (error) {
-      toast(error.message || 'Failed to add task');
-    } finally { if (submit) submit.disabled = false; }
-  });
   document.querySelectorAll('[data-today-task-complete]').forEach(input => input.addEventListener('change', async () => {
     const row = input.closest('[data-today-task-row]');
     row?.classList.add('is-completing');
     input.disabled = true;
     try {
       await postJson('/api/project-tasks/update', { id: input.dataset.todayTaskComplete, status: 'done' });
+      await new Promise(resolve => setTimeout(resolve, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 430));
       await load();
     } catch (error) {
       input.checked = false;
