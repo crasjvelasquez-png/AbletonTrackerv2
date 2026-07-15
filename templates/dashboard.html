@@ -1618,25 +1618,25 @@ header{
   margin-top:18px;display:flex;justify-content:flex-end;
 }
 .task-modal{
-  max-width:640px;max-height:calc(100dvh - 40px);display:flex;flex-direction:column;
+  max-width:760px;max-height:calc(100dvh - 28px);display:flex;flex-direction:column;
   overflow:hidden;
 }
 .task-modal-body{
-  display:grid;gap:14px;margin-bottom:18px;overflow-y:auto;min-height:0;
-  padding-right:4px;
+  display:grid;gap:18px;margin-bottom:18px;overflow-y:auto;min-height:0;
+  padding-right:6px;
 }
 .project-planning-form{
-  display:grid;gap:12px;padding:14px;border:1px solid var(--border);
-  border-radius:16px;background:var(--control-bg);
+  display:grid;gap:14px;padding:16px;border:1px solid var(--border);
+  border-radius:18px;background:color-mix(in srgb,var(--control-bg) 78%,transparent);
 }
 .project-planning-head{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
 }
 .project-planning-title{
-  font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);
+  font-size:13px;font-weight:800;letter-spacing:-.01em;color:var(--ink-2);
 }
 .project-planning-grid{
-  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;
 }
 .project-planning-field{display:grid;gap:5px;min-width:0}
 .project-planning-field label{
@@ -1683,11 +1683,16 @@ select.project-planning-input{
 .tracker-calendar-foot button:hover{color:var(--accent);background:var(--control-bg)}
 .tracker-calendar-foot [data-date=""]{border:1px solid color-mix(in srgb,#ff5b62 28%,var(--border));background:color-mix(in srgb,#ff5b62 9%,transparent);color:#ff767c}
 .tracker-calendar-foot [data-date=""]:hover{border-color:color-mix(in srgb,#ff5b62 55%,var(--border));background:color-mix(in srgb,#ff5b62 16%,transparent);color:#ff9196}
-.task-form{
-  display:grid;grid-template-columns:minmax(0,1fr) 130px 132px auto;gap:10px;
-  align-items:center;padding:12px;border:1px solid var(--border);
-  border-radius:16px;background:var(--control-bg);
-}
+.task-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:0 2px}
+.task-section-title{font-family:var(--font-display);font-size:18px;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
+.task-section-kicker{margin-top:3px;font-size:11px;color:var(--ink-4)}
+.task-completed-toggle{border:0;background:transparent;color:var(--ink-3);font:inherit;font-size:11px;font-weight:750;cursor:pointer;padding:6px 8px;border-radius:8px}
+.task-completed-toggle:hover{background:var(--control-bg);color:var(--ink)}
+.task-completed-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.task-form{display:grid;grid-template-columns:minmax(0,1fr) 130px 132px auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--control-bg)}
+#taskForm{display:grid;grid-template-columns:1fr;gap:12px;align-items:stretch;padding:14px;border-radius:18px;background:color-mix(in srgb,var(--control-bg) 84%,transparent)}
+.task-form-main{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.task-form-tools,.task-row-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .task-input,
 .task-priority-select{
   min-height:38px;border:1px solid var(--border);border-radius:11px;
@@ -1695,6 +1700,8 @@ select.project-planning-input{
   outline:none;
 }
 .task-input{padding:8px 11px;min-width:0}
+.task-form-main .task-input{min-height:42px;font-size:14px;padding-inline:13px}
+.task-form-main .btn{min-height:42px;padding-inline:16px}
 .task-priority-select{
   padding:8px 26px 8px 10px;font-weight:600;
   appearance:none;-webkit-appearance:none;
@@ -1708,6 +1715,26 @@ select.project-planning-input{
 .task-priority-select:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
+.task-priority-segment{display:inline-flex;align-items:center;padding:3px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.task-priority-segment button{min-height:30px;border:0;border-radius:7px;background:transparent;color:var(--ink-4);font:inherit;font-size:10px;font-weight:800;letter-spacing:.02em;padding:5px 9px;cursor:pointer}
+.task-priority-segment button:hover{color:var(--ink);background:var(--surface-hover)}
+.task-priority-segment button.is-selected{background:var(--control-bg-strong);color:var(--task-priority-ink,var(--ink));box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.task-priority-segment button[data-task-priority-choice="low"].is-selected{color:#8bc7ff}
+.task-priority-segment button[data-task-priority-choice="high"].is-selected{color:#ffbd5f}
+.task-priority-segment button:focus-visible,.task-tool-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.task-tool-trigger{min-height:36px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink-3);font:inherit;font-size:11px;font-weight:750;padding:7px 10px;cursor:pointer}
+.task-tool-trigger:hover,.task-tool-trigger[aria-expanded="true"]{border-color:var(--border-strong);background:var(--control-bg-strong);color:var(--ink)}
+.task-date-trigger svg{width:14px;height:14px;fill:none;stroke:var(--accent);stroke-width:1.8}
+.task-inline-panel{width:100%;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));border-radius:13px;background:color-mix(in srgb,var(--surface-2) 88%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.task-inline-panel[hidden]{display:none}
+.task-date-shortcuts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.task-date-shortcuts button{border:1px solid var(--border);border-radius:8px;background:var(--control-bg);color:var(--ink-3);font:inherit;font-size:10px;font-weight:750;padding:6px 9px;cursor:pointer}
+.task-date-shortcuts button:hover{border-color:var(--accent);color:var(--accent)}
+.task-date-panel .tracker-calendar-head{margin-bottom:8px}
+.task-date-panel .tracker-calendar-days{max-width:310px}
+.task-date-panel .tracker-calendar-week{max-width:310px}
+.task-more-panel{display:grid;grid-template-columns:minmax(160px,1fr) auto auto;align-items:end;gap:12px}
+.task-more-label{display:grid;gap:5px;color:var(--ink-4);font-size:10px;font-weight:750}
 .project-task-pill{
   border:1px solid var(--border);border-radius:999px;background:var(--control-bg-strong);
   color:var(--ink-2);padding:7px 11px;display:inline-flex;align-items:center;gap:7px;
@@ -1723,7 +1750,7 @@ select.project-planning-input{
   color:var(--ink);font-family:var(--font-mono);font-size:12px;
 }
 .task-list{
-  display:grid;gap:8px;max-height:min(46vh,380px);overflow:auto;padding-right:2px;
+  display:grid;gap:9px;padding-right:2px;
 }
 .task-row{
   display:grid;grid-template-columns:auto minmax(150px,1fr) 108px 132px minmax(88px,.6fr) auto auto;gap:10px;align-items:center;
@@ -1733,6 +1760,12 @@ select.project-planning-input{
   padding:10px 12px;border:1px solid var(--task-priority-accent);border-radius:14px;
   background:linear-gradient(90deg,var(--task-priority-soft),var(--surface) 44%);
 }
+#taskModalList .task-row{grid-template-columns:auto minmax(0,1fr);align-items:start;gap:12px;padding:13px 14px;background:linear-gradient(100deg,var(--task-priority-soft),color-mix(in srgb,var(--surface) 92%,transparent) 42%)}
+.task-row-content{display:grid;gap:9px;min-width:0}
+.task-row-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.task-row-meta{display:flex;align-items:center;gap:6px;min-height:14px;color:var(--ink-4);font-size:10px;font-weight:650}
+.task-row-meta:empty{display:none}
+.task-row-meta span+span::before{content:"·";margin-right:6px;color:var(--ink-4)}
 .task-row.is-priority-high{
   --task-priority-accent:rgba(255,178,74,.38);
   --task-priority-soft:rgba(255,178,74,.10);
@@ -1760,13 +1793,15 @@ select.project-planning-input{
   min-width:0;color:var(--ink);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;
 }
-.task-row.is-done .task-title{text-decoration:line-through;color:var(--ink-4)}
+.task-row.is-done .task-title,.task-row.is-done .task-title-input{text-decoration:line-through;color:var(--ink-4)}
 .task-row .task-priority-select{
   border-color:var(--task-priority-accent);
   color:var(--task-priority-ink);
   background-color:rgba(16,16,18,.72);
 }
 .task-row .task-title-input,.task-row .task-date-input{min-width:0;width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);padding:6px 8px;font-size:12px}
+.task-row .task-title-input{min-height:34px;border-color:transparent;background:transparent;font-size:13px;font-weight:650;padding:5px 7px}
+.task-row .task-title-input:hover,.task-row .task-title-input:focus{border-color:var(--border);background:var(--surface)}
 .task-row .task-date-input{max-width:132px}
 .task-label-input{min-width:0;width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);padding:6px 8px;font-size:12px}
 .task-flags{display:flex;align-items:center;gap:6px;white-space:nowrap}
@@ -1777,9 +1812,7 @@ select.project-planning-input{
   color:var(--danger);font-size:16px;line-height:1;cursor:pointer;opacity:.66;
 }
 .task-delete:hover{opacity:1;background:var(--danger-soft);border-color:rgba(255,59,48,.28)}
-.task-toggle-row{
-  display:flex;align-items:center;justify-content:flex-end;gap:8px;
-}
+.task-toggle-row{display:flex;align-items:center;justify-content:flex-end;gap:8px}
 .task-empty{
   padding:28px 14px;text-align:center;border:1px dashed var(--border-strong);border-radius:16px;
   color:var(--ink-4);font-size:13px;
@@ -3262,11 +3295,22 @@ select.planner-goal-input{
   .scale-endpoint{display:none}
   .color-presets{grid-template-columns:repeat(4,minmax(0,1fr))}
   .task-form{grid-template-columns:1fr}
+  .task-modal{width:calc(100% - 20px);max-height:calc(100dvh - 20px);padding:22px 18px 18px}
+  .task-section-head{align-items:flex-start}
+  .task-section-kicker{display:none}
+  .task-form-main{grid-template-columns:1fr}
+  .task-form-main .btn{width:100%}
+  .task-form-tools{align-items:stretch}
+  .task-priority-segment{flex:1}
+  .task-priority-segment button{flex:1}
+  .task-more-panel{grid-template-columns:1fr}
   .project-planning-grid{grid-template-columns:1fr}
   .project-planning-head{align-items:flex-start}
   .task-row{grid-template-columns:auto minmax(0,1fr) auto}
-  .task-row .task-priority-select{grid-column:2 / -1}
-  .task-row .task-date-input,.task-row .task-label-input,.task-row .task-flags{grid-column:2 / -1;max-width:none}
+  #taskModalList .task-row{grid-template-columns:auto minmax(0,1fr)}
+  .task-row-tools{align-items:stretch}
+  .task-row-tools .task-priority-segment{flex-basis:100%}
+  .task-inline-panel{padding:10px}
   .today-mission-head{grid-template-columns:1fr;padding:18px 20px 14px;gap:12px}
   .today-progress{justify-self:start}
   .today-mission-body{padding:0 20px 22px}.today-queue{padding-left:15px}.today-task-row{grid-template-columns:auto minmax(0,1fr);gap:10px}.today-task-rank{display:none}.today-task-row::before{left:-13px}.today-task-row.is-start::before{left:-14px}
@@ -3460,8 +3504,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
       <form class="project-planning-form" id="projectPlanningForm">
         <div class="project-planning-head">
           <div>
-            <div class="project-planning-title">Details</div>
-            <div class="category-modal-kicker" id="projectPlanningSummary"></div>
+            <div class="project-planning-title">Project details</div>
           </div>
         </div>
         <div class="project-planning-grid">
@@ -3518,27 +3561,44 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
           </div>
         </div>
       </form>
-      <form class="task-form" id="taskForm">
-        <input class="task-input" id="taskTitleInput" type="text" maxlength="180" placeholder="Add a project task" autocomplete="off">
-        <select class="task-priority-select" id="taskPriorityInput" aria-label="Task priority">
-          <option value="normal">Normal</option>
-          <option value="high">High</option>
-          <option value="low">Low</option>
-        </select>
-        <input class="task-date-input" id="taskDueDateInput" type="date" aria-label="Task due date">
-        <input class="task-label-input" id="taskLabelInput" type="text" maxlength="32" placeholder="Label (optional)" aria-label="Task label">
-        <label class="task-flag"><input id="taskQuickInput" type="checkbox"> Quick</label>
-        <label class="task-flag"><input id="taskWaitingInput" type="checkbox"> Waiting</label>
-        <button class="btn small" id="taskAddButton" type="submit">Add</button>
-      </form>
-      <div class="task-toggle-row" id="taskToggleRow">
-        <button class="btn small" id="taskToggleCompleted" type="button" aria-pressed="false">Show completed (0)</button>
+      <div class="task-section-head">
+        <div>
+          <div class="task-section-title">Tasks</div>
+          <div class="task-section-kicker">Plan the next move, then keep working.</div>
+        </div>
+        <button class="task-completed-toggle" id="taskToggleCompleted" type="button" aria-pressed="false">Show completed (0)</button>
       </div>
+      <form class="task-form" id="taskForm">
+        <div class="task-form-main">
+          <input class="task-input" id="taskTitleInput" type="text" maxlength="180" placeholder="What needs to happen next?" autocomplete="off">
+          <button class="btn primary small" id="taskAddButton" type="submit">Add task</button>
+        </div>
+        <div class="task-form-tools">
+          <input id="taskPriorityInput" type="hidden" value="normal">
+          <div class="task-priority-segment" data-task-priority-group role="radiogroup" aria-label="Task urgency">
+            <button type="button" data-task-priority-choice="low" role="radio" aria-checked="false">Low</button>
+            <button class="is-selected" type="button" data-task-priority-choice="normal" role="radio" aria-checked="true">Med</button>
+            <button type="button" data-task-priority-choice="high" role="radio" aria-checked="false">High</button>
+          </div>
+          <input id="taskDueDateInput" data-task-date-input type="hidden">
+          <button class="task-tool-trigger task-date-trigger" data-task-date-trigger type="button" aria-expanded="false">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2"></rect><path d="M6.5 2.5v4M13.5 2.5v4M3 8.5h14"></path></svg>
+            <span>Set date</span>
+          </button>
+          <button class="task-tool-trigger" data-task-more-trigger type="button" aria-expanded="false">More</button>
+        </div>
+        <div class="task-inline-panel task-date-panel" data-task-date-panel hidden></div>
+        <div class="task-inline-panel task-more-panel" data-task-more-panel hidden>
+          <label class="task-more-label" for="taskLabelInput">Label<input class="task-label-input" id="taskLabelInput" type="text" maxlength="32" placeholder="Optional"></label>
+          <label class="task-flag"><input id="taskQuickInput" type="checkbox"> Quick task</label>
+          <label class="task-flag"><input id="taskWaitingInput" type="checkbox"> Waiting on something</label>
+        </div>
+      </form>
       <div class="task-list" id="taskModalList"></div>
     </div>
     <div class="modal-actions">
       <button class="btn secondary" id="taskModalCloseBtn" type="button">Close</button>
-      <button class="btn primary" id="taskModalDone" type="button" disabled>Save</button>
+      <button class="btn primary" id="taskModalDone" type="button" disabled>Save project</button>
     </div>
   </div>
 </div>
@@ -5547,13 +5607,39 @@ function sortProjectTasks(tasks) {
   });
 }
 
-function taskPrioritySelect(task) {
-  const current = task.priority || 'normal';
-  return `
-    <select class="task-priority-select" data-task-priority="${task.id}" aria-label="Priority for ${escapeHtml(task.title)}">
-      ${TASK_PRIORITY_OPTIONS.map(([value, label]) => `<option value="${value}" ${current === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
-    </select>
-  `;
+function taskPrioritySegment(taskId, current = 'normal', label = 'Task urgency') {
+  const shortLabels = { low: 'Low', normal: 'Med', high: 'High' };
+  return `<div class="task-priority-segment" data-task-priority-group${taskId ? ` data-task-id="${taskId}"` : ''} role="radiogroup" aria-label="${escapeHtml(label)}">
+    ${['low', 'normal', 'high'].map(value => `<button class="${current === value ? 'is-selected' : ''}" type="button" data-task-priority-choice="${value}" role="radio" aria-checked="${current === value ? 'true' : 'false'}">${shortLabels[value]}</button>`).join('')}
+  </div>`;
+}
+
+function localIsoDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function taskDateOffset(days) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return localIsoDate(date);
+}
+
+function formatTaskDate(value) {
+  if (!value) return 'Set date';
+  if (value === taskDateOffset(0)) return 'Today';
+  if (value === taskDateOffset(1)) return 'Tomorrow';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(year, month - 1, day));
+}
+
+function taskDateControl(task) {
+  const value = task.due_date || '';
+  return `<input data-task-date-input data-task-due-date="${task.id}" type="hidden" value="${escapeHtml(value)}">
+    <button class="task-tool-trigger task-date-trigger" data-task-date-trigger type="button" aria-expanded="false" aria-label="Due date for ${escapeHtml(task.title)}">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2"></rect><path d="M6.5 2.5v4M13.5 2.5v4M3 8.5h14"></path></svg>
+      <span>${escapeHtml(formatTaskDate(value))}</span>
+    </button>`;
 }
 
 function renderProjectTaskRows(tasks) {
@@ -5563,19 +5649,182 @@ function renderProjectTaskRows(tasks) {
   return tasks.map(task => {
     const done = task.status === 'done';
     const priorityClass = ['low', 'normal', 'high'].includes(task.priority) ? `is-priority-${task.priority}` : 'is-priority-normal';
+    const metadata = [task.label, task.quick ? 'Quick' : '', task.waiting ? 'Waiting' : ''].filter(Boolean);
     return `
       <div class="task-row ${priorityClass} ${done ? 'is-done' : ''}" data-task-row="${task.id}">
         <input class="task-check" type="checkbox" data-task-toggle="${task.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} ${escapeHtml(task.title)}">
-        <input class="task-title-input" data-task-title="${task.id}" value="${escapeHtml(task.title)}" aria-label="Title for ${escapeHtml(task.title)}">
-        ${taskPrioritySelect(task)}
-        <input class="task-date-input" data-task-due-date="${task.id}" type="date" value="${escapeHtml(task.due_date || '')}" aria-label="Due date for ${escapeHtml(task.title)}">
-        <input class="task-label-input" data-task-label="${task.id}" maxlength="32" value="${escapeHtml(task.label || '')}" placeholder="Label" aria-label="Label for ${escapeHtml(task.title)}">
-        <div class="task-flags"><label class="task-flag"><input data-task-quick="${task.id}" type="checkbox" ${task.quick ? 'checked' : ''}>Quick</label><label class="task-flag"><input data-task-waiting="${task.id}" type="checkbox" ${task.waiting ? 'checked' : ''}>Waiting</label></div>
-        <button class="task-delete" type="button" data-task-delete="${task.id}" aria-label="Delete ${escapeHtml(task.title)}">×</button>
+        <div class="task-row-content">
+          <div class="task-row-top">
+            <input class="task-title-input" data-task-title="${task.id}" value="${escapeHtml(task.title)}" aria-label="Title for ${escapeHtml(task.title)}">
+            <button class="task-delete" type="button" data-task-delete="${task.id}" aria-label="Delete ${escapeHtml(task.title)}">×</button>
+          </div>
+          <div class="task-row-tools">
+            ${taskPrioritySegment(task.id, task.priority || 'normal', `Urgency for ${task.title}`)}
+            ${taskDateControl(task)}
+            <button class="task-tool-trigger" data-task-more-trigger type="button" aria-expanded="false">More${metadata.length ? ` · ${metadata.length}` : ''}</button>
+          </div>
+          <div class="task-row-meta">${metadata.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+          <div class="task-inline-panel task-date-panel" data-task-date-panel hidden></div>
+          <div class="task-inline-panel task-more-panel" data-task-more-panel hidden>
+            <label class="task-more-label">Label<input class="task-label-input" data-task-label="${task.id}" maxlength="32" value="${escapeHtml(task.label || '')}" placeholder="Optional"></label>
+            <label class="task-flag"><input data-task-quick="${task.id}" type="checkbox" ${task.quick ? 'checked' : ''}>Quick task</label>
+            <label class="task-flag"><input data-task-waiting="${task.id}" type="checkbox" ${task.waiting ? 'checked' : ''}>Waiting on something</label>
+          </div>
+        </div>
       </div>
     `;
   }).join('');
 }
+
+function closeTaskInlinePanels(except = null) {
+  document.querySelectorAll('[data-task-date-panel],[data-task-more-panel]').forEach(panel => {
+    if (panel === except) return;
+    panel.hidden = true;
+    const container = panel.closest('.task-form,.task-row');
+    container?.querySelectorAll('[data-task-date-trigger],[data-task-more-trigger]').forEach(button => button.setAttribute('aria-expanded', 'false'));
+  });
+}
+
+function renderTaskDatePanel(container) {
+  const input = container?.querySelector('[data-task-date-input]');
+  const panel = container?.querySelector('[data-task-date-panel]');
+  if (!input || !panel) return;
+  const selected = input.value || '';
+  let view;
+  if (panel.dataset.view) {
+    const [year, month] = panel.dataset.view.split('-').map(Number);
+    view = new Date(year, month - 1, 1);
+  } else if (selected) {
+    const [year, month] = selected.split('-').map(Number);
+    view = new Date(year, month - 1, 1);
+  } else {
+    view = new Date();
+    view = new Date(view.getFullYear(), view.getMonth(), 1);
+  }
+  panel.dataset.view = `${view.getFullYear()}-${String(view.getMonth() + 1).padStart(2, '0')}`;
+  const first = new Date(view.getFullYear(), view.getMonth(), 1);
+  const start = new Date(view.getFullYear(), view.getMonth(), 1 - first.getDay());
+  const today = localIsoDate();
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const value = localIsoDate(date);
+    return `<button class="tracker-calendar-day${date.getMonth() !== view.getMonth() ? ' is-outside' : ''}${value === today ? ' is-today' : ''}${value === selected ? ' is-selected' : ''}" type="button" data-task-calendar-date="${value}">${date.getDate()}</button>`;
+  }).join('');
+  panel.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-task-date-offset="0">Today</button><button type="button" data-task-date-offset="1">Tomorrow</button><button type="button" data-task-date-offset="7">+7d</button>${selected ? '<button type="button" data-task-date-clear>Clear</button>' : ''}</div><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-task-date-month="-1" aria-label="Previous month">‹</button><button type="button" data-task-date-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day => `<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
+}
+
+function setTaskDate(container, value) {
+  const input = container?.querySelector('[data-task-date-input]');
+  const trigger = container?.querySelector('[data-task-date-trigger] span');
+  if (!input) return;
+  input.value = value;
+  if (trigger) trigger.textContent = formatTaskDate(value);
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function syncTaskPriorityGroup(group, value) {
+  group?.querySelectorAll('[data-task-priority-choice]').forEach(button => {
+    const selected = button.dataset.taskPriorityChoice === value;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-checked', String(selected));
+  });
+}
+
+document.addEventListener('click', event => {
+  const priorityButton = event.target.closest('[data-task-priority-choice]');
+  if (priorityButton) {
+    closeTaskInlinePanels();
+    const group = priorityButton.closest('[data-task-priority-group]');
+    const value = priorityButton.dataset.taskPriorityChoice;
+    const taskId = group?.dataset.taskId;
+    const previous = group?.querySelector('.is-selected')?.dataset.taskPriorityChoice || 'normal';
+    syncTaskPriorityGroup(group, value);
+    if (!taskId) {
+      const input = document.getElementById('taskPriorityInput');
+      if (input) input.value = value;
+      return;
+    }
+    group.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    void (async () => {
+      try {
+        await postJson('/api/project-tasks/update', { id: taskId, priority: value });
+        await refreshProjectTaskModal(projectTaskModalState?.projectName);
+        await load();
+      } catch (error) {
+        syncTaskPriorityGroup(group, previous);
+        group.querySelectorAll('button').forEach(button => { button.disabled = false; });
+        toast(error.message || 'Failed to update urgency');
+      }
+    })();
+    return;
+  }
+
+  const dateTrigger = event.target.closest('[data-task-date-trigger]');
+  if (dateTrigger) {
+    const container = dateTrigger.closest('.task-form,.task-row');
+    const panel = container?.querySelector('[data-task-date-panel]');
+    const opening = panel?.hidden !== false;
+    closeTaskInlinePanels(opening ? panel : null);
+    if (panel) {
+      panel.hidden = !opening;
+      dateTrigger.setAttribute('aria-expanded', String(opening));
+      if (opening) renderTaskDatePanel(container);
+    }
+    return;
+  }
+
+  const moreTrigger = event.target.closest('[data-task-more-trigger]');
+  if (moreTrigger) {
+    const container = moreTrigger.closest('.task-form,.task-row');
+    const panel = container?.querySelector('[data-task-more-panel]');
+    const opening = panel?.hidden !== false;
+    closeTaskInlinePanels(opening ? panel : null);
+    if (panel) {
+      panel.hidden = !opening;
+      moreTrigger.setAttribute('aria-expanded', String(opening));
+      if (opening) panel.querySelector('input')?.focus();
+    }
+    return;
+  }
+
+  const dateAction = event.target.closest('[data-task-date-offset],[data-task-date-clear],[data-task-calendar-date],[data-task-date-month]');
+  if (dateAction) {
+    const container = dateAction.closest('.task-form,.task-row');
+    const panel = container?.querySelector('[data-task-date-panel]');
+    if (dateAction.dataset.taskDateMonth) {
+      const [year, month] = (panel.dataset.view || '').split('-').map(Number);
+      const next = new Date(year, month - 1 + Number(dateAction.dataset.taskDateMonth), 1);
+      panel.dataset.view = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+      renderTaskDatePanel(container);
+      return;
+    }
+    const value = dateAction.hasAttribute('data-task-date-clear') ? '' : (dateAction.dataset.taskCalendarDate || taskDateOffset(Number(dateAction.dataset.taskDateOffset || 0)));
+    setTaskDate(container, value);
+    closeTaskInlinePanels();
+    return;
+  }
+
+  if (!event.target.closest('[data-task-date-panel],[data-task-more-panel]')) closeTaskInlinePanels();
+});
+
+document.addEventListener('keydown', event => {
+  const button = event.target.closest?.('[data-task-priority-choice]');
+  if (!button || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  const buttons = [...button.closest('[data-task-priority-group]').querySelectorAll('[data-task-priority-choice]')];
+  const step = event.key === 'ArrowRight' ? 1 : -1;
+  const next = buttons[(buttons.indexOf(button) + step + buttons.length) % buttons.length];
+  event.preventDefault();
+  next.focus();
+  next.click();
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !document.querySelector('[data-task-date-panel]:not([hidden]),[data-task-more-panel]:not([hidden])')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  closeTaskInlinePanels();
+}, true);
 
 async function refreshProjectTaskModal(projectName) {
   const list = document.getElementById('taskModalList');
@@ -5792,28 +6041,6 @@ function bindProjectTaskModalRows(projectName) {
     });
   });
 
-  document.querySelectorAll('[data-task-priority]').forEach(select => {
-    select.addEventListener('change', async () => {
-      const previous = select.dataset.previousValue || 'normal';
-      select.disabled = true;
-      try {
-        await postJson('/api/project-tasks/update', {
-          id: select.dataset.taskPriority,
-          priority: select.value,
-        });
-        select.dataset.previousValue = select.value;
-        await refreshProjectTaskModal(projectName);
-        await load();
-      } catch (error) {
-        select.value = previous;
-        toast(error.message || 'Failed to update priority');
-      } finally {
-        select.disabled = false;
-      }
-    });
-    select.dataset.previousValue = select.value || 'normal';
-  });
-
   document.querySelectorAll('[data-task-delete]').forEach(button => {
     button.addEventListener('click', async () => {
       button.disabled = true;
@@ -5851,24 +6078,29 @@ function openProjectTasks(projectName) {
 
   let isDirty = false;
   saveBtn.disabled = true;
-  saveBtn.textContent = 'Save';
+  saveBtn.textContent = 'Save project';
 
   const markDirty = () => {
     isDirty = true;
     saveBtn.disabled = false;
-    saveBtn.textContent = 'Save';
+    saveBtn.textContent = 'Save project';
   };
 
   if (projectTaskModalState?.close) projectTaskModalState.close();
   const project = findProjectByName(projectName) || { project_name: projectName };
-  document.getElementById('taskModalTitle').textContent = projectDisplayName(project);
+  const displayName = projectDisplayName(project);
+  document.getElementById('taskModalTitle').textContent = displayName;
   projectLabel.textContent = projectName;
+  projectLabel.hidden = projectName === displayName;
   titleInput.value = '';
   priorityInput.value = 'normal';
   dueDateInput.value = '';
   labelInput.value = '';
   quickInput.checked = false;
   waitingInput.checked = false;
+  syncTaskPriorityGroup(form.querySelector('[data-task-priority-group]'), 'normal');
+  form.querySelector('[data-task-date-trigger] span').textContent = 'Set date';
+  closeTaskInlinePanels();
 
   const toggleCompleted = () => {
     const show = !(projectTaskModalState?.showCompleted ?? false);
@@ -5924,6 +6156,9 @@ function openProjectTasks(projectName) {
       labelInput.value = '';
       quickInput.checked = false;
       waitingInput.checked = false;
+      syncTaskPriorityGroup(form.querySelector('[data-task-priority-group]'), 'normal');
+      form.querySelector('[data-task-date-trigger] span').textContent = 'Set date';
+      closeTaskInlinePanels();
       await refreshProjectTaskModal(projectName);
       await load();
       titleInput.focus();
@@ -5958,7 +6193,7 @@ function openProjectTasks(projectName) {
       saveBtn.textContent = 'Saved';
     } catch(error) {
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save';
+      saveBtn.textContent = 'Save project';
       toast(error.message || 'Failed to save');
     }
   };
@@ -5966,7 +6201,7 @@ function openProjectTasks(projectName) {
   const dueInput = document.getElementById('projectDueDateInput');
   const onDueDateChange = () => { void onSave(); };
 
-  projectTaskModalState = { close, showCompleted: false };
+  projectTaskModalState = { close, showCompleted: false, projectName };
   modal.classList.add('show');
   closeBtn.addEventListener('click', close);
   if (closeFooterBtn) closeFooterBtn.addEventListener('click', close);
