@@ -1664,6 +1664,7 @@ select.project-planning-input{
 .date-trigger svg{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.8;flex:0 0 auto}
 .date-trigger-placeholder{color:var(--ink-4)}
 .tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:264px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 78%,transparent);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
+.tracker-calendar{max-width:calc(100vw - 32px);box-sizing:border-box}
 .tracker-calendar[hidden]{display:none}
 .tracker-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .tracker-calendar-month{font-size:13px;font-weight:800;letter-spacing:.01em;color:var(--ink)}
@@ -1725,14 +1726,17 @@ select.project-planning-input{
 .task-tool-trigger{min-height:36px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink-3);font:inherit;font-size:11px;font-weight:750;padding:7px 10px;cursor:pointer}
 .task-tool-trigger:hover,.task-tool-trigger[aria-expanded="true"]{border-color:var(--border-strong);background:var(--control-bg-strong);color:var(--ink)}
 .task-date-trigger svg{width:14px;height:14px;fill:none;stroke:var(--accent);stroke-width:1.8}
-.task-inline-panel{width:100%;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));border-radius:13px;background:color-mix(in srgb,var(--surface-2) 88%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.task-inline-panel{width:min(100%,330px);padding:10px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));border-radius:13px;background:color-mix(in srgb,var(--surface-2) 88%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .task-inline-panel[hidden]{display:none}
 .task-date-shortcuts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .task-date-shortcuts button{border:1px solid var(--border);border-radius:8px;background:var(--control-bg);color:var(--ink-3);font:inherit;font-size:10px;font-weight:750;padding:6px 9px;cursor:pointer}
 .task-date-shortcuts button:hover{border-color:var(--accent);color:var(--accent)}
 .task-date-panel .tracker-calendar-head{margin-bottom:8px}
-.task-date-panel .tracker-calendar-days{max-width:310px}
-.task-date-panel .tracker-calendar-week{max-width:310px}
+.task-date-panel .tracker-calendar-days{max-width:300px}
+.task-date-panel .tracker-calendar-week{max-width:300px}
+.task-date-jump{display:flex;align-items:center;gap:8px;margin:0 0 10px;color:var(--ink-4);font-size:10px;font-weight:750}
+.task-date-jump input{width:132px;min-height:30px;padding:5px 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:11px}
+.task-date-jump input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .task-more-panel{display:grid;grid-template-columns:minmax(160px,1fr) auto auto;align-items:end;gap:12px}
 .task-more-label{display:grid;gap:5px;color:var(--ink-4);font-size:10px;font-weight:750}
 .project-task-pill{
@@ -1760,8 +1764,16 @@ select.project-planning-input{
   padding:10px 12px;border:1px solid var(--task-priority-accent);border-radius:14px;
   background:linear-gradient(90deg,var(--task-priority-soft),var(--surface) 44%);
 }
-#taskModalList .task-row{grid-template-columns:auto minmax(0,1fr);align-items:start;gap:12px;padding:13px 14px;background:linear-gradient(100deg,var(--task-priority-soft),color-mix(in srgb,var(--surface) 92%,transparent) 42%)}
-.task-row-content{display:grid;gap:9px;min-width:0}
+#taskModalList .task-row{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:8px 10px;background:linear-gradient(100deg,var(--task-priority-soft),color-mix(in srgb,var(--surface) 92%,transparent) 42%)}
+#taskModalList .task-row-content{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:8px;align-items:center;min-width:0}
+#taskModalList .task-row-top,#taskModalList .task-row-tools{display:contents}
+#taskModalList .task-row .task-title-input{grid-column:1;order:1}
+#taskModalList .task-row .task-priority-segment{order:2}
+#taskModalList .task-row .task-date-trigger{order:3;white-space:nowrap}
+#taskModalList .task-row [data-task-more-trigger]{order:4;white-space:nowrap}
+#taskModalList .task-row .task-delete{order:5}
+#taskModalList .task-row .task-row-meta{grid-column:1 / -1;order:6}
+#taskModalList .task-row .task-inline-panel{grid-column:1 / -1;order:7}
 .task-row-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
 .task-row-meta{display:flex;align-items:center;gap:6px;min-height:14px;color:var(--ink-4);font-size:10px;font-weight:650}
 .task-row-meta:empty{display:none}
@@ -3307,7 +3319,10 @@ select.planner-goal-input{
   .project-planning-grid{grid-template-columns:1fr}
   .project-planning-head{align-items:flex-start}
   .task-row{grid-template-columns:auto minmax(0,1fr) auto}
-  #taskModalList .task-row{grid-template-columns:auto minmax(0,1fr)}
+  #taskModalList .task-row{grid-template-columns:auto minmax(0,1fr);align-items:start;gap:12px;padding:13px 14px}
+  #taskModalList .task-row-content{display:grid;grid-template-columns:1fr;gap:9px}
+  #taskModalList .task-row-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+  #taskModalList .task-row-tools{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
   .task-row-tools{align-items:stretch}
   .task-row-tools .task-priority-segment{flex-basis:100%}
   .task-inline-panel{padding:10px}
@@ -3564,13 +3579,12 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
       <div class="task-section-head">
         <div>
           <div class="task-section-title">Tasks</div>
-          <div class="task-section-kicker">Plan the next move, then keep working.</div>
         </div>
         <button class="task-completed-toggle" id="taskToggleCompleted" type="button" aria-pressed="false">Show completed (0)</button>
       </div>
       <form class="task-form" id="taskForm">
         <div class="task-form-main">
-          <input class="task-input" id="taskTitleInput" type="text" maxlength="180" placeholder="What needs to happen next?" autocomplete="off">
+          <input class="task-input" id="taskTitleInput" type="text" maxlength="180" aria-label="Task title" autocomplete="off">
           <button class="btn primary small" id="taskAddButton" type="submit">Add task</button>
         </div>
         <div class="task-form-tools">
@@ -5711,7 +5725,7 @@ function renderTaskDatePanel(container) {
     const value = localIsoDate(date);
     return `<button class="tracker-calendar-day${date.getMonth() !== view.getMonth() ? ' is-outside' : ''}${value === today ? ' is-today' : ''}${value === selected ? ' is-selected' : ''}" type="button" data-task-calendar-date="${value}">${date.getDate()}</button>`;
   }).join('');
-  panel.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-task-date-offset="0">Today</button><button type="button" data-task-date-offset="1">Tomorrow</button><button type="button" data-task-date-offset="7">+7d</button>${selected ? '<button type="button" data-task-date-clear>Clear</button>' : ''}</div><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-task-date-month="-1" aria-label="Previous month">‹</button><button type="button" data-task-date-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day => `<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
+  panel.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-task-date-offset="0">Today</button><button type="button" data-task-date-offset="1">Tomorrow</button><button type="button" data-task-date-offset="7">+7d</button>${selected ? '<button type="button" data-task-date-clear>Clear</button>' : ''}</div><label class="task-date-jump">Jump to date <input type="date" value="${selected}" data-task-date-jump aria-label="Jump to a specific date"></label><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-task-date-month="-1" aria-label="Previous month">‹</button><button type="button" data-task-date-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day => `<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
 }
 
 function setTaskDate(container, value) {
@@ -5808,6 +5822,14 @@ document.addEventListener('click', event => {
   if (!event.target.closest('[data-task-date-panel],[data-task-more-panel]')) closeTaskInlinePanels();
 });
 
+document.addEventListener('change', event => {
+  const jump = event.target.closest('[data-task-date-jump]');
+  if (!jump) return;
+  const container = jump.closest('.task-form,.task-row');
+  setTaskDate(container, jump.value);
+  closeTaskInlinePanels();
+});
+
 document.addEventListener('keydown', event => {
   const button = event.target.closest?.('[data-task-priority-choice]');
   if (!button || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -5894,7 +5916,7 @@ function renderProjectDatePicker() {
     const value = iso(date);
     return `<button class="tracker-calendar-day${date.getMonth() !== month ? ' is-outside' : ''}${value === iso(today) ? ' is-today' : ''}${value === projectDatePickerState.selected ? ' is-selected' : ''}" type="button" data-date="${value}">${date.getDate()}</button>`;
   }).join('');
-  calendar.innerHTML = `<div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-month="-1" aria-label="Previous month">‹</button><button type="button" data-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day=>`<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div><div class="tracker-calendar-foot"><button type="button" data-date="">Clear</button><button type="button" data-today>Today</button></div>`;
+  calendar.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-today>Today</button><button type="button" data-project-date-offset="1">Tomorrow</button><button type="button" data-project-date-offset="7">+7d</button><button type="button" data-date="">Clear</button></div><label class="task-date-jump">Jump to date <input type="date" value="${projectDatePickerState.selected}" data-project-date-jump aria-label="Jump to a specific date"></label><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-month="-1" aria-label="Previous month">‹</button><button type="button" data-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day=>`<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
 }
 
 function closeProjectDatePicker() {
@@ -5918,8 +5940,17 @@ document.getElementById('projectDueDateCalendar')?.addEventListener('click', eve
   const monthButton = event.target.closest('[data-month]');
   if (monthButton) { projectDatePickerState.view.setMonth(projectDatePickerState.view.getMonth() + Number(monthButton.dataset.month)); renderProjectDatePicker(); return; }
   if (event.target.closest('[data-today]')) { const now = new Date(); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); return; }
+  const offsetButton = event.target.closest('[data-project-date-offset]');
+  if (offsetButton) { const now = new Date(); now.setDate(now.getDate() + Number(offsetButton.dataset.projectDateOffset)); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); return; }
   const dayButton = event.target.closest('[data-date]');
   if (dayButton) { setProjectDueDate(dayButton.dataset.date); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); }
+});
+document.getElementById('projectDueDateCalendar')?.addEventListener('change', event => {
+  const input = event.target.closest('[data-project-date-jump]');
+  if (!input) return;
+  setProjectDueDate(input.value);
+  document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true }));
+  closeProjectDatePicker();
 });
 document.addEventListener('click', closeProjectDatePicker);
 
