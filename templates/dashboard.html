@@ -2761,25 +2761,20 @@ details.planner-panel[open] > summary.planner-panel-head:after{
 .planner-panel-title{
   font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.02em;
 }
-.today-mission{--mission-tone:var(--accent);padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--mission-tone) 34%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--mission-tone) 9%,var(--control-bg)),var(--control-bg) 46%)}
-.today-mission.is-overdue{--mission-tone:var(--danger)}
-.today-mission.is-today{--mission-tone:#d89218}
-.today-mission-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:26px 26px 22px;border-left:3px solid var(--mission-tone)}
-.today-mission-kicker{font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase;color:var(--mission-tone)}
-.today-mission-title{margin-top:4px;font-family:var(--font-display);font-size:30px;font-weight:740;letter-spacing:-.035em;color:var(--ink)}
-.today-mission-summary{margin-top:5px;font-size:13px;color:var(--ink-3)}
-.today-progress{display:grid;grid-template-columns:auto 62px;gap:13px;align-items:center}.today-progress-copy{text-align:right}.today-progress-copy strong{display:block;font-family:var(--font-display);font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}.today-progress-copy span{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4)}
-.today-progress-ring{width:62px;height:62px;transform:rotate(-90deg);filter:drop-shadow(0 5px 12px color-mix(in srgb,var(--mission-tone) 20%,transparent))}.today-progress-ring circle{fill:none;stroke-width:6}.today-progress-track{stroke:color-mix(in srgb,var(--border) 70%,transparent)}.today-progress-value{stroke:var(--mission-tone);stroke-linecap:round;transition:stroke-dashoffset .75s var(--ease-spring)}
-.today-mission-body{padding:0 26px 26px;display:grid;gap:22px}.today-mission-section{display:grid;gap:9px}.today-mission-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.today-mission-section-title{font-size:11px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4)}.today-mission-section-count{font-size:11px;font-weight:750;color:var(--ink-4)}
-.today-task-list{display:grid;gap:8px}.today-task-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:13px;align-items:center;min-height:66px;padding:13px 15px;border:1px solid var(--border);border-radius:15px;background:color-mix(in srgb,var(--surface) 72%,transparent);position:relative;transition:transform .28s var(--ease-spring),opacity .24s ease,max-height .36s var(--ease-smooth),padding .36s ease,margin .36s ease,border-color .24s ease,box-shadow .28s ease;animation:todayTaskEnter .5s var(--ease-spring) both;animation-delay:calc(var(--mission-index,0) * 48ms)}
-.today-task-row:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--mission-tone) 32%,var(--border));box-shadow:0 10px 26px rgba(0,0,0,.06)}.today-task-row.is-start{min-height:92px;padding:18px;border-color:color-mix(in srgb,var(--mission-tone) 48%,var(--border));background:linear-gradient(120deg,color-mix(in srgb,var(--mission-tone) 13%,var(--surface)),var(--surface));animation:todayTaskEnter .55s var(--ease-spring) both,todayStartPulse 3.6s ease-in-out 1s infinite}.today-task-row.is-completing{pointer-events:none;animation:todayTaskComplete .52s var(--ease-smooth) forwards}
-.today-mission.is-settled .today-task-row:not(.is-start){animation:none}.today-mission.is-settled .today-task-row.is-start{animation:todayStartPulse 3.6s ease-in-out infinite}
-.today-task-check{appearance:none;width:22px;height:22px;border-radius:50%;border:2px solid color-mix(in srgb,var(--mission-tone) 58%,var(--border));background:var(--control-bg);cursor:pointer;display:grid;place-items:center;transition:transform .2s var(--ease-spring),background .2s ease,border-color .2s ease}.today-task-check::after{content:"";width:8px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) scale(0);transition:transform .2s var(--ease-spring)}.today-task-check:checked{background:var(--mission-tone);border-color:var(--mission-tone);transform:scale(1.12)}.today-task-check:checked::after{transform:rotate(-45deg) scale(1)}
-.today-task-main{min-width:0;display:grid;gap:4px}.today-task-owner{appearance:none;border:0;background:none;padding:0;width:max-content;max-width:100%;font:inherit;font-size:10px;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:var(--mission-tone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}.today-task-title{font-size:14px;font-weight:720;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.is-start .today-task-title{font-family:var(--font-display);font-size:19px;letter-spacing:-.015em}.today-task-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:720;color:var(--ink-4)}.today-task-reason{color:var(--mission-tone)}.today-task-label{color:var(--accent)}.today-task-rank{font-family:var(--font-display);font-size:12px;font-weight:800;color:var(--ink-4)}
+.today-mission{--mission-tone:var(--accent);padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--accent) 24%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 6%,var(--control-bg)),var(--control-bg) 42%)}
+.today-mission-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:20px 24px 16px;border-left:3px solid var(--accent)}
+.today-mission-title{font-family:var(--font-display);font-size:24px;font-weight:740;letter-spacing:-.025em;color:var(--ink)}
+.today-progress{justify-self:end;display:inline-flex;align-items:baseline;gap:7px;padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface) 78%,transparent);font-variant-numeric:tabular-nums}.today-progress strong{font-family:var(--font-display);font-size:18px;color:var(--ink)}.today-progress span{font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.today-mission-body{padding:0 24px 24px}.today-queue{position:relative;display:grid;gap:8px;padding-left:18px}.today-queue::before{content:"";position:absolute;left:7px;top:18px;bottom:18px;width:1px;background:linear-gradient(to bottom,var(--danger) 0 44px,color-mix(in srgb,var(--accent) 42%,var(--border)) 44px 100%)}
+.today-task-list{display:grid;gap:8px}.today-task-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;min-height:58px;padding:11px 13px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--surface) 78%,transparent);position:relative;transition:transform .28s var(--ease-spring),opacity .24s ease,max-height .36s var(--ease-smooth),padding .36s ease,margin .36s ease,border-color .24s ease,box-shadow .28s ease;animation:todayTaskEnter .46s var(--ease-spring) both;animation-delay:calc(var(--mission-index,0) * 44ms)}
+.today-task-row::before{content:"";position:absolute;left:-15px;top:50%;width:7px;height:7px;border-radius:50%;background:color-mix(in srgb,var(--accent) 58%,var(--border));transform:translateY(-50%);box-shadow:0 0 0 3px var(--control-bg)}.today-task-row:hover,.today-task-row:focus-within{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 32%,var(--border));box-shadow:0 10px 24px rgba(0,0,0,.05)}.today-task-row.is-start{min-height:86px;padding:15px;border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 9%,var(--surface)),var(--surface));animation:todayTaskEnter .52s var(--ease-spring) both}.today-task-row.is-start::before{width:10px;height:10px;left:-16px;background:var(--danger);box-shadow:0 0 0 4px var(--control-bg),0 0 0 7px color-mix(in srgb,var(--danger) 14%,transparent)}.today-task-row.is-completing{pointer-events:none;animation:todayTaskComplete .52s var(--ease-smooth) forwards}
+.today-mission.is-settled .today-task-row{animation:none}
+.today-task-check{appearance:none;width:21px;height:21px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 58%,var(--border));background:var(--control-bg);cursor:pointer;display:grid;place-items:center;transition:transform .2s var(--ease-spring),background .2s ease,border-color .2s ease}.today-task-check::after{content:"";width:8px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) scale(0);transition:transform .2s var(--ease-spring)}.today-task-check:checked{background:var(--accent);border-color:var(--accent);transform:scale(1.08)}.today-task-check:checked::after{transform:rotate(-45deg) scale(1)}
+.today-task-main{min-width:0;display:grid;gap:4px}.today-task-owner,.today-task-title{appearance:none;border:0;background:none;padding:0;max-width:100%;font:inherit;text-align:left;cursor:pointer}.today-task-owner{width:max-content;font-size:10px;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.today-task-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;font-weight:720;line-height:1.25;color:var(--ink)}.is-start .today-task-title{font-family:var(--font-display);font-size:18px;letter-spacing:-.01em}.today-task-owner:focus-visible,.today-task-title:focus-visible,.today-more-toggle:focus-visible,.today-task-check:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 72%,white);outline-offset:3px;border-radius:8px}.today-task-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:760;color:var(--ink-4)}.today-task-due.is-overdue{color:var(--danger)}.today-task-count{color:var(--ink-4)}.today-task-rank{font-family:var(--font-display);font-size:11px;font-weight:800;color:var(--ink-4)}
+.today-more{display:grid;gap:8px}.today-more-toggle{list-style:none;justify-self:start;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));border-radius:999px;padding:7px 10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));color:var(--accent);font-size:11px;font-weight:820;cursor:pointer}.today-more-toggle::-webkit-details-marker{display:none}.today-more[open] .today-more-toggle{margin-bottom:2px}.today-more[open] .today-more-toggle .is-collapsed,.today-more:not([open]) .today-more-toggle .is-expanded{display:none}
 .today-clear{position:relative;overflow:hidden;display:grid;place-items:center;text-align:center;min-height:260px;padding:44px 24px}.today-clear-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:white;font-size:28px;box-shadow:0 14px 36px color-mix(in srgb,var(--accent) 34%,transparent);animation:todayClearPop .62s var(--ease-spring) both}.today-clear h2{margin:16px 0 4px;font-family:var(--font-display);font-size:27px;color:var(--ink)}.today-clear p{color:var(--ink-3);font-size:13px}.today-particle{position:absolute;left:50%;top:45%;width:7px;height:7px;border-radius:2px;background:var(--particle-color,var(--accent));animation:todayParticle 1.05s var(--ease-smooth) both;animation-delay:var(--particle-delay,0ms)}
 .today-mission.is-settled .today-particle{display:none}.today-mission.is-settled .today-clear-mark{animation:none}
 @keyframes todayTaskEnter{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes todayStartPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mission-tone) 0%,transparent)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--mission-tone) 10%,transparent),0 14px 34px color-mix(in srgb,var(--mission-tone) 14%,transparent)}}
 @keyframes todayTaskComplete{0%{opacity:1;transform:scale(1);max-height:120px}35%{opacity:1;transform:scale(1.015);background:color-mix(in srgb,var(--accent) 20%,var(--surface))}100%{opacity:0;transform:translateX(18px) scale(.98);max-height:0;min-height:0;padding-top:0;padding-bottom:0;border-width:0}}
 @keyframes todayClearPop{from{opacity:0;transform:scale(.55) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
 @keyframes todayParticle{from{opacity:1;transform:translate(-50%,-50%) rotate(0) translateY(0)}to{opacity:0;transform:translate(-50%,-50%) rotate(var(--particle-rotate)) translate(var(--particle-x),var(--particle-y))}}
@@ -3272,9 +3267,9 @@ select.planner-goal-input{
   .task-row{grid-template-columns:auto minmax(0,1fr) auto}
   .task-row .task-priority-select{grid-column:2 / -1}
   .task-row .task-date-input,.task-row .task-label-input,.task-row .task-flags{grid-column:2 / -1;max-width:none}
-  .today-mission-head{grid-template-columns:1fr;padding:22px 20px 18px;gap:16px}
-  .today-progress{grid-template-columns:minmax(0,1fr) 54px}.today-progress-copy{text-align:left}.today-progress-ring{width:54px;height:54px}
-  .today-mission-body{padding:0 20px 22px}.today-task-row{grid-template-columns:auto minmax(0,1fr);gap:10px}.today-task-rank{display:none}
+  .today-mission-head{grid-template-columns:1fr;padding:18px 20px 14px;gap:12px}
+  .today-progress{justify-self:start}
+  .today-mission-body{padding:0 20px 22px}.today-queue{padding-left:15px}.today-task-row{grid-template-columns:auto minmax(0,1fr);gap:10px}.today-task-rank{display:none}.today-task-row::before{left:-13px}.today-task-row.is-start::before{left:-14px}
   .detail-modal-backdrop{padding:14px}
   .detail-modal-head{padding:20px 20px 16px}
   .detail-modal-body{padding:18px 20px 22px}
@@ -3922,10 +3917,12 @@ function updateHeaderForView() {
   document.getElementById('pageTitle').innerHTML = isSettings
     ? 'Workspace <em>settings</em>'
     : (isPlanner ? 'Today' : '<strong class="page-title-dashboard">Dashboard</strong>');
-  document.getElementById('pageSubtitle').innerHTML = isSettings
+  const pageSubtitle = document.getElementById('pageSubtitle');
+  pageSubtitle.hidden = isPlanner;
+  pageSubtitle.innerHTML = isSettings
     ? 'Manage categories, colors, and personal organization'
     : (isPlanner
-      ? 'Your priorities, decided by the commitments you already made'
+      ? ''
       : `
       <span class="session-status" id="sessionStatus" data-state="live">
         <span class="session-status__text" id="sessionStatusText">Live</span>
@@ -7029,27 +7026,20 @@ function taskIsThisWeek(task) {
   return delta <= 6 - today.getDay();
 }
 
-function todayMissionCategory(task) {
-  if (task?.waiting) return null;
-  const delta = taskDueDelta(task);
-  if (delta != null && delta < 0) return 'overdue';
-  if (delta === 0) return 'today';
-  if (delta != null && delta <= 7) return 'upcoming';
-  if (delta == null && task?.priority === 'high') return 'important';
-  if (delta == null && task?.quick) return 'quick';
-  return null;
-}
-
-function todayMissionReason(item) {
-  const delta = taskDueDelta(item.task);
-  if (item.category === 'overdue') {
-    const days = Math.abs(delta);
-    return `${days} day${days === 1 ? '' : 's'} overdue`;
+function todayMissionCategory(item) {
+  if (item.task?.waiting) return null;
+  if (item.ownerType === 'project') {
+    const dueDelta = projectDueDelta(item.owner);
+    if (dueDelta != null && dueDelta < 0) return 'overdue';
+    if (dueDelta != null) return 'upcoming';
+    const inactiveDays = daysSinceTimestamp(item.owner?.last_seen);
+    if (inactiveDays == null || inactiveDays >= 7) return 'inactive';
+    return null;
   }
-  if (item.category === 'today') return 'Due today';
-  if (item.category === 'upcoming') return delta === 1 ? 'Due tomorrow' : `Due in ${delta} days`;
-  if (item.category === 'important') return 'High-priority one-off';
-  return 'Quick win';
+  const taskDelta = taskDueDelta(item.task);
+  if (taskDelta != null && taskDelta < 0) return 'overdue';
+  if (taskDelta != null) return 'upcoming';
+  return null;
 }
 
 function taskCompletedToday(task) {
@@ -7066,14 +7056,20 @@ function buildTodayMission(projects, folders) {
     .filter(folder => !isTerminalProjectStatus(folder.status || ''))
     .flatMap(folder => (folder.project_tasks || []).map(task => ({ task, owner: folder, ownerType: 'folder', ownerName: folder.name || folder.project_name || 'Folder', pinned: false })));
   const ranked = [...projectItems, ...folderItems]
-    .map(item => ({ ...item, category: todayMissionCategory(item.task) }))
+    .map(item => ({ ...item, category: todayMissionCategory(item) }))
     .filter(item => item.category);
-  const categoryRank = { overdue: 0, today: 1, upcoming: 2, important: 3, quick: 4 };
+  const categoryRank = { overdue: 0, upcoming: 1, inactive: 2 };
   ranked.sort((a, b) => {
     const categoryDiff = categoryRank[a.category] - categoryRank[b.category];
     if (categoryDiff) return categoryDiff;
-    const dateDiff = String(a.task.due_date || '9999-12-31').localeCompare(String(b.task.due_date || '9999-12-31'));
-    if (dateDiff) return dateDiff;
+    if (a.category === 'overdue' || a.category === 'upcoming') {
+      const dueDiff = (projectDueDelta(a.owner) ?? taskDueDelta(a.task) ?? 99999) - (projectDueDelta(b.owner) ?? taskDueDelta(b.task) ?? 99999);
+      if (dueDiff) return dueDiff;
+    }
+    if (a.category === 'inactive') {
+      const inactiveDiff = (daysSinceTimestamp(b.owner?.last_seen) ?? Number.MAX_SAFE_INTEGER) - (daysSinceTimestamp(a.owner?.last_seen) ?? Number.MAX_SAFE_INTEGER);
+      if (inactiveDiff) return inactiveDiff;
+    }
     const priorityDiff = TASK_PRIORITY_RANK(a.task.priority) - TASK_PRIORITY_RANK(b.task.priority);
     if (priorityDiff) return priorityDiff;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -7089,9 +7085,46 @@ function buildTodayMission(projects, folders) {
     open,
     completed,
     start: open[0] || null,
-    upNext: open.slice(1).filter(item => ['overdue', 'today', 'upcoming'].includes(item.category)),
-    ifTime: open.slice(1).filter(item => ['important', 'quick'].includes(item.category)),
+    upNext: open.slice(1).filter(item => ['overdue', 'upcoming'].includes(item.category)),
+    ifTime: open.slice(1).filter(item => item.category === 'inactive'),
   };
+}
+
+function todayMissionOwnerKey(item) {
+  if (item.ownerType === 'folder') return `folder:${item.owner?.id || item.ownerName || ''}`;
+  return `project:${item.owner?.project_name || item.ownerName || ''}`;
+}
+
+function groupTodayMissionItems(items) {
+  const groups = [];
+  const byOwner = new Map();
+  (items || []).forEach(item => {
+    const key = todayMissionOwnerKey(item);
+    let group = byOwner.get(key);
+    if (!group) {
+      group = { key, first: item, items: [] };
+      byOwner.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  });
+  return groups.map(group => ({ ...group, count: group.items.length }));
+}
+
+function todayMissionDueDate(item) {
+  if (item.ownerType === 'project') return item.owner?.hard_deadline || item.owner?.due_date || '';
+  return item.task?.due_date || '';
+}
+
+function todayMissionDueDeltaForItem(item) {
+  return item.ownerType === 'project' ? projectDueDelta(item.owner) : taskDueDelta(item.task);
+}
+
+function todayMissionDueDisplay(item) {
+  const delta = todayMissionDueDeltaForItem(item);
+  if (delta == null) return null;
+  if (delta < 0) return { label: 'Overdue', state: 'overdue' };
+  return { label: compactDateLabel(todayMissionDueDate(item)), state: delta === 0 ? 'today' : 'upcoming' };
 }
 
 function daysSinceTimestamp(timestamp) {
@@ -7519,35 +7552,43 @@ function renderPlanner(data) {
     .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
   const deadlineProjects = plannerDeadlineProjects(projects);
   const todayMission = buildTodayMission(projects, folders);
+  const todayMissionGroups = groupTodayMissionItems(todayMission.open);
 
-  const renderMissionTask = (item, index, isStart = false) => {
+  const renderMissionGroup = (group, index, isStart = false) => {
+    const item = group.first;
+    const due = todayMissionDueDisplay(item);
+    const dueHtml = due?.label ? `<span class="today-task-due ${due.state === 'overdue' ? 'is-overdue' : ''}">${escapeHtml(due.label)}</span>` : '';
+    const countHtml = group.count > 1 ? `<span class="today-task-count">${group.count} tasks</span>` : '';
     const ownerValue = item.ownerType === 'folder' ? String(item.owner.id || '') : encodeURIComponent(item.owner.project_name || '');
+    const ownerSuffix = item.ownerType === 'folder' ? ' · Folder' : '';
+    const ownerLabel = `${item.ownerName}${ownerSuffix}`;
     return `<div class="today-task-row ${isStart ? 'is-start' : ''}" style="--mission-index:${index}" data-today-task-row="${item.task.id}">
       <input class="today-task-check" type="checkbox" data-today-task-complete="${item.task.id}" aria-label="Complete ${escapeHtml(item.task.title)}">
       <div class="today-task-main">
-        <button class="today-task-owner" type="button" data-today-owner-type="${item.ownerType}" data-today-owner="${ownerValue}">${escapeHtml(item.ownerName)}${item.ownerType === 'folder' ? ' · Folder' : ''}</button>
-        <div class="today-task-title">${escapeHtml(item.task.title)}</div>
-        <div class="today-task-meta"><span class="today-task-reason">${escapeHtml(todayMissionReason(item))}</span>${item.task.priority !== 'normal' ? `<span>${escapeHtml(priorityLabel(item.task.priority))}</span>` : ''}${item.task.label ? `<span class="today-task-label">${escapeHtml(item.task.label)}</span>` : ''}</div>
+        <button class="today-task-owner" type="button" data-today-owner-type="${item.ownerType}" data-today-owner="${ownerValue}" aria-label="Open ${escapeHtml(ownerLabel)}">${escapeHtml(ownerLabel)}</button>
+        <button class="today-task-title" type="button" data-today-owner-type="${item.ownerType}" data-today-owner="${ownerValue}" aria-label="Open ${escapeHtml(ownerLabel)} task ${escapeHtml(item.task.title)}">${escapeHtml(item.task.title)}</button>
+        ${dueHtml || countHtml ? `<div class="today-task-meta">${dueHtml}${countHtml}</div>` : ''}
       </div>
-      <div class="today-task-rank">${isStart ? 'NOW' : String(index + 1).padStart(2, '0')}</div>
+      <div class="today-task-rank">${isStart ? 'Start Here' : String(index + 1).padStart(2, '0')}</div>
     </div>`;
   };
 
-  const renderMissionSection = (title, items, indexOffset) => items.length ? `<section class="today-mission-section"><div class="today-mission-section-head"><div class="today-mission-section-title">${title}</div><div class="today-mission-section-count">${items.length}</div></div><div class="today-task-list">${items.map((item, index) => renderMissionTask(item, indexOffset + index)).join('')}</div></section>` : '';
+  const renderMissionGroups = (groups, indexOffset = 0) => groups.length ? `<div class="today-task-list">${groups.map((group, index) => renderMissionGroup(group, indexOffset + index)).join('')}</div>` : '';
   const renderClearState = () => {
     const particles = Array.from({ length: 12 }, (_, index) => `<i class="today-particle" style="--particle-x:${Math.round(Math.cos(index / 12 * Math.PI * 2) * (70 + index % 3 * 18))}px;--particle-y:${Math.round(Math.sin(index / 12 * Math.PI * 2) * (62 + index % 4 * 12))}px;--particle-rotate:${120 + index * 37}deg;--particle-delay:${index * 22}ms;--particle-color:${index % 3 === 0 ? 'var(--accent)' : index % 3 === 1 ? '#d89218' : '#7bd389'}"></i>`).join('');
-    return `<div class="today-clear">${particles}<div><div class="today-clear-mark">✓</div><h2>Today is clear</h2><p>You handled every commitment that needed your attention.</p></div></div>`;
+    return `<div class="today-clear">${particles}<div><div class="today-clear-mark">✓</div><h2>Today is clear</h2><p>No active tasks.</p></div></div>`;
   };
   const renderTodayMission = () => {
     const remaining = todayMission.open.length;
     const completed = todayMission.completed.length;
     const total = remaining + completed;
-    const percent = total ? Math.round(completed / total * 100) : 100;
-    const circumference = 2 * Math.PI * 25;
-    const offset = circumference * (1 - percent / 100);
-    const stateClass = todayMission.start?.category === 'overdue' ? 'is-overdue' : todayMission.start?.category === 'today' ? 'is-today' : '';
-    const missionBody = todayMission.start ? `<div class="today-mission-body"><section class="today-mission-section"><div class="today-mission-section-head"><div class="today-mission-section-title">Start Here</div><div class="today-mission-section-count">Most consequential</div></div>${renderMissionTask(todayMission.start, 0, true)}</section>${renderMissionSection('Up Next', todayMission.upNext, 1)}${renderMissionSection("If There's Time", todayMission.ifTime, 1 + todayMission.upNext.length)}</div>` : renderClearState();
-    return `<section class="planner-panel today-mission ${stateClass}"><div class="today-mission-head"><div><div class="today-mission-kicker">Automatic daily mission</div><div class="today-mission-title">What matters today</div><div class="today-mission-summary">${remaining ? `${remaining} commitment${remaining === 1 ? ' needs' : 's need'} your attention` : 'Nothing is competing for your attention'}</div></div><div class="today-progress"><div class="today-progress-copy"><strong data-today-progress-count>${percent}%</strong><span>${completed} complete · ${remaining} left</span></div><svg class="today-progress-ring" viewBox="0 0 60 60" aria-label="${percent}% of today's mission complete"><circle class="today-progress-track" cx="30" cy="30" r="25"></circle><circle class="today-progress-value" cx="30" cy="30" r="25" stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}" data-progress-offset="${offset}"></circle></svg></div></div>${missionBody}</section>`;
+    const startGroup = todayMissionGroups[0] || null;
+    const visibleGroups = todayMissionGroups.slice(1, 4);
+    const hiddenGroups = todayMissionGroups.slice(4);
+    const hiddenTaskCount = hiddenGroups.reduce((sum, group) => sum + group.count, 0);
+    const hiddenControl = hiddenGroups.length ? `<details class="today-more"><summary class="today-more-toggle"><span class="is-collapsed">${hiddenTaskCount} more</span><span class="is-expanded">Show fewer</span></summary>${renderMissionGroups(hiddenGroups, 4)}</details>` : '';
+    const missionBody = startGroup ? `<div class="today-mission-body"><div class="today-queue">${renderMissionGroup(startGroup, 0, true)}${renderMissionGroups(visibleGroups, 1)}${hiddenControl}</div></div>` : renderClearState();
+    return `<section class="planner-panel today-mission"><div class="today-mission-head"><div class="today-mission-title">Today Queue</div><div class="today-progress" aria-label="${completed} of ${total} tasks complete"><strong>${completed} / ${total}</strong><span>complete</span></div></div>${missionBody}</section>`;
   };
 
   const renderDeadlineRadar = () => {
@@ -7751,8 +7792,6 @@ function bindTodayWorklist(data) {
   document.querySelector('.today-mission')?.classList.toggle('is-settled', !shouldAnimateEntrance);
   todayMissionHasRendered = true;
   todayMissionDateKey = currentDateKey;
-  const progressValue = document.querySelector('.today-progress-value');
-  if (progressValue) requestAnimationFrame(() => progressValue.setAttribute('stroke-dashoffset', progressValue.dataset.progressOffset || '0'));
   clearTimeout(todayMissionMidnightTimer);
   const now = new Date();
   const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
