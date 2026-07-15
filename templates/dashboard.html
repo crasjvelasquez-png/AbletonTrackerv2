@@ -1663,7 +1663,7 @@ select.project-planning-input{
 .date-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}
 .date-trigger svg{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.8;flex:0 0 auto}
 .date-trigger-placeholder{color:var(--ink-4)}
-.tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:264px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 78%,transparent);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
+.tracker-calendar{position:absolute;z-index:40;top:calc(100% + 7px);left:0;width:280px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--surface) 78%,transparent);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);box-shadow:0 18px 50px rgba(0,0,0,.35);transform-origin:top left}
 .tracker-calendar{max-width:calc(100vw - 32px);box-sizing:border-box}
 .tracker-calendar[hidden]{display:none}
 .tracker-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -1727,16 +1727,15 @@ select.project-planning-input{
 .task-tool-trigger:hover,.task-tool-trigger[aria-expanded="true"]{border-color:var(--border-strong);background:var(--control-bg-strong);color:var(--ink)}
 .task-date-trigger svg{width:14px;height:14px;fill:none;stroke:var(--accent);stroke-width:1.8}
 .task-inline-panel{width:min(100%,330px);padding:10px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));border-radius:13px;background:color-mix(in srgb,var(--surface-2) 88%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.task-form,.task-row{position:relative}
+.task-date-panel{position:absolute;z-index:60;top:calc(100% + 6px);left:0;width:190px;padding:7px}
+.task-date-panel .tracker-calendar-head{margin-bottom:5px}
+.task-date-panel .tracker-calendar-month{font-size:11px}
+.task-date-panel .tracker-calendar-nav button{width:22px;height:22px;font-size:14px}
+.task-date-panel .tracker-calendar-days,.task-date-panel .tracker-calendar-week{gap:1px;max-width:none}
+.task-date-panel .tracker-calendar-week span{padding:2px 0 3px;font-size:8px}
+.task-date-panel .tracker-calendar-day{border-radius:5px;font-size:9px}
 .task-inline-panel[hidden]{display:none}
-.task-date-shortcuts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.task-date-shortcuts button{border:1px solid var(--border);border-radius:8px;background:var(--control-bg);color:var(--ink-3);font:inherit;font-size:10px;font-weight:750;padding:6px 9px;cursor:pointer}
-.task-date-shortcuts button:hover{border-color:var(--accent);color:var(--accent)}
-.task-date-panel .tracker-calendar-head{margin-bottom:8px}
-.task-date-panel .tracker-calendar-days{max-width:300px}
-.task-date-panel .tracker-calendar-week{max-width:300px}
-.task-date-jump{display:flex;align-items:center;gap:8px;margin:0 0 10px;color:var(--ink-4);font-size:10px;font-weight:750}
-.task-date-jump input{width:132px;min-height:30px;padding:5px 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:11px}
-.task-date-jump input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
 .task-more-panel{display:grid;grid-template-columns:minmax(160px,1fr) auto auto;align-items:end;gap:12px}
 .task-more-label{display:grid;gap:5px;color:var(--ink-4);font-size:10px;font-weight:750}
 .project-task-pill{
@@ -3153,10 +3152,29 @@ select.planner-goal-input{
   background:var(--control-bg);color:var(--ink-2) !important;
   text-transform:none;letter-spacing:0;font-size:13px;
 }
-.planner-board-head::before{
-  content:"";width:3px;height:16px;border-radius:999px;
-  background:var(--status-color,var(--ink-4));flex:0 0 auto;
+.lane-color-trigger{
+  position:relative;display:grid;place-items:center;flex:0 0 24px;width:24px;height:30px;
+  margin:-7px -5px -7px -7px;padding:0;border:0;border-radius:7px;background:transparent;cursor:pointer;
+  transition:background .16s ease,box-shadow .16s ease;
 }
+.lane-color-trigger::before{content:"";width:3px;height:16px;border-radius:999px;background:var(--status-color,var(--ink-4));}
+.lane-color-trigger:hover{background:color-mix(in srgb,var(--status-color,var(--accent)) 14%,transparent)}
+.lane-color-trigger:focus-visible{outline:none;background:color-mix(in srgb,var(--status-color,var(--accent)) 16%,transparent);box-shadow:0 0 0 3px var(--accent-soft)}
+.lane-color-picker{position:fixed;z-index:80;width:min(292px,calc(100vw - 24px));padding:13px;border:1px solid var(--border-strong);border-radius:14px;background:#fff;box-shadow:0 18px 48px rgba(0,0,0,.2);}
+:root[data-theme="dark"] .lane-color-picker{background:#18181c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lane-color-picker{background:#18181c}}
+.lane-color-picker[hidden]{display:none}
+.lane-color-picker-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px;font-size:13px;font-weight:750;color:var(--ink)}
+.lane-color-picker-swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:7px;margin-bottom:12px}
+.lane-color-picker-swatch{width:100%;aspect-ratio:1;border:2px solid transparent;border-radius:7px;background:var(--color-value);cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.38)}
+.lane-color-picker-swatch:hover{transform:translateY(-1px)}
+.lane-color-picker-swatch:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft),inset 0 0 0 1px rgba(255,255,255,.38)}
+.lane-color-picker-swatch.is-active{border-color:var(--ink);box-shadow:0 0 0 1px var(--surface),0 0 0 3px var(--accent-soft)}
+.lane-color-picker .color-saturation{margin:0 0 10px;height:142px}
+.lane-color-picker .color-hue{width:100%;margin:0 0 12px}
+.lane-color-picker-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}
+.lane-color-picker-actions .lane-color-reset{grid-column:1 / -1;color:var(--ink-3)}
+@media (prefers-reduced-motion:reduce){.lane-color-trigger,.lane-color-picker-swatch{transition:none}.lane-color-picker-swatch:hover{transform:none}}
 .planner-board-head > span:first-of-type{margin-right:auto}
 .lane-color-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
 .lane-color-setting{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--control-bg);font-size:12px;font-weight:700;color:var(--ink-2)}
@@ -3800,19 +3818,143 @@ const DEFAULT_LANE_HEADER_COLORS = {
 };
 let LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS};
 
+function normalizeLaneHeaderColors(colors) {
+  return Object.fromEntries(Object.entries({...DEFAULT_LANE_HEADER_COLORS, ...(colors || {})})
+    .map(([key, value]) => [key, normalizeHexColor(value) || DEFAULT_LANE_HEADER_COLORS[key] || '#8E8E93']));
+}
+
+function repaintLaneHeaderColors() {
+  document.querySelectorAll('.planner-board-column[data-planner-status]').forEach(column => {
+    const key = column.dataset.plannerStatus || '';
+    column.style.setProperty('--status-color', LANE_HEADER_COLORS[key] || DEFAULT_LANE_HEADER_COLORS[key] || '#8E8E93');
+  });
+}
+
+window.applyLaneHeaderColors = colors => {
+  LANE_HEADER_COLORS = normalizeLaneHeaderColors(colors);
+  repaintLaneHeaderColors();
+  window.dispatchEvent(new CustomEvent('laneheadercolorschange', { detail: {...LANE_HEADER_COLORS} }));
+};
+
+window.saveLaneHeaderColors = async colors => {
+  const next = normalizeLaneHeaderColors(colors);
+  window.applyLaneHeaderColors(next);
+  await postJson('/api/app-settings', { key: 'lane_header_colors', value: JSON.stringify(next) });
+  return next;
+};
+
 async function hydrateLaneHeaderColors() {
   try {
     const res = await fetch('/api/app-settings');
     const settings = await res.json();
     const saved = JSON.parse(settings?.lane_header_colors || '{}');
-    if (saved && typeof saved === 'object') LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS, ...saved};
+    if (saved && typeof saved === 'object') LANE_HEADER_COLORS = normalizeLaneHeaderColors(saved);
   } catch (_) {}
   if (latestDashboardData && activeView === 'planner') renderPlanner(latestDashboardData);
 }
-window.applyLaneHeaderColors = colors => {
-  LANE_HEADER_COLORS = {...DEFAULT_LANE_HEADER_COLORS, ...(colors || {})};
-  if (latestDashboardData && activeView === 'planner') renderPlanner(latestDashboardData);
-};
+
+const LANE_COLOR_PRESETS = ['#8E8E93','#FF9500','#FFCC00','#34C759','#007AFF','#AF52DE','#FF3B30','#5AC8FA'];
+let laneColorPicker = null;
+let laneColorPickerState = null;
+
+function ensureLaneColorPicker() {
+  if (laneColorPicker) return laneColorPicker;
+  const picker = document.createElement('div');
+  picker.className = 'lane-color-picker';
+  picker.id = 'laneColorPicker';
+  picker.hidden = true;
+  picker.setAttribute('role', 'dialog');
+  picker.setAttribute('aria-modal', 'false');
+  picker.innerHTML = `<div class="lane-color-picker-head"><span data-lane-picker-title>Lane color</span></div>
+    <div class="lane-color-picker-swatches" aria-label="Suggested colors">${LANE_COLOR_PRESETS.map(color => `<button type="button" class="lane-color-picker-swatch" data-lane-picker-swatch="${color}" style="--color-value:${color}" aria-label="Use ${color}"></button>`).join('')}</div>
+    <div class="color-saturation" data-lane-picker-saturation role="slider" tabindex="0" aria-label="Saturation and brightness" aria-valuemin="0" aria-valuemax="100"><span class="color-saturation-thumb"></span></div>
+    <input class="color-hue" data-lane-picker-hue type="range" min="0" max="360" aria-label="Hue">
+    <div class="lane-color-picker-actions"><button type="button" class="btn subtle small lane-color-reset" data-lane-picker-reset>Reset to default</button><button type="button" class="btn subtle small" data-lane-picker-cancel>Cancel</button><button type="button" class="btn primary small" data-lane-picker-apply>Apply</button></div>`;
+  document.body.appendChild(picker);
+  laneColorPicker = picker;
+  return picker;
+}
+
+function positionLaneColorPicker(trigger) {
+  const picker = ensureLaneColorPicker(), rect = trigger.getBoundingClientRect();
+  const width = Math.min(292, innerWidth - 24);
+  picker.style.left = `${Math.max(12, Math.min(rect.left, innerWidth - width - 12))}px`;
+  picker.style.top = `${Math.max(12, Math.min(rect.bottom + 8, innerHeight - picker.offsetHeight - 12))}px`;
+}
+
+function closeLaneColorPicker({ restore = true, returnFocus = true } = {}) {
+  if (!laneColorPickerState) return;
+  const { key, original, trigger } = laneColorPickerState;
+  if (restore) window.applyLaneHeaderColors({...LANE_HEADER_COLORS, [key]: original});
+  laneColorPicker.hidden = true;
+  trigger?.setAttribute('aria-expanded', 'false');
+  laneColorPickerState = null;
+  if (returnFocus) trigger?.focus();
+}
+
+function openLaneColorPicker(trigger) {
+  const picker = ensureLaneColorPicker();
+  if (laneColorPickerState) closeLaneColorPicker({ restore: true, returnFocus: false });
+  const key = trigger.dataset.laneColorKey || '';
+  const label = trigger.dataset.laneColorLabel || 'Project';
+  let hsv = hexToHsv(LANE_HEADER_COLORS[key] || DEFAULT_LANE_HEADER_COLORS[key] || '#8E8E93');
+  const sync = color => {
+    const value = normalizeHexColor(color) || '#8E8E93';
+    hsv = hexToHsv(value);
+    if (laneColorPickerState) laneColorPickerState.hsv = hsv;
+    picker.style.setProperty('--picker-hue', hsv.h);
+    picker.style.setProperty('--picker-saturation', hsv.s * 100);
+    picker.style.setProperty('--picker-value', hsv.v * 100);
+    picker.querySelector('[data-lane-picker-hue]').value = String(Math.round(hsv.h));
+    picker.querySelectorAll('[data-lane-picker-swatch]').forEach(button => {
+      const selected = button.dataset.lanePickerSwatch === value;
+      button.classList.toggle('is-active', selected); button.setAttribute('aria-pressed', String(selected));
+    });
+    laneColorPickerState.preview = value;
+    window.applyLaneHeaderColors({...LANE_HEADER_COLORS, [key]: value});
+  };
+  laneColorPickerState = { key, original: LANE_HEADER_COLORS[key] || DEFAULT_LANE_HEADER_COLORS[key] || '#8E8E93', preview: '', trigger, sync, hsv };
+  picker.querySelector('[data-lane-picker-title]').textContent = `${label} lane color`;
+  picker.hidden = false;
+  trigger.setAttribute('aria-expanded', 'true');
+  sync(laneColorPickerState.original);
+  positionLaneColorPicker(trigger);
+  picker.querySelector('[data-lane-picker-saturation]').focus();
+}
+
+document.addEventListener('pointerdown', event => {
+  if (laneColorPickerState && !laneColorPicker?.contains(event.target) && !laneColorPickerState.trigger.contains(event.target)) closeLaneColorPicker();
+});
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && laneColorPickerState) { event.preventDefault(); closeLaneColorPicker(); } });
+window.addEventListener('resize', () => { if (laneColorPickerState) positionLaneColorPicker(laneColorPickerState.trigger); });
+document.addEventListener('click', async event => {
+  if (!laneColorPickerState) return;
+  const button = event.target.closest('[data-lane-picker-swatch],[data-lane-picker-reset],[data-lane-picker-cancel],[data-lane-picker-apply]');
+  if (!button) return;
+  if (button.dataset.lanePickerSwatch) laneColorPickerState.sync(button.dataset.lanePickerSwatch);
+  if (button.matches('[data-lane-picker-reset]')) laneColorPickerState.sync(DEFAULT_LANE_HEADER_COLORS[laneColorPickerState.key] || '#8E8E93');
+  if (button.matches('[data-lane-picker-cancel]')) closeLaneColorPicker();
+  if (button.matches('[data-lane-picker-apply]')) {
+    const state = laneColorPickerState;
+    try { await window.saveLaneHeaderColors({...LANE_HEADER_COLORS, [state.key]: state.preview}); closeLaneColorPicker({ restore: false }); }
+    catch (_) { window.applyLaneHeaderColors({...LANE_HEADER_COLORS, [state.key]: state.original}); laneColorPicker.hidden = true; state.trigger.setAttribute('aria-expanded', 'false'); laneColorPickerState = null; state.trigger.focus(); toast('Failed to save lane color'); }
+  }
+});
+document.addEventListener('input', event => {
+  if (!laneColorPickerState || event.target !== laneColorPicker?.querySelector('[data-lane-picker-hue]')) return;
+  const state = laneColorPickerState; state.hsv.h = Number(event.target.value); state.sync(hsvToHex(state.hsv.h, state.hsv.s, state.hsv.v));
+});
+document.addEventListener('pointerdown', event => {
+  const saturation = event.target.closest('[data-lane-picker-saturation]'); if (!saturation || !laneColorPickerState) return;
+  const setSv = point => { const rect = saturation.getBoundingClientRect(), state = laneColorPickerState; state.hsv.s = Math.max(0, Math.min(1, (point.clientX - rect.left) / rect.width)); state.hsv.v = Math.max(0, Math.min(1, (rect.bottom - point.clientY) / rect.height)); state.sync(hsvToHex(state.hsv.h, state.hsv.s, state.hsv.v)); };
+  saturation.setPointerCapture(event.pointerId); setSv(event); saturation.addEventListener('pointermove', setSv, { once: false }); saturation.addEventListener('pointerup', () => saturation.removeEventListener('pointermove', setSv), { once: true });
+});
+document.addEventListener('keydown', event => {
+  const saturation = event.target.closest('[data-lane-picker-saturation]'); if (!saturation || !laneColorPickerState) return;
+  const state = laneColorPickerState, step = event.shiftKey ? .05 : .01;
+  if (event.key === 'ArrowLeft') state.hsv.s -= step; else if (event.key === 'ArrowRight') state.hsv.s += step; else if (event.key === 'ArrowDown') state.hsv.v -= step; else if (event.key === 'ArrowUp') state.hsv.v += step; else return;
+  event.preventDefault(); state.hsv.s = Math.max(0, Math.min(1, state.hsv.s)); state.hsv.v = Math.max(0, Math.min(1, state.hsv.v)); state.sync(hsvToHex(state.hsv.h, state.hsv.s, state.hsv.v));
+});
 
 function syncCategoryOptions(options) {
   CATEGORY_OPTIONS = Array.isArray(options) ? options : [];
@@ -5725,7 +5867,7 @@ function renderTaskDatePanel(container) {
     const value = localIsoDate(date);
     return `<button class="tracker-calendar-day${date.getMonth() !== view.getMonth() ? ' is-outside' : ''}${value === today ? ' is-today' : ''}${value === selected ? ' is-selected' : ''}" type="button" data-task-calendar-date="${value}">${date.getDate()}</button>`;
   }).join('');
-  panel.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-task-date-offset="0">Today</button><button type="button" data-task-date-offset="1">Tomorrow</button><button type="button" data-task-date-offset="7">+7d</button>${selected ? '<button type="button" data-task-date-clear>Clear</button>' : ''}</div><label class="task-date-jump">Jump to date <input type="date" value="${selected}" data-task-date-jump aria-label="Jump to a specific date"></label><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-task-date-month="-1" aria-label="Previous month">‹</button><button type="button" data-task-date-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day => `<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
+  panel.innerHTML = `<div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-task-date-month="-1" aria-label="Previous month">‹</button><button type="button" data-task-date-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day => `<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
 }
 
 function setTaskDate(container, value) {
@@ -5822,14 +5964,6 @@ document.addEventListener('click', event => {
   if (!event.target.closest('[data-task-date-panel],[data-task-more-panel]')) closeTaskInlinePanels();
 });
 
-document.addEventListener('change', event => {
-  const jump = event.target.closest('[data-task-date-jump]');
-  if (!jump) return;
-  const container = jump.closest('.task-form,.task-row');
-  setTaskDate(container, jump.value);
-  closeTaskInlinePanels();
-});
-
 document.addEventListener('keydown', event => {
   const button = event.target.closest?.('[data-task-priority-choice]');
   if (!button || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -5852,6 +5986,8 @@ async function refreshProjectTaskModal(projectName) {
   const list = document.getElementById('taskModalList');
   const toggle = document.getElementById('taskToggleCompleted');
   if (!list) return;
+  const scrollContainer = list.closest('.task-modal-body');
+  const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
   refreshProjectPlanningForm(projectName);
   list.innerHTML = '<div class="task-empty">Loading tasks…</div>';
   try {
@@ -5880,6 +6016,8 @@ async function refreshProjectTaskModal(projectName) {
     }
   } catch (error) {
     list.innerHTML = `<div class="task-empty">${escapeHtml(error.message || 'Could not load tasks')}</div>`;
+  } finally {
+    if (scrollContainer) scrollContainer.scrollTop = savedScrollTop;
   }
 }
 
@@ -5916,7 +6054,7 @@ function renderProjectDatePicker() {
     const value = iso(date);
     return `<button class="tracker-calendar-day${date.getMonth() !== month ? ' is-outside' : ''}${value === iso(today) ? ' is-today' : ''}${value === projectDatePickerState.selected ? ' is-selected' : ''}" type="button" data-date="${value}">${date.getDate()}</button>`;
   }).join('');
-  calendar.innerHTML = `<div class="task-date-shortcuts"><button type="button" data-today>Today</button><button type="button" data-project-date-offset="1">Tomorrow</button><button type="button" data-project-date-offset="7">+7d</button><button type="button" data-date="">Clear</button></div><label class="task-date-jump">Jump to date <input type="date" value="${projectDatePickerState.selected}" data-project-date-jump aria-label="Jump to a specific date"></label><div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-month="-1" aria-label="Previous month">‹</button><button type="button" data-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day=>`<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div>`;
+  calendar.innerHTML = `<div class="tracker-calendar-head"><span class="tracker-calendar-month">${new Intl.DateTimeFormat(undefined,{month:'short',year:'numeric'}).format(view)}</span><div class="tracker-calendar-nav"><button type="button" data-month="-1" aria-label="Previous month">‹</button><button type="button" data-month="1" aria-label="Next month">›</button></div></div><div class="tracker-calendar-week">${['S','M','T','W','T','F','S'].map(day=>`<span>${day}</span>`).join('')}</div><div class="tracker-calendar-days">${days}</div><div class="tracker-calendar-foot"><button type="button" data-date="">Clear</button></div>`;
 }
 
 function closeProjectDatePicker() {
@@ -5940,17 +6078,8 @@ document.getElementById('projectDueDateCalendar')?.addEventListener('click', eve
   const monthButton = event.target.closest('[data-month]');
   if (monthButton) { projectDatePickerState.view.setMonth(projectDatePickerState.view.getMonth() + Number(monthButton.dataset.month)); renderProjectDatePicker(); return; }
   if (event.target.closest('[data-today]')) { const now = new Date(); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); return; }
-  const offsetButton = event.target.closest('[data-project-date-offset]');
-  if (offsetButton) { const now = new Date(); now.setDate(now.getDate() + Number(offsetButton.dataset.projectDateOffset)); setProjectDueDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); return; }
   const dayButton = event.target.closest('[data-date]');
   if (dayButton) { setProjectDueDate(dayButton.dataset.date); document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true })); closeProjectDatePicker(); }
-});
-document.getElementById('projectDueDateCalendar')?.addEventListener('change', event => {
-  const input = event.target.closest('[data-project-date-jump]');
-  if (!input) return;
-  setProjectDueDate(input.value);
-  document.getElementById('projectDueDateInput')?.dispatchEvent(new Event('change', { bubbles: true }));
-  closeProjectDatePicker();
 });
 document.addEventListener('click', closeProjectDatePicker);
 
@@ -7950,6 +8079,7 @@ function renderPlanner(data) {
     return `
       <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}" style="--status-color:${LANE_HEADER_COLORS[value] || DEFAULT_LANE_HEADER_COLORS[value] || '#8e8e93'}">
         <div class="planner-board-head">
+          <button type="button" class="lane-color-trigger" data-lane-color-key="${escapeHtml(value)}" data-lane-color-label="${escapeHtml(label)}" aria-label="Change ${escapeHtml(label)} lane color" aria-haspopup="dialog" aria-expanded="false"></button>
           <span>${escapeHtml(label)}</span>
           <div>
             <span class="planner-board-count">${groupProjects.length}</span>
@@ -8095,6 +8225,7 @@ function bindProjectBoard(data) {
   const searchInput = document.getElementById('boardSearchInput');
   const filterChips = document.querySelectorAll('[data-filter-type]');
   document.getElementById('newFolderBtn')?.addEventListener('click', () => openFolderModal());
+  document.querySelectorAll('[data-lane-color-key]').forEach(trigger => trigger.addEventListener('click', event => { event.stopPropagation(); openLaneColorPicker(trigger); }));
   document.querySelectorAll('[data-open-folder]').forEach(card => card.addEventListener('click', event => {
     if (card.classList.contains('is-dragging')) return;
     const folder = (data.project_folders || []).find(item => item.id === Number(card.dataset.openFolder));

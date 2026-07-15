@@ -1241,12 +1241,21 @@
       const input = event.target.closest('[data-lane-color-key]');
       if (!input) return;
       currentLaneHeaderColors[input.dataset.laneColorKey] = input.value;
-      window.applyLaneHeaderColors?.(currentLaneHeaderColors);
       try {
-        await window.postJson('/api/app-settings', { key: 'lane_header_colors', value: JSON.stringify(currentLaneHeaderColors) });
+        if (typeof window.saveLaneHeaderColors === 'function') {
+          currentLaneHeaderColors = await window.saveLaneHeaderColors(currentLaneHeaderColors);
+        } else {
+          window.applyLaneHeaderColors?.(currentLaneHeaderColors);
+          await window.postJson('/api/app-settings', { key: 'lane_header_colors', value: JSON.stringify(currentLaneHeaderColors) });
+        }
       } catch (_) { window.toast('Failed to save lane color'); }
     });
   }
+
+  window.addEventListener('laneheadercolorschange', event => {
+    currentLaneHeaderColors = {...(event.detail || {})};
+    renderLaneColorSettings();
+  });
 
   function bindWidgetControls(root) {
     const heatmapToggle = $('[data-widget-toggle="heatmap"]', root);
