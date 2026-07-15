@@ -2154,5 +2154,165 @@ class MultiProjectMergeTests(unittest.TestCase):
         self.assertEqual([item["project_name"] for item in projects], ["Newest", "Middle", "Old"])
 
 
+class DashboardLaneOrderTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _lane_order_from_stats(self):
+        stats = dashboard.get_stats()
+        return stats.get("project_board_lane_order", [])
+
+    def test_default_order_includes_empty_string_first(self):
+        order = self._lane_order_from_stats()
+        self.assertEqual(order[0], "")
+        for key in dashboard.PROJECT_STATUS_OPTIONS:
+            self.assertIn(key, order)
+
+    def test_default_order_contains_all_status_keys(self):
+        order = self._lane_order_from_stats()
+        expected = [""] + list(dashboard.PROJECT_STATUS_OPTIONS.keys())
+        self.assertEqual(set(order), set(expected))
+        self.assertEqual(len(order), len(expected))
+
+    def test_save_exact_permutation_persists(self):
+        custom = ["", "finished", "abandoned", "paused", "final_touches", "finishing", "in_progress", "idea", "needs_work"]
+        result = dashboard.save_project_board_lane_order(custom)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["ordered_statuses"], custom)
+
+        order = self._lane_order_from_stats()
+        self.assertEqual(order, custom)
+
+    def test_unsorted_placement_in_saved_order(self):
+        custom = ["idea", "", "finished", "in_progress", "needs_work", "finishing", "final_touches", "paused", "abandoned"]
+        result = dashboard.save_project_board_lane_order(custom)
+        self.assertTrue(result["ok"])
+        order = self._lane_order_from_stats()
+        self.assertEqual(order[1], "")
+        self.assertEqual(order, custom)
+
+    def test_duplicate_rejection(self):
+        dup = ["", "idea", "idea", "finished", "in_progress", "needs_work", "finishing", "final_touches", "paused", "abandoned"]
+        result = dashboard.save_project_board_lane_order(dup)
+        self.assertIn("error", result)
+        order = self._lane_order_from_stats()
+        self.assertEqual(order[0], "")
+
+    def test_missing_lane_rejection(self):
+        missing = ["", "idea", "finished", "in_progress", "needs_work", "finishing", "final_touches", "paused"]  # no "abandoned"
+        result = dashboard.save_project_board_lane_order(missing)
+        self.assertIn("error", result)
+        self.assertIn("missing", result["error"].lower())
+
+    def test_unknown_lane_rejection(self):
+        unknown = ["", "idea", "finished", "in_progress", "needs_work", "finishing", "final_touches", "paused", "abandoned", "extra"]
+        result = dashboard.save_project_board_lane_order(unknown)
+        self.assertIn("error", result)
+        self.assertIn("unknown", result["error"].lower())
+
+    def test_empty_list_rejection(self):
+        result = dashboard.save_project_board_lane_order([])
+        self.assertIn("error", result)
+
+    def test_non_list_rejection(self):
+        result = dashboard.save_project_board_lane_order("not-a-list")
+        self.assertIn("error", result)
+
+    def test_malformed_saved_json_falls_back_to_default(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_board_lane_order", "not valid json"))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertEqual(order[0], "")
+        self.assertIn("idea", order)
+
+    def test_saved_partial_order_preserves_known_and_appends_new(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_board_lane_order", json.dumps(["", "finished", "idea"])))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertEqual(order[0], "")
+        self.assertEqual(order[1], "finished")
+        self.assertEqual(order[2], "idea")
+        for key in dashboard.PROJECT_STATUS_OPTIONS:
+            self.assertIn(key, order)
+
+    def test_saved_unknown_keys_are_discarded(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_board_lane_order", json.dumps(["", "idea", "removed_status", "finished"])))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertNotIn("removed_status", order)
+        self.assertIn("idea", order)
+        self.assertIn("finished", order)
+
+    def test_saved_duplicate_keys_are_deduplicated(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_board_lane_order", json.dumps(["", "idea", "idea", "finished"])))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertEqual(len(order), len(set(order)))
+
+    def test_custom_status_addition_appended(self):
+        custom_statuses = {**dashboard.PROJECT_STATUS_OPTIONS, "mixing": "Mixing"}
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_status_options", json.dumps(custom_statuses)))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertIn("mixing", order)
+        self.assertEqual(order[-1], "mixing")
+
+    def test_custom_status_removal_removed_from_order(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, 0)",
+                         ("project_board_lane_order", json.dumps(["", "idea", "old_status", "finished"])))
+            conn.commit()
+
+        order = self._lane_order_from_stats()
+        self.assertNotIn("old_status", order)
+
+    def test_api_data_exposes_lane_order(self):
+        stats = dashboard.get_stats()
+        self.assertIn("project_board_lane_order", stats)
+        order = stats["project_board_lane_order"]
+        self.assertIsInstance(order, list)
+        self.assertGreater(len(order), 0)
+        self.assertEqual(order[0], "")
+
+    def test_lane_order_change_invalidates_etag(self):
+        before = dashboard._compute_data_etag()
+        dashboard.save_project_board_lane_order(
+            ["", "finished", "idea", "in_progress", "needs_work", "finishing", "final_touches", "paused", "abandoned"]
+        )
+        after = dashboard._compute_data_etag()
+        self.assertNotEqual(before, after)
+
+
 if __name__ == "__main__":
     unittest.main()

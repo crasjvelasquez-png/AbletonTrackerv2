@@ -996,6 +996,75 @@ def get_project_status_options(conn: sqlite3.Connection) -> dict[str, str]:
     return PROJECT_STATUS_OPTIONS
 
 
+def get_project_board_lane_order(conn: sqlite3.Connection) -> list[str]:
+    """Return the saved lane order normalized against current status options.
+
+    The order always includes "" (Unsorted) plus every configured status key.
+    Saved positions for removed/unknown keys are discarded; newly configured
+    statuses not yet in the saved order are appended in their configured order.
+    """
+    statuses = get_project_status_options(conn)
+    current_keys = [""] + list(statuses.keys())
+    row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'project_board_lane_order'"
+    ).fetchone()
+    saved: list[str] = []
+    if row and row[0]:
+        try:
+            parsed = json.loads(row[0])
+            if isinstance(parsed, list):
+                saved = [str(s) for s in parsed]
+        except Exception:
+            saved = []
+    current_set = set(current_keys)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for status in saved:
+        if status in current_set and status not in seen:
+            normalized.append(status)
+            seen.add(status)
+    for status in current_keys:
+        if status not in seen:
+            normalized.append(status)
+            seen.add(status)
+    return normalized
+
+
+def save_project_board_lane_order(ordered_statuses: list[str]) -> dict:
+    """Validate and persist the lane order for the project board."""
+    if not DB_PATH.exists():
+        return {"error": "No data"}
+
+    if not isinstance(ordered_statuses, list) or len(ordered_statuses) == 0:
+        return {"error": "ordered_statuses must be a non-empty list"}
+
+    with db_connection() as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        statuses = get_project_status_options(conn)
+        current_keys = [""] + list(statuses.keys())
+
+        submitted = [str(s) for s in ordered_statuses]
+        submitted_set = set(submitted)
+        current_set = set(current_keys)
+
+        if len(submitted) != len(submitted_set):
+            return {"error": "ordered_statuses contains duplicate values"}
+
+        if submitted_set != current_set:
+            missing = current_set - submitted_set
+            extra = submitted_set - current_set
+            if missing:
+                return {"error": f"ordered_statuses is missing lanes: {', '.join(sorted(missing))}"}
+            if extra:
+                return {"error": f"ordered_statuses contains unknown lanes: {', '.join(sorted(extra))}"}
+
+        if len(submitted) != len(current_keys):
+            return {"error": "ordered_statuses must contain exactly the current lanes"}
+
+        set_app_setting("project_board_lane_order", json.dumps(submitted))
+    return {"ok": True, "ordered_statuses": submitted}
+
+
 def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
     row = conn.execute("SELECT value FROM app_settings WHERE key = 'project_type_options'").fetchone()
     if row and row[0]:
@@ -2817,7 +2886,10 @@ def _compute_data_etag(month_value: str = "") -> str:
         pf = conn.execute("SELECT COUNT(*), MAX(id), MAX(updated_at), GROUP_CONCAT(id || ':' || name || ':' || status || ':' || board_order, '|') FROM project_folders").fetchone()
         pfm = conn.execute("SELECT COUNT(*), GROUP_CONCAT(project_name || ':' || folder_id || ':' || sort_order, '|') FROM project_folder_members").fetchone()
         dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
-        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{month_value}"
+        ast = conn.execute(
+            "SELECT GROUP_CONCAT(key || ':' || value, '|') FROM (SELECT key, value FROM app_settings ORDER BY key)"
+        ).fetchone()
+        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{ast}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -3359,6 +3431,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 "artists": artists,
                 "custom_category_limit": MAX_CUSTOM_CATEGORIES,
                 "custom_category_count": len(category_options),
+                "project_board_lane_order": get_project_board_lane_order(conn),
             }
     except sqlite3.Error as e:
         return {"error": str(e)}
@@ -7166,6 +7239,19 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_name", ""),
                 payload.get("status"),
                 payload.get("ordered_projects"),
+            )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-board/lane-order":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None:
+                self._json({"error": "request body is required"}, status=400)
+                return
+            result = save_project_board_lane_order(
+                payload.get("ordered_statuses", [])
             )
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/artists":
