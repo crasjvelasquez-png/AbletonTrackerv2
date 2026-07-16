@@ -2808,20 +2808,36 @@ details.planner-panel[open] > summary.planner-panel-head:after{
 .today-mission{--mission-tone:var(--accent);padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--accent) 24%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 6%,var(--control-bg)),var(--control-bg) 42%)}
 .today-mission-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:20px 24px 16px;border-left:3px solid var(--accent)}
 .today-mission-title{font-family:var(--font-display);font-size:24px;font-weight:740;letter-spacing:-.025em;color:var(--ink)}
-.today-progress{justify-self:end;display:inline-flex;align-items:baseline;gap:7px;padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface) 78%,transparent);font-variant-numeric:tabular-nums}.today-progress strong{font-family:var(--font-display);font-size:18px;color:var(--ink)}.today-progress span{font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+.today-progress{justify-self:end;display:inline-flex;align-items:baseline;gap:7px;padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface) 78%,transparent);font-variant-numeric:tabular-nums}.today-progress strong{font-family:var(--font-display);font-size:18px;color:var(--ink);transform-origin:left center}.today-progress strong.is-feedback{animation:todayProgressFeedback .14s var(--ease-smooth) both}.today-progress span{font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 .today-mission-body{padding:0 24px 24px}.today-queue{position:relative;display:grid;gap:8px;padding-left:18px}.today-queue::before{content:"";position:absolute;left:7px;top:18px;bottom:18px;width:1px;background:linear-gradient(to bottom,var(--danger) 0 44px,color-mix(in srgb,var(--accent) 42%,var(--border)) 44px 100%)}
 .today-task-list{display:grid;gap:8px}.today-task-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;min-height:58px;padding:11px 13px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--surface) 78%,transparent);position:relative;transition:transform .28s var(--ease-spring),opacity .24s ease,max-height .36s var(--ease-smooth),padding .36s ease,margin .36s ease,border-color .24s ease,box-shadow .28s ease;animation:todayTaskEnter .46s var(--ease-spring) both;animation-delay:calc(var(--mission-index,0) * 44ms)}
-.today-task-row::before{content:"";position:absolute;left:-15px;top:50%;width:7px;height:7px;border-radius:50%;background:color-mix(in srgb,var(--accent) 58%,var(--border));transform:translateY(-50%);box-shadow:0 0 0 3px var(--control-bg)}.today-task-row:hover,.today-task-row:focus-within{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 32%,var(--border));box-shadow:0 10px 24px rgba(0,0,0,.05)}.today-task-row.is-start{min-height:86px;padding:15px;border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 9%,var(--surface)),var(--surface));animation:todayTaskEnter .52s var(--ease-spring) both}.today-task-row.is-start::before{width:10px;height:10px;left:-16px;background:var(--danger);box-shadow:0 0 0 4px var(--control-bg),0 0 0 7px color-mix(in srgb,var(--danger) 14%,transparent)}.today-task-row.is-completing{pointer-events:none;animation:todayTaskComplete .52s var(--ease-smooth) forwards}
-.today-mission.is-settled .today-task-row{animation:none}
+.today-task-row::before{content:"";position:absolute;left:-15px;top:50%;width:7px;height:7px;border-radius:50%;background:color-mix(in srgb,var(--accent) 58%,var(--border));transform:translateY(-50%);box-shadow:0 0 0 3px var(--control-bg)}.today-task-row:hover,.today-task-row:focus-within{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 32%,var(--border));box-shadow:0 10px 24px rgba(0,0,0,.05)}.today-task-row.is-start{min-height:86px;padding:15px;border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 9%,var(--surface)),var(--surface));animation:todayTaskEnter .52s var(--ease-spring) both}.today-task-row.is-start::before{width:10px;height:10px;left:-16px;background:var(--danger);box-shadow:0 0 0 4px var(--control-bg),0 0 0 7px color-mix(in srgb,var(--danger) 14%,transparent)}.today-task-row.is-completing{pointer-events:none;animation:todayTaskComplete .16s var(--ease-smooth) forwards}
+.today-mission.is-settled .today-task-row{animation:none}.today-mission.is-settled .today-task-row.is-completing{animation:todayTaskComplete .16s var(--ease-smooth) forwards}
 .today-task-check{appearance:none;width:21px;height:21px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 58%,var(--border));background:var(--control-bg);cursor:pointer;display:grid;place-items:center;transition:transform .2s var(--ease-spring),background .2s ease,border-color .2s ease}.today-task-check::after{content:"";width:8px;height:4px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) scale(0);transition:transform .2s var(--ease-spring)}.today-task-check:checked{background:var(--accent);border-color:var(--accent);transform:scale(1.08)}.today-task-check:checked::after{transform:rotate(-45deg) scale(1)}
 .today-task-main{min-width:0;display:grid;gap:4px}.today-task-owner,.today-task-title{appearance:none;border:0;background:none;padding:0;max-width:100%;font:inherit;text-align:left;cursor:pointer}.today-task-owner{width:max-content;font-size:10px;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.today-task-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;font-weight:720;line-height:1.25;color:var(--ink)}.is-start .today-task-title{font-family:var(--font-display);font-size:18px;letter-spacing:-.01em}.today-task-owner:focus-visible,.today-task-title:focus-visible,.today-more-toggle:focus-visible,.today-task-check:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 72%,white);outline-offset:3px;border-radius:8px}.today-task-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:760;color:var(--ink-4)}.today-task-due.is-overdue{color:var(--danger)}.today-task-count{color:var(--ink-4)}.today-task-rank{font-family:var(--font-display);font-size:11px;font-weight:800;color:var(--ink-4)}
-.today-more{display:grid;gap:8px}.today-more-toggle{list-style:none;justify-self:start;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));border-radius:999px;padding:7px 10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));color:var(--accent);font-size:11px;font-weight:820;cursor:pointer}.today-more-toggle::-webkit-details-marker{display:none}.today-more[open] .today-more-toggle{margin-bottom:2px}.today-more[open] .today-more-toggle .is-collapsed,.today-more:not([open]) .today-more-toggle .is-expanded{display:none}
+.today-more{display:grid;gap:8px}.today-more-toggle{list-style:none;justify-self:start;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));border-radius:999px;padding:7px 10px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));color:var(--accent);font-size:11px;font-weight:820;cursor:pointer}.today-more-toggle::-webkit-details-marker{display:none}.today-more[open] .today-more-toggle{margin-bottom:2px}.today-more[open] .today-more-toggle .is-collapsed,.today-more:not([open]) .today-more-toggle .is-expanded{display:none}.today-more-content{display:grid;gap:8px;overflow:hidden;opacity:0;transform:translateY(-4px) scale(.99);transition:opacity .16s var(--ease-smooth),transform .16s var(--ease-smooth)}.today-more[open] .today-more-content{opacity:1;transform:translateY(0) scale(1)}
 .today-clear{position:relative;overflow:hidden;display:grid;place-items:center;text-align:center;min-height:260px;padding:44px 24px}.today-clear-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:white;font-size:28px;box-shadow:0 14px 36px color-mix(in srgb,var(--accent) 34%,transparent);animation:todayClearPop .62s var(--ease-spring) both}.today-clear h2{margin:16px 0 4px;font-family:var(--font-display);font-size:27px;color:var(--ink)}.today-clear p{color:var(--ink-3);font-size:13px}.today-particle{position:absolute;left:50%;top:45%;width:7px;height:7px;border-radius:2px;background:var(--particle-color,var(--accent));animation:todayParticle 1.05s var(--ease-smooth) both;animation-delay:var(--particle-delay,0ms)}
 .today-mission.is-settled .today-particle{display:none}.today-mission.is-settled .today-clear-mark{animation:none}
 @keyframes todayTaskEnter{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes todayTaskComplete{0%{opacity:1;transform:scale(1);max-height:120px}35%{opacity:1;transform:scale(1.015);background:color-mix(in srgb,var(--accent) 20%,var(--surface))}100%{opacity:0;transform:translateX(18px) scale(.98);max-height:0;min-height:0;padding-top:0;padding-bottom:0;border-width:0}}
+@keyframes todayTaskComplete{0%{opacity:1;transform:scale(1)}35%{opacity:1;transform:scale(1.015)}100%{opacity:0;transform:translateX(18px) scale(.98)}}
+@keyframes todayProgressFeedback{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes todayTaskCompleteReduced{from{opacity:1}to{opacity:0}}
+@keyframes todayProgressFeedbackReduced{from{opacity:.45}to{opacity:1}}
 @keyframes todayClearPop{from{opacity:0;transform:scale(.55) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
 @keyframes todayParticle{from{opacity:1;transform:translate(-50%,-50%) rotate(0) translateY(0)}to{opacity:0;transform:translate(-50%,-50%) rotate(var(--particle-rotate)) translate(var(--particle-x),var(--particle-y))}}
+@media (prefers-reduced-motion:reduce){
+  .today-mission .today-task-row{animation:none}
+  .today-mission .today-task-row:hover,.today-mission .today-task-row:focus-within{transform:none}
+  .today-task-check{transition:background .1s ease,border-color .1s ease}
+  .today-task-check:checked{transform:none}
+  .today-task-check::after{transition:opacity .1s ease;transform:rotate(-45deg) scale(1);opacity:0}
+  .today-task-check:checked::after{opacity:1;transform:rotate(-45deg) scale(1)}
+  .today-mission .today-task-row.is-completing,
+  .today-mission.is-settled .today-task-row.is-completing{animation:todayTaskCompleteReduced .1s ease forwards}
+  .today-more-content{transition:opacity .1s ease;transform:none}
+  .today-more[open] .today-more-content{transform:none}
+  .today-progress strong.is-feedback{animation:todayProgressFeedbackReduced .1s ease both}
+}
 .planner-panel-meta{font-size:12px;color:var(--ink-4);line-height:1.35}
 .planner-focus-list,
 .planner-deadline-list,
@@ -3924,6 +3940,9 @@ let boardTypeFilter = '';
 let todayMissionDateKey = '';
 let todayMissionHasRendered = false;
 let todayMissionMidnightTimer = null;
+let todayMissionLayoutSnapshot = null;
+let todayMissionProgressCount = null;
+let todayMissionProgressFeedbackPending = false;
 let activeView = window.location.hash === '#settings'
   ? 'settings'
   : (window.location.hash === '#dashboard' ? 'dashboard' : 'planner');
@@ -8188,9 +8207,9 @@ function renderPlanner(data) {
     const visibleGroups = todayMissionGroups.slice(1, 4);
     const hiddenGroups = todayMissionGroups.slice(4);
     const hiddenTaskCount = hiddenGroups.reduce((sum, group) => sum + group.count, 0);
-    const hiddenControl = hiddenGroups.length ? `<details class="today-more"><summary class="today-more-toggle"><span class="is-collapsed">${hiddenTaskCount} more</span><span class="is-expanded">Show fewer</span></summary>${renderMissionGroups(hiddenGroups, 4)}</details>` : '';
+    const hiddenControl = hiddenGroups.length ? `<details class="today-more"><summary class="today-more-toggle" aria-controls="today-more-content" aria-expanded="false"><span class="is-collapsed">${hiddenTaskCount} more</span><span class="is-expanded">Show fewer</span></summary><div class="today-more-content" id="today-more-content">${renderMissionGroups(hiddenGroups, 4)}</div></details>` : '';
     const missionBody = startGroup ? `<div class="today-mission-body"><div class="today-queue">${renderMissionGroup(startGroup, 0, true)}${renderMissionGroups(visibleGroups, 1)}${hiddenControl}</div></div>` : renderClearState();
-    return `<section class="planner-panel today-mission"><div class="today-mission-head"><div class="today-mission-title">Today Queue</div><div class="today-progress" aria-label="${completed} of ${total} tasks complete"><strong>${completed} / ${total}</strong><span>complete</span></div></div>${missionBody}</section>`;
+    return `<section class="planner-panel today-mission"><div class="today-mission-head"><div class="today-mission-title">Today Queue</div><div class="today-progress" aria-label="${completed} of ${total} tasks complete"><strong data-today-progress-completed="${completed}">${completed} / ${total}</strong><span>complete</span></div></div>${missionBody}</section>`;
   };
 
   const renderDeadlineRadar = () => {
@@ -8418,12 +8437,160 @@ function renderPlanner(data) {
   bindProjectBoard(data);
 }
 
+function captureTodayMissionLayout() {
+  const snapshot = new Map();
+  document.querySelectorAll('[data-today-task-row]').forEach(row => {
+    const taskId = row.dataset.todayTaskRow;
+    if (!taskId) return;
+    const rect = row.getBoundingClientRect();
+    snapshot.set(taskId, rect.top + window.scrollY);
+  });
+  return snapshot;
+}
+
+function todayMotionUsesReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function animateTodayMissionReflow() {
+  const snapshot = todayMissionLayoutSnapshot;
+  todayMissionLayoutSnapshot = null;
+  if (!snapshot?.size) return;
+  const reducedMotion = todayMotionUsesReducedMotion();
+  const duration = reducedMotion ? 100 : 180;
+  const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-smooth').trim() || 'cubic-bezier(.22,1,.36,1)';
+  document.querySelectorAll('[data-today-task-row]').forEach(row => {
+    const oldTop = snapshot.get(row.dataset.todayTaskRow);
+    if (!Number.isFinite(oldTop) || typeof row.animate !== 'function') return;
+    const newTop = row.getBoundingClientRect().top + window.scrollY;
+    const deltaY = oldTop - newTop;
+    if (Math.abs(deltaY) < 0.5) return;
+    const keyframes = reducedMotion
+      ? [{ opacity: .92 }, { opacity: 1 }]
+      : [{ transform: `translateY(${deltaY}px)`, opacity: .92 }, { transform: 'translateY(0)', opacity: 1 }];
+    const animation = row.animate(keyframes, { duration, easing, fill: 'both' });
+    animation.onfinish = () => animation.cancel();
+  });
+}
+
+function animateTodayMissionProgress() {
+  const progress = document.querySelector('.today-progress strong');
+  const renderedCount = Number(progress?.dataset.todayProgressCompleted);
+  const shouldAnimate = Boolean(
+    progress
+    && todayMissionProgressFeedbackPending
+    && Number.isFinite(renderedCount)
+    && todayMissionProgressCount !== null
+    && renderedCount !== todayMissionProgressCount,
+  );
+  if (shouldAnimate) {
+    progress.classList.add('is-feedback');
+    progress.addEventListener('animationend', () => progress.classList.remove('is-feedback'), { once: true });
+  }
+  if (Number.isFinite(renderedCount)) todayMissionProgressCount = renderedCount;
+  todayMissionProgressFeedbackPending = false;
+}
+
+function bindTodayMoreDisclosure() {
+  document.querySelectorAll('.today-more').forEach(details => {
+    const summary = details.querySelector('.today-more-toggle');
+    const content = details.querySelector('.today-more-content');
+    if (!summary || !content) return;
+    let animation = null;
+    let fallbackTimer = null;
+    let targetOpen = details.open;
+    summary.setAttribute('aria-expanded', String(targetOpen));
+    summary.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+      event.preventDefault();
+      summary.click();
+    });
+    summary.addEventListener('click', event => {
+      event.preventDefault();
+      const nextOpen = !targetOpen;
+      targetOpen = nextOpen;
+      summary.setAttribute('aria-expanded', String(nextOpen));
+      const wasOpen = details.open;
+      const reducedMotion = todayMotionUsesReducedMotion();
+      const currentStyle = (animation || wasOpen) ? getComputedStyle(content) : null;
+      const startOpacity = Number.parseFloat(currentStyle?.opacity);
+      const startTransform = currentStyle?.transform && currentStyle.transform !== 'none'
+        ? currentStyle.transform
+        : (wasOpen ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(.99)');
+      animation?.cancel();
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      details.open = true;
+      const duration = reducedMotion ? 100 : (nextOpen ? 160 : 120);
+      const easing = reducedMotion ? 'ease' : (getComputedStyle(document.documentElement).getPropertyValue('--ease-smooth').trim() || 'cubic-bezier(.22,1,.36,1)');
+      const fromOpacity = Number.isFinite(startOpacity) ? startOpacity : (nextOpen ? 0 : 1);
+      const keyframes = reducedMotion
+        ? [{ opacity: fromOpacity }, { opacity: nextOpen ? 1 : 0 }]
+        : [{ opacity: fromOpacity, transform: startTransform }, { opacity: nextOpen ? 1 : 0, transform: nextOpen ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(.99)' }];
+      if (typeof content.animate !== 'function') {
+        content.style.transition = `opacity ${duration}ms ${easing}`;
+        content.style.opacity = nextOpen ? '1' : '0';
+        if (!reducedMotion) content.style.transform = nextOpen ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(.99)';
+        fallbackTimer = window.setTimeout(() => {
+          if (targetOpen !== nextOpen) return;
+          if (!nextOpen) details.open = false;
+          content.style.transition = '';
+          content.style.opacity = '';
+          content.style.transform = '';
+          fallbackTimer = null;
+        }, duration);
+        return;
+      }
+      animation = content.animate(keyframes, { duration, easing, fill: 'both' });
+      animation.onfinish = () => {
+        if (targetOpen !== nextOpen) return;
+        if (!nextOpen) details.open = false;
+        animation.cancel();
+        animation = null;
+      };
+    });
+  });
+}
+
+function restoreTodayTaskRow(row) {
+  if (!row) return;
+  const reducedMotion = todayMotionUsesReducedMotion();
+  const computed = getComputedStyle(row);
+  const currentOpacity = computed.opacity;
+  const currentTransform = computed.transform;
+  const duration = reducedMotion ? 100 : 120;
+  row.classList.remove('is-completing');
+  row.style.animation = 'none';
+  row.style.transition = 'none';
+  if (reducedMotion) {
+    row.style.opacity = currentOpacity;
+    void row.offsetWidth;
+    row.style.transition = `opacity ${duration}ms ease`;
+    row.style.opacity = '1';
+  } else {
+    row.style.transform = currentTransform === 'none' ? 'translateX(0) scale(1)' : currentTransform;
+    row.style.opacity = currentOpacity;
+    void row.offsetWidth;
+    row.style.transition = `transform ${duration}ms var(--ease-smooth), opacity ${duration}ms var(--ease-smooth)`;
+    row.style.transform = 'translateX(0) scale(1)';
+    row.style.opacity = '1';
+  }
+  window.setTimeout(() => {
+    row.style.animation = '';
+    row.style.transition = '';
+    row.style.transform = '';
+    row.style.opacity = '';
+  }, duration);
+}
+
 function bindTodayWorklist(data) {
   const currentDateKey = localDateKey(new Date());
   const shouldAnimateEntrance = !todayMissionHasRendered || todayMissionDateKey !== currentDateKey;
   document.querySelector('.today-mission')?.classList.toggle('is-settled', !shouldAnimateEntrance);
   todayMissionHasRendered = true;
   todayMissionDateKey = currentDateKey;
+  animateTodayMissionReflow();
+  animateTodayMissionProgress();
+  bindTodayMoreDisclosure();
   clearTimeout(todayMissionMidnightTimer);
   const now = new Date();
   const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
@@ -8442,16 +8609,23 @@ function bindTodayWorklist(data) {
   }));
   document.querySelectorAll('[data-today-task-complete]').forEach(input => input.addEventListener('change', async () => {
     const row = input.closest('[data-today-task-row]');
+    todayMissionLayoutSnapshot = captureTodayMissionLayout();
+    todayMissionProgressFeedbackPending = true;
     row?.classList.add('is-completing');
     input.disabled = true;
     try {
-      await postJson('/api/project-tasks/update', { id: input.dataset.todayTaskComplete, status: 'done' });
-      await new Promise(resolve => setTimeout(resolve, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 430));
+      await Promise.all([
+        postJson('/api/project-tasks/update', { id: input.dataset.todayTaskComplete, status: 'done' }),
+        new Promise(resolve => setTimeout(resolve, todayMotionUsesReducedMotion() ? 100 : 160)),
+      ]);
       await load();
+      todayMissionProgressFeedbackPending = false;
     } catch (error) {
       input.checked = false;
       input.disabled = false;
-      row?.classList.remove('is-completing');
+      todayMissionLayoutSnapshot = null;
+      todayMissionProgressFeedbackPending = false;
+      restoreTodayTaskRow(row);
       toast(error.message || 'Failed to complete task');
     }
   }));
