@@ -3114,7 +3114,7 @@ select.planner-goal-input{
   width:20px;height:28px;margin:-4px 4px -4px -6px;padding:0;
   border:0;border-radius:6px;background:transparent;color:var(--ink-4);
   cursor:grab;flex:0 0 auto;outline:none;
-  transition:background .16s ease,color .16s ease;
+  transition:background .1s ease,color .1s ease;
 }
 .lane-drag-handle:hover{background:color-mix(in srgb,var(--ink-4) 14%,transparent);color:var(--ink-2)}
 .lane-drag-handle:active{cursor:grabbing}
@@ -3125,7 +3125,7 @@ select.planner-goal-input{
 /* Lane dragging states */
 .planner-board-column.is-lane-dragging{
   opacity:0.35;border-style:dashed;border-color:var(--border-strong);
-  transition:opacity .15s ease;
+  transition:opacity .09s ease;
 }
 .planner-board-column.lane-insert-before{
   box-shadow:inset 3px 0 0 var(--accent);
@@ -3176,7 +3176,7 @@ select.planner-goal-input{
   width:300px;min-width:300px;max-width:300px;
   padding:0 10px 10px;gap:8px;border-radius:12px;
   background:var(--control-bg) !important;
-  transition:border-color .15s ease,box-shadow .15s ease;
+  transition:border-color .1s ease,box-shadow .1s ease;
   scroll-snap-align:start;
 }
 .planner-board-head{
@@ -8266,7 +8266,7 @@ function renderPlanner(data) {
     return `
       <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}" style="--status-color:${LANE_HEADER_COLORS[value] || DEFAULT_LANE_HEADER_COLORS[value] || '#8e8e93'}">
         <div class="planner-board-head">
-          <button type="button" class="lane-drag-handle" data-lane-drag="${escapeHtml(value)}" aria-label="Drag ${escapeHtml(label)} lane to reorder" title="Drag to reorder lane" tabindex="0">
+          <button type="button" class="lane-drag-handle" data-lane-drag="${escapeHtml(value)}" aria-label="Drag ${escapeHtml(label)} lane to reorder" title="Drag to reorder lane" tabindex="0" draggable="true">
             <svg viewBox="0 0 10 16" fill="currentColor"><circle cx="3" cy="1.5" r="1.5"/><circle cx="7" cy="1.5" r="1.5"/><circle cx="3" cy="6.5" r="1.5"/><circle cx="7" cy="6.5" r="1.5"/><circle cx="3" cy="11.5" r="1.5"/><circle cx="7" cy="11.5" r="1.5"/></svg>
           </button>
           <button type="button" class="lane-color-trigger" data-lane-color-key="${escapeHtml(value)}" data-lane-color-label="${escapeHtml(label)}" aria-label="Change ${escapeHtml(label)} lane color" aria-haspopup="dialog" aria-expanded="false"></button>
@@ -8514,6 +8514,8 @@ function bindProjectBoard(data) {
   });
 
   let dragSrcEl = null;
+  let laneDragSrcEl = null;
+  let laneDragInsertIndex = -1;
   document.querySelectorAll('.planner-board-project[draggable]').forEach(card => {
     card.addEventListener('dragstart', (e) => {
       dragSrcEl = card;
@@ -8531,20 +8533,24 @@ function bindProjectBoard(data) {
 
   document.querySelectorAll('.planner-board-column').forEach(col => {
     col.addEventListener('dragover', (e) => {
+      if (laneDragSrcEl) return;
       if (e.preventDefault) { e.preventDefault(); }
       e.dataTransfer.dropEffect = 'move';
       col.classList.add('drag-over');
       return false;
     });
     col.addEventListener('dragenter', (e) => {
+      if (laneDragSrcEl) return;
       col.classList.add('drag-over');
     });
     col.addEventListener('dragleave', (e) => {
+      if (laneDragSrcEl) return;
       if (!col.contains(e.relatedTarget)) {
         col.classList.remove('drag-over');
       }
     });
     col.addEventListener('drop', async (e) => {
+      if (laneDragSrcEl) return;
       e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
       col.classList.remove('drag-over');
@@ -8601,8 +8607,16 @@ function bindProjectBoard(data) {
     if (live) { live.textContent = ''; void live.offsetWidth; live.textContent = msg; }
   };
 
-  let laneDragSrcEl = null;
-  let laneDragInsertIndex = -1;
+  const completeLaneOrder = visibleOrder => {
+    const configuredOrder = ['', ...PROJECT_STATUS_OPTIONS.filter(([value]) => value).map(([value]) => value)];
+    const fullOrder = Array.isArray(data.project_board_lane_order) && data.project_board_lane_order.length
+      ? data.project_board_lane_order
+      : configuredOrder;
+    const visible = [...new Set(visibleOrder.filter(status => fullOrder.includes(status)))];
+    const visibleSet = new Set(visible);
+    let visibleIndex = 0;
+    return fullOrder.map(status => visibleSet.has(status) ? visible[visibleIndex++] : status);
+  };
 
   document.querySelectorAll('.lane-drag-handle').forEach(handle => {
     handle.addEventListener('dragstart', (e) => {
@@ -8643,9 +8657,10 @@ function bindProjectBoard(data) {
       if (newIdx === idx) return;
       e.preventDefault();
 
-      const ordered = columns.map(c => c.dataset.plannerStatus);
-      const [moved] = ordered.splice(idx, 1);
-      ordered.splice(newIdx, 0, moved);
+      const orderedVisible = columns.map(c => c.dataset.plannerStatus);
+      const [moved] = orderedVisible.splice(idx, 1);
+      orderedVisible.splice(newIdx, 0, moved);
+      const ordered = completeLaneOrder(orderedVisible);
       const label = column.querySelector('.planner-board-head span')?.textContent || 'Lane';
 
       postJson('/api/project-board/lane-order', { ordered_statuses: ordered })
@@ -8681,8 +8696,7 @@ function bindProjectBoard(data) {
 
   document.querySelectorAll('.planner-board').forEach(board => {
     board.addEventListener('dragover', (e) => {
-      const draggedValue = e.dataTransfer?.getData('text/plain') || '';
-      if (!draggedValue.startsWith('lane:')) return;
+      if (!laneDragSrcEl) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       board.classList.add('is-dragging-lane');
@@ -8697,7 +8711,7 @@ function bindProjectBoard(data) {
       // Auto-scroll near board edges
       const boardRect = board.getBoundingClientRect();
       const scrollThreshold = 70;
-      const SCROLL_SPEED = 14;
+      const SCROLL_SPEED = 24;
       if (e.clientX - boardRect.left < scrollThreshold) {
         board.scrollLeft -= SCROLL_SPEED;
       } else if (boardRect.right - e.clientX < scrollThreshold) {
@@ -8733,8 +8747,7 @@ function bindProjectBoard(data) {
     });
 
     board.addEventListener('drop', async (e) => {
-      const draggedValue = e.dataTransfer?.getData('text/plain') || '';
-      if (!draggedValue.startsWith('lane:')) return;
+      if (!laneDragSrcEl) return;
       e.preventDefault();
       if (e.stopPropagation) e.stopPropagation();
 
@@ -8752,10 +8765,11 @@ function bindProjectBoard(data) {
       const srcIdx = columns.indexOf(laneDragSrcEl);
       if (srcIdx < 0) { cleanupLaneDrag(); return false; }
 
-      const ordered = columns.map(c => c.dataset.plannerStatus);
-      const [moved] = ordered.splice(srcIdx, 1);
+      const orderedVisible = columns.map(c => c.dataset.plannerStatus);
+      const [moved] = orderedVisible.splice(srcIdx, 1);
       const insertIdx = srcIdx < laneDragInsertIndex ? laneDragInsertIndex - 1 : laneDragInsertIndex;
-      ordered.splice(insertIdx, 0, moved);
+      orderedVisible.splice(insertIdx, 0, moved);
+      const ordered = completeLaneOrder(orderedVisible);
       const label = laneDragSrcEl.querySelector('.planner-board-head span')?.textContent || 'Lane';
 
       try {

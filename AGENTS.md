@@ -84,6 +84,7 @@ Start here. This is the repo-specific, compact source of truth for future coding
 - Keep shell wrapper output readable because users double-click `*.command` files in Terminal; preserve executable bits.
 - Do not add package managers, build systems, telemetry, auth services, remote dependencies, or frontend frameworks unless explicitly requested.
 - Reuse existing CSS variables/card/button/settings shell patterns. No generated bundles and no npm.
+- Reuse purposeful, theme-native motion like the Project Board bucket reorder when a state or spatial change benefits from feedback. Keep it quick and interruptible (generally 100-180ms), avoid decorative animation, and always provide a `prefers-reduced-motion` fallback.
 - Avoid cosmetic renames of states, API keys, labels, colors, and time-allocation behavior; tests assert many exact values.
 - Time/session logic should take explicit times or use existing helpers where possible; avoid new wall-clock calls in deterministic logic.
 - Generated/local artifacts to leave out of commits: `__pycache__/`, `.DS_Store`, `.history/`, `.app` bundles, local DBs, temporary debug output.

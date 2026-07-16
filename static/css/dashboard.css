@@ -2879,7 +2879,7 @@ select.planner-goal-input{
   width:20px;height:28px;margin:-4px 4px -4px -6px;padding:0;
   border:0;border-radius:6px;background:transparent;color:var(--ink-4);
   cursor:grab;flex:0 0 auto;outline:none;
-  transition:background .16s ease,color .16s ease;
+  transition:background .1s ease,color .1s ease;
 }
 .lane-drag-handle:hover{background:color-mix(in srgb,var(--ink-4) 14%,transparent);color:var(--ink-2)}
 .lane-drag-handle:active{cursor:grabbing}
@@ -2890,7 +2890,7 @@ select.planner-goal-input{
 /* Lane dragging states */
 .planner-board-column.is-lane-dragging{
   opacity:0.35;border-style:dashed;border-color:var(--border-strong);
-  transition:opacity .15s ease;
+  transition:opacity .09s ease;
 }
 .planner-board-column.lane-insert-before{
   box-shadow:inset 3px 0 0 var(--accent);
@@ -2941,7 +2941,7 @@ select.planner-goal-input{
   width:300px;min-width:300px;max-width:300px;
   padding:0 10px 10px;gap:8px;border-radius:12px;
   background:var(--control-bg) !important;
-  transition:border-color .15s ease,box-shadow .15s ease;
+  transition:border-color .1s ease,box-shadow .1s ease;
   scroll-snap-align:start;
 }
 .planner-board-head{

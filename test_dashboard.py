@@ -2313,6 +2313,20 @@ class DashboardLaneOrderTests(unittest.TestCase):
         after = dashboard._compute_data_etag()
         self.assertNotEqual(before, after)
 
+    def test_lane_drag_handle_is_actually_draggable(self):
+        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
+        self.assertIn('class="lane-drag-handle"', source)
+        self.assertIn('tabindex="0" draggable="true"', source)
+
+    def test_pointer_and_keyboard_lane_reorders_complete_hidden_lane_order(self):
+        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
+        self.assertIn("const completeLaneOrder = visibleOrder =>", source)
+        self.assertEqual(
+            source.count("const ordered = completeLaneOrder(orderedVisible);"),
+            2,
+        )
+        self.assertGreaterEqual(source.count("if (laneDragSrcEl) return;"), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
