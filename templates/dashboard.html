@@ -3521,6 +3521,26 @@ select.planner-goal-input{
 .planner-board-project.is-folder{
   border-style:dashed;background:color-mix(in srgb,var(--board-card-bg) 94%,var(--accent) 6%);
 }
+.project-completion-check{
+  width:28px;height:28px;margin:-5px 0 -5px -5px;padding:0;display:inline-grid;place-items:center;flex:0 0 auto;
+  border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);color:transparent;cursor:pointer;touch-action:manipulation;
+  transition:transform .17s ease,opacity .17s ease,background-color .17s ease,border-color .17s ease,color .17s ease;
+}
+.project-completion-check svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.project-completion-check:hover,.project-completion-check:focus-visible,.planner-board-project:focus-within .project-completion-check{color:var(--ink-4);border-color:var(--ink-4)}
+.project-completion-check:active,.project-completion-check.is-pending{transform:scale(.9)}
+.project-completion-check:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.project-completion-check[aria-pressed="true"]{color:#fff;background:var(--live);border-color:var(--live)}
+.planner-board-project.is-completed{opacity:.82}
+.completed-projects{margin-top:4px;padding-top:12px;border-top:1px solid var(--border)}
+.completed-projects-toggle{border:0;padding:7px 0;background:transparent;color:var(--ink-3);font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+.completed-projects-toggle:hover,.completed-projects-toggle:focus-visible{color:var(--ink)}
+.completed-projects-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-radius:6px}
+.completed-projects-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px}
+.completed-projects-grid .planner-board-project{animation:completed-card-in .17s ease-out both}
+@keyframes completed-card-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+@media (hover:none),(pointer:coarse){.project-completion-check{color:var(--ink-4);border-color:var(--border-strong)}}
+@media (prefers-reduced-motion:reduce){.project-completion-check,.completed-projects-grid .planner-board-project{transition:none;animation:none}.project-completion-check:active{transform:none}}
 .board-empty-hint{
   padding:28px 14px;border:1px dashed var(--border);border-radius:10px;
   background:color-mix(in srgb,var(--board-card-bg) 66%,transparent);color:var(--ink-4);
@@ -8213,9 +8233,12 @@ function renderPlanner(data) {
       : dueClass === 'is-due-soon' ? 'is-due-soon' : '';
     
     return `
-      <div class="planner-board-project ${terminalClass}" draggable="${boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
+      <div class="planner-board-project ${terminalClass} ${project.status === 'finished' ? 'is-completed' : ''}" draggable="${project.status === 'finished' || boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
         <div class="board-card-header">
           <div class="board-card-title-wrap">
+            <button type="button" class="project-completion-check" data-project-completion="${encodedProject}" aria-label="${project.status === 'finished' ? 'Reopen' : 'Complete'} ${escapeHtml(projectDisplayName(project))}" aria-pressed="${project.status === 'finished' ? 'true' : 'false'}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.5"/></svg>
+            </button>
             <span class="proj-dot" style="background:${projectColor(project, index)}"></span>
             <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(projectDisplayName(project))}</span>
           </div>
@@ -8290,12 +8313,14 @@ function renderPlanner(data) {
     `;
   };
 
-  const folderedProjects = new Set(folders.flatMap(folder => (folder.members || []).map(member => member.project_name)));
-  let boardProjects = projects.filter(project => !folderedProjects.has(project.project_name)).concat(folders).filter(p => {
+  const boardMatches = p => {
     if (boardSearchQuery && !`${projectDisplayName(p)} ${p.project_name || ''}`.toLowerCase().includes(boardSearchQuery.toLowerCase())) return false;
     if (boardTypeFilter && p.type !== boardTypeFilter) return false;
     return true;
-  });
+  };
+  const folderedProjects = new Set(folders.flatMap(folder => (folder.members || []).map(member => member.project_name)));
+  const completedProjects = projects.filter(project => (project.status || '') === 'finished').filter(boardMatches);
+  let boardProjects = projects.filter(project => (project.status || '') !== 'finished' && !folderedProjects.has(project.project_name)).concat(folders).filter(boardMatches);
 
   boardProjects.sort((a, b) => {
     const aOrder = Number(a.board_order || 0);
@@ -8315,7 +8340,7 @@ function renderPlanner(data) {
   for (const status of laneOrder) {
     if (status === '') {
       orderedColumns.push({ value: '', label: 'Unsorted', projects: unsortedProjects });
-    } else if (!hiddenColumns.includes(status) && statusLabelMap[status]) {
+    } else if (status !== 'finished' && !hiddenColumns.includes(status) && statusLabelMap[status]) {
       orderedColumns.push({
         value: status,
         label: statusLabelMap[status],
@@ -8323,7 +8348,15 @@ function renderPlanner(data) {
       });
     }
   }
-  const hiddenStatusOptions = PROJECT_STATUS_OPTIONS.filter(([value]) => hiddenColumns.includes(value));
+  const hiddenStatusOptions = PROJECT_STATUS_OPTIONS.filter(([value]) => value !== 'finished' && hiddenColumns.includes(value));
+  completedProjects.sort((a, b) => {
+    const aCompleted = Number(a.completed_at || 0);
+    const bCompleted = Number(b.completed_at || 0);
+    if (aCompleted && bCompleted && aCompleted !== bCompleted) return bCompleted - aCompleted;
+    if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
+    return Number(a.board_order || 0) - Number(b.board_order || 0);
+  });
+  const completedVisible = localStorage.getItem('boardCompletedVisible') === 'true';
 
   plannerEl.innerHTML = `
     <div class="planner-shell">
@@ -8369,6 +8402,10 @@ function renderPlanner(data) {
         <div class="planner-board" id="projectBoard" role="region" aria-label="Project Board Kanban">
           ${orderedColumns.map(renderBoardColumn).join('')}
         </div>
+        <section class="completed-projects" aria-label="Completed projects">
+          <button type="button" class="completed-projects-toggle" data-toggle-completed aria-expanded="${completedVisible}">${completedVisible ? 'Hide completed' : `Show completed (${completedProjects.length})`}</button>
+          ${completedVisible ? `<div class="completed-projects-grid">${completedProjects.map(renderBoardProject).join('') || '<div class="board-empty-hint">No completed projects</div>'}</div>` : ''}
+        </section>
         <div class="sr-only" id="boardAriaLive" aria-live="assertive" aria-atomic="true"></div>
       </details>
     </div>
@@ -8454,10 +8491,41 @@ function bindProjectBoard(data) {
 
   document.querySelectorAll('[data-open-project]').forEach(trigger => {
     trigger.addEventListener('click', event => {
-      const categoryButton = event.target.closest('[data-category-trigger]');
-      if (categoryButton) return;
+      if (event.target.closest('[data-category-trigger], [data-project-completion]')) return;
       const projectName = decodeURIComponent(trigger.dataset.openProject || '');
       if (projectName) openProjectTasks(projectName);
+    });
+  });
+
+  document.querySelector('[data-toggle-completed]')?.addEventListener('click', event => {
+    event.stopPropagation();
+    localStorage.setItem('boardCompletedVisible', String(event.currentTarget.getAttribute('aria-expanded') !== 'true'));
+    renderPlanner(data);
+  });
+
+  document.querySelectorAll('[data-project-completion]').forEach(control => {
+    const isolate = event => { event.stopPropagation(); };
+    control.addEventListener('pointerdown', isolate);
+    control.addEventListener('dragstart', isolate);
+    control.addEventListener('click', async event => {
+      isolate(event);
+      const projectName = decodeURIComponent(control.dataset.projectCompletion || '');
+      if (!projectName) return;
+      const completed = control.getAttribute('aria-pressed') !== 'true';
+      const wasPressed = control.getAttribute('aria-pressed');
+      control.setAttribute('aria-pressed', String(completed));
+      control.classList.add('is-pending');
+      control.disabled = true;
+      try {
+        await postJson('/api/project-completion', { project_name: projectName, completed });
+        await new Promise(resolve => setTimeout(resolve, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 170));
+        await load();
+      } catch (error) {
+        control.setAttribute('aria-pressed', wasPressed);
+        control.classList.remove('is-pending');
+        control.disabled = false;
+        toast(error.message || 'Failed to update project completion');
+      }
     });
   });
 

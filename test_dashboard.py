@@ -496,7 +496,7 @@ class DashboardProjectMetadataTests(unittest.TestCase):
             }
             row = conn.execute(
                 """
-                SELECT display_name, priority, due_date, hard_deadline, turn_in_date, pinned, project_note
+                SELECT display_name, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, completed_at, prior_status, prior_progress_percent
                 FROM project_metadata
                 WHERE project_name = ?
                 """,
@@ -511,7 +511,52 @@ class DashboardProjectMetadataTests(unittest.TestCase):
         self.assertIn("turn_in_date", columns)
         self.assertIn("pinned", columns)
         self.assertIn("project_note", columns)
-        self.assertEqual(row, ("", "", "", "", "", 0, ""))
+        self.assertIn("completed_at", columns)
+        self.assertIn("prior_status", columns)
+        self.assertIn("prior_progress_percent", columns)
+        self.assertEqual(row, ("", "", "", "", "", 0, "", 0, "", 0))
+
+    def test_project_completion_restores_status_progress_and_is_idempotent(self):
+        self._insert_session("Completion Song")
+        dashboard.set_project_metadata("Completion Song", "finishing", "personal", progress_percent=67)
+        before = dashboard._compute_data_etag()
+
+        completed = dashboard.set_project_completion("Completion Song", True)
+        self.assertTrue(completed["ok"])
+        self.assertEqual(completed["metadata"]["status"], "finished")
+        self.assertEqual(completed["metadata"]["progress_percent"], 100)
+        self.assertEqual(completed["metadata"]["prior_status"], "finishing")
+        self.assertEqual(completed["metadata"]["prior_progress_percent"], 67)
+        after_complete = dashboard._compute_data_etag()
+        self.assertNotEqual(before, after_complete)
+        self.assertEqual(dashboard.set_project_completion("Completion Song", True)["metadata"]["completed_at"], completed["metadata"]["completed_at"])
+
+        reopened = dashboard.set_project_completion("Completion Song", False)
+        self.assertEqual(reopened["metadata"]["status"], "finishing")
+        self.assertEqual(reopened["metadata"]["progress_percent"], 67)
+        self.assertEqual(reopened["metadata"]["completed_at"], 0)
+        self.assertTrue(dashboard.set_project_completion("Completion Song", False)["ok"])
+
+    def test_project_completion_legacy_and_unknown_project_handling(self):
+        self._insert_session("Legacy Finished")
+        dashboard.set_project_metadata("Legacy Finished", "finished", "personal", progress_percent=83)
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute("UPDATE project_metadata SET progress_percent = 83, completed_at = 0 WHERE project_name = ?", ("Legacy Finished",))
+            conn.commit()
+        reopened = dashboard.set_project_completion("Legacy Finished", False)
+        self.assertEqual(reopened["metadata"]["status"], "in_progress")
+        self.assertEqual(reopened["metadata"]["progress_percent"], 83)
+        self.assertIn("error", dashboard.set_project_completion("Missing Project", True))
+
+    def test_modal_finished_status_records_and_clears_completion_metadata(self):
+        self._insert_session("Modal Finish")
+        dashboard.set_project_metadata("Modal Finish", "idea", "personal", progress_percent=25)
+        finished = dashboard.set_project_metadata("Modal Finish", "finished", "personal", progress_percent=25)
+        self.assertEqual(finished["metadata"]["progress_percent"], 100)
+        self.assertEqual(finished["metadata"]["prior_status"], "idea")
+        reopened = dashboard.set_project_metadata("Modal Finish", "in_progress", "personal", progress_percent=100)
+        self.assertEqual(reopened["metadata"]["completed_at"], 0)
+        self.assertEqual(reopened["metadata"]["prior_status"], "")
 
     def test_project_deadline_states_are_exposed_in_stats(self):
         today = date.today()
@@ -2326,6 +2371,17 @@ class DashboardLaneOrderTests(unittest.TestCase):
             2,
         )
         self.assertGreaterEqual(source.count("if (laneDragSrcEl) return;"), 4)
+
+    def test_project_completion_board_source_has_accessible_isolated_controls(self):
+        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
+        self.assertIn('data-project-completion="${encodedProject}"', source)
+        self.assertIn("if (project.is_folder)", source)
+        self.assertIn("completed-projects-grid", source)
+        self.assertIn("boardCompletedVisible", source)
+        self.assertIn("status !== 'finished'", source)
+        self.assertIn("[data-category-trigger], [data-project-completion]", source)
+        self.assertIn("/api/project-completion", source)
+        self.assertIn("prefers-reduced-motion", source)
 
 
 if __name__ == "__main__":

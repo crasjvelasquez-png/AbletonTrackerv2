@@ -602,6 +602,9 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
             pinned       INTEGER NOT NULL DEFAULT 0,
             project_note TEXT NOT NULL DEFAULT '',
             board_order  INTEGER NOT NULL DEFAULT 0,
+            completed_at INTEGER NOT NULL DEFAULT 0,
+            prior_status TEXT NOT NULL DEFAULT '',
+            prior_progress_percent INTEGER NOT NULL DEFAULT 0,
             updated_at   INTEGER NOT NULL
         )
         """
@@ -621,6 +624,9 @@ def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
         "pinned": "INTEGER NOT NULL DEFAULT 0",
         "project_note": "TEXT NOT NULL DEFAULT ''",
         "board_order": "INTEGER NOT NULL DEFAULT 0",
+        "completed_at": "INTEGER NOT NULL DEFAULT 0",
+        "prior_status": "TEXT NOT NULL DEFAULT ''",
+        "prior_progress_percent": "INTEGER NOT NULL DEFAULT 0",
     }
     for column, definition in metadata_columns.items():
         if column not in existing_columns:
@@ -1078,7 +1084,7 @@ def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
 def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
     rows = conn.execute(
         """
-        SELECT project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
+        SELECT project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent
         FROM project_metadata
         """
     ).fetchall()
@@ -1108,6 +1114,9 @@ def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
             "pinned": bool(row["pinned"]),
             "project_note": row["project_note"] or "",
             "board_order": row["board_order"] or 0,
+            "completed_at": row["completed_at"] or 0,
+            "prior_status": row["prior_status"] or "",
+            "prior_progress_percent": row["prior_progress_percent"] or 0,
         }
     return metadata
 
@@ -2198,7 +2207,7 @@ def set_project_metadata(
         conn.row_factory = sqlite3.Row
         existing = conn.execute(
             """
-            SELECT display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order
+            SELECT display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent
             FROM project_metadata
             WHERE project_name = ?
             """,
@@ -2297,12 +2306,24 @@ def set_project_metadata(
                 },
             }
 
+        completion_update = (normalized_status == "finished" and (not existing or existing["status"] != "finished"))
+        completion_clear = (normalized_status != "finished" and existing and existing["status"] == "finished")
+        completed_at = int(time.time()) if completion_update else (existing["completed_at"] if existing else 0)
+        prior_status = (existing["status"] or "") if completion_update and existing else (existing["prior_status"] if existing else "")
+        prior_progress = (existing["progress_percent"] or 0) if completion_update and existing else (existing["prior_progress_percent"] if existing else 0)
+        if completion_update:
+            normalized_progress = 100
+        if completion_clear:
+            completed_at = 0
+            prior_status = ""
+            prior_progress = 0
+
         conn.execute(
             """
             INSERT INTO project_metadata (
-                project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, updated_at
+                project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, completed_at, prior_status, prior_progress_percent, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
             ON CONFLICT(project_name) DO UPDATE SET
                 display_name = excluded.display_name,
                 status = excluded.status,
@@ -2315,6 +2336,9 @@ def set_project_metadata(
                 progress_percent = excluded.progress_percent,
                 pinned = excluded.pinned,
                 project_note = excluded.project_note,
+                completed_at = excluded.completed_at,
+                prior_status = excluded.prior_status,
+                prior_progress_percent = excluded.prior_progress_percent,
                 updated_at = excluded.updated_at
             """,
             (
@@ -2330,6 +2354,9 @@ def set_project_metadata(
                 normalized_progress,
                 1 if normalized_pinned else 0,
                 normalized_project_note,
+                completed_at,
+                prior_status,
+                prior_progress,
             ),
         )
         conn.commit()
@@ -2352,8 +2379,55 @@ def set_project_metadata(
                 "pinned": normalized_pinned,
                 "project_note": normalized_project_note,
                 "board_order": existing["board_order"] if existing else 0,
+                "completed_at": completed_at,
+                "prior_status": prior_status,
+                "prior_progress_percent": prior_progress,
             },
         }
+
+
+def set_project_completion(project_name: str, completed: bool) -> dict:
+    """Atomically complete or reopen a known project card."""
+    if not DB_PATH.exists():
+        return {"error": "No data yet — start the tracker first."}
+    name = (project_name or "").strip()
+    if not name:
+        return {"error": "Project name is required."}
+    with db_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        known = conn.execute(
+            "SELECT 1 FROM sessions WHERE project_name = ? UNION SELECT 1 FROM project_metadata WHERE project_name = ? LIMIT 1",
+            (name, name),
+        ).fetchone()
+        if not known:
+            return {"error": "Unknown project."}
+        row = conn.execute(
+            "SELECT status, progress_percent, completed_at, prior_status, prior_progress_percent FROM project_metadata WHERE project_name = ?",
+            (name,),
+        ).fetchone()
+        now = int(time.time())
+        if completed:
+            if row and row["status"] == "finished" and row["completed_at"]:
+                return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
+            prior_status = (row["status"] if row else "") or ""
+            prior_progress = (row["progress_percent"] if row else 0) or 0
+            conn.execute(
+                """INSERT INTO project_metadata (project_name, status, progress_percent, completed_at, prior_status, prior_progress_percent, updated_at)
+                   VALUES (?, 'finished', 100, ?, ?, ?, ?)
+                   ON CONFLICT(project_name) DO UPDATE SET status='finished', progress_percent=100, completed_at=excluded.completed_at, prior_status=excluded.prior_status, prior_progress_percent=excluded.prior_progress_percent, updated_at=excluded.updated_at""",
+                (name, now, prior_status, prior_progress, now),
+            )
+        else:
+            if not row or row["status"] != "finished":
+                return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
+            restore_status = row["prior_status"] or "in_progress"
+            restore_progress = row["prior_progress_percent"] if row["completed_at"] else row["progress_percent"]
+            conn.execute(
+                "UPDATE project_metadata SET status=?, progress_percent=?, completed_at=0, prior_status='', prior_progress_percent=0, updated_at=? WHERE project_name=?",
+                (restore_status, restore_progress, now, name),
+            )
+        conn.commit()
+        return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
 
 
 def reorder_project_board(project_name: str, status: str | None, ordered_projects: object) -> dict:
@@ -2853,9 +2927,9 @@ def _compute_data_etag(month_value: str = "") -> str:
         pm = conn.execute(
             """
             SELECT COUNT(*), MAX(rowid), MAX(updated_at),
-                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note || ':' || board_order, '|')
+                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note || ':' || board_order || ':' || completed_at || ':' || prior_status || ':' || prior_progress_percent, '|')
             FROM (
-                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, board_order, updated_at
+                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent, updated_at
                 FROM project_metadata
                 ORDER BY project_name
             )
@@ -3314,6 +3388,9 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 project["pinned"] = metadata.get("pinned", False)
                 project["project_note"] = metadata.get("project_note", "")
                 project["board_order"] = metadata.get("board_order", 0)
+                project["completed_at"] = metadata.get("completed_at", 0)
+                project["prior_status"] = metadata.get("prior_status", "")
+                project["prior_progress_percent"] = metadata.get("prior_progress_percent", 0)
                 project.update(_project_deadline_summary(metadata, today))
                 project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
@@ -7225,6 +7302,17 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_note"),
                 payload.get("display_name"),
             )
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/project-completion":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if payload is None or not isinstance(payload.get("completed"), bool):
+                self._json({"error": "project_name and boolean completed are required"}, status=400)
+                return
+            result = set_project_completion(payload.get("project_name", ""), payload["completed"])
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-board/reorder":
             try:

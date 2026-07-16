@@ -3265,6 +3265,16 @@ select.planner-goal-input{
 .planner-board-project.is-folder{
   border-style:dashed;background:color-mix(in srgb,var(--board-card-bg) 94%,var(--accent) 6%);
 }
+.project-completion-check{width:28px;height:28px;margin:-5px 0 -5px -5px;padding:0;display:inline-grid;place-items:center;flex:0 0 auto;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface);color:transparent;cursor:pointer;touch-action:manipulation;transition:transform .17s ease,opacity .17s ease,background-color .17s ease,border-color .17s ease,color .17s ease}
+.project-completion-check svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.project-completion-check:hover,.project-completion-check:focus-visible,.planner-board-project:focus-within .project-completion-check{color:var(--ink-4);border-color:var(--ink-4)}
+.project-completion-check:active,.project-completion-check.is-pending{transform:scale(.9)}
+.project-completion-check:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.project-completion-check[aria-pressed="true"]{color:#fff;background:var(--live);border-color:var(--live)}
+.planner-board-project.is-completed{opacity:.82}.completed-projects{margin-top:4px;padding-top:12px;border-top:1px solid var(--border)}
+.completed-projects-toggle{border:0;padding:7px 0;background:transparent;color:var(--ink-3);font:inherit;font-size:12px;font-weight:750;cursor:pointer}.completed-projects-toggle:hover,.completed-projects-toggle:focus-visible{color:var(--ink)}.completed-projects-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-radius:6px}
+.completed-projects-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px}.completed-projects-grid .planner-board-project{animation:completed-card-in .17s ease-out both}@keyframes completed-card-in{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+@media (hover:none),(pointer:coarse){.project-completion-check{color:var(--ink-4);border-color:var(--border-strong)}}@media (prefers-reduced-motion:reduce){.project-completion-check,.completed-projects-grid .planner-board-project{transition:none;animation:none}.project-completion-check:active{transform:none}}
 .board-empty-hint{
   padding:28px 14px;border:1px dashed var(--border);border-radius:10px;
   background:color-mix(in srgb,var(--board-card-bg) 66%,transparent);color:var(--ink-4);
