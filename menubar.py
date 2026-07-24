@@ -7,7 +7,7 @@ import signal
 import threading
 import subprocess
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import rumps
@@ -28,6 +28,7 @@ from tracker import (
     yesterday_seconds,
     Tracker,
 )
+from notifications import NotificationCoordinator, NotificationMessage
 
 DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
@@ -36,6 +37,8 @@ DASHBOARD_WINDOW_SCRIPT = APP_DIR / "dashboard_window.py"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 REFRESH_INTERVAL = 5
 TRACKER_WAKE_INTERVAL = 5
+NOTIFICATION_CHECK_INTERVAL = 5 * 60
+NOTIFICATION_STATE_PATH = Path.home() / ".ableton_tracker" / "notification_state.json"
 
 
 def fmt_dur(seconds: float) -> str:
@@ -194,6 +197,12 @@ class AbletonTrackerApp(rumps.App):
         self.icon = None
         self.tracker_thread = TrackerThread()
         self.dashboard = DashboardProcess()
+        self.notification_coordinator = NotificationCoordinator(
+            db_path=Path.home() / ".ableton_tracker" / "sessions.db",
+            state_path=NOTIFICATION_STATE_PATH,
+            enabled="unittest" not in sys.modules,
+        )
+        self._next_notification_check = 0.0
 
         self.open_ableton_item = rumps.MenuItem(
             "Open Ableton", callback=self.open_ableton
@@ -250,6 +259,13 @@ class AbletonTrackerApp(rumps.App):
         except Exception as e:
             print(f"[refresh] streak/week error: {e}", file=sys.stderr)
 
+        self._check_notifications(
+            today=today,
+            week=week,
+            weekly_goal=weekly_goal,
+            streak=streak,
+        )
+
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error
         if failures > 0:
@@ -296,6 +312,39 @@ class AbletonTrackerApp(rumps.App):
         self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
         self._update_streak(streak)
         self._update_open_ableton(not ableton_up)
+
+    def _check_notifications(
+        self,
+        *,
+        today: float,
+        week: float,
+        weekly_goal: float | None,
+        streak: int,
+    ) -> None:
+        now_monotonic = time.monotonic()
+        if now_monotonic < self._next_notification_check:
+            return
+        self._next_notification_check = now_monotonic + NOTIFICATION_CHECK_INTERVAL
+        try:
+            self.notification_coordinator.check(
+                now=datetime.now(),
+                today_seconds=today,
+                week_seconds=week,
+                weekly_goal_hours=weekly_goal,
+                streak_days=streak,
+                deliver=self._deliver_notification,
+            )
+        except Exception as exc:
+            print(f"[notifications] check error: {exc}", file=sys.stderr)
+
+    @staticmethod
+    def _deliver_notification(notification: NotificationMessage) -> None:
+        rumps.notification(
+            notification.title,
+            notification.subtitle,
+            notification.message,
+            sound=False,
+        )
 
     def _build_title(
         self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
