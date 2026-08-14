@@ -91,6 +91,7 @@ WEEKDAY_NAMES = [
     "Friday", "Saturday", "Sunday",
 ]
 DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
+PRODUCTION_RUN_QUALIFYING_SECONDS = 15 * 60
 
 
 @contextmanager
@@ -100,6 +101,71 @@ def db_connection():
         yield conn
     finally:
         conn.close()
+
+
+def calculate_production_run(daily_totals: dict, today: date) -> dict:
+    """Return qualifying-day run state without mutating recorded activity."""
+    qualifying_seconds = PRODUCTION_RUN_QUALIFYING_SECONDS
+
+    def seconds_for(day_value: date) -> float:
+        return float(daily_totals.get(day_value.isoformat(), 0) or 0)
+
+    qualifying_days = set()
+    for day_key, seconds in daily_totals.items():
+        day_value = date.fromisoformat(day_key)
+        if day_value <= today and float(seconds or 0) >= qualifying_seconds:
+            qualifying_days.add(day_value)
+
+    best_days = 0
+    current_best = 0
+    previous_day = None
+    for day_value in sorted(qualifying_days):
+        if previous_day is not None and day_value == previous_day + timedelta(days=1):
+            current_best += 1
+        else:
+            current_best = 1
+        best_days = max(best_days, current_best)
+        previous_day = day_value
+
+    cursor_day = today if today in qualifying_days else today - timedelta(days=1)
+    current_days = 0
+    while cursor_day in qualifying_days:
+        current_days += 1
+        cursor_day -= timedelta(days=1)
+
+    today_seconds = seconds_for(today)
+    today_qualifies = today_seconds >= qualifying_seconds
+    recent_days = []
+    for offset in range(6, -1, -1):
+        day_value = today - timedelta(days=offset)
+        seconds = seconds_for(day_value)
+        qualifies = seconds >= qualifying_seconds
+        if qualifies:
+            state = "completed"
+        elif day_value == today and seconds > 0:
+            state = "partial"
+        elif day_value == today:
+            state = "today"
+        else:
+            state = "missed"
+        recent_days.append({
+            "day": day_value.isoformat(),
+            "seconds": seconds,
+            "qualifies": qualifies,
+            "is_today": day_value == today,
+            "state": state,
+        })
+
+    return {
+        "current_days": current_days,
+        "best_days": best_days,
+        "qualifying_seconds": qualifying_seconds,
+        "today_seconds": today_seconds,
+        "today_qualifies": today_qualifies,
+        "today_progress_ratio": min(today_seconds / qualifying_seconds, 1.0),
+        "remaining_seconds": max(qualifying_seconds - today_seconds, 0.0),
+        "recent_days": recent_days,
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -3191,9 +3257,11 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             artists = get_artists(conn)
 
             activity_rows = conn.execute("""
-                SELECT project_name, start_time, last_seen_time, end_time, active_seconds
-                FROM sessions
-                WHERE active_seconds > 0
+                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
+                       s.start_time, s.last_seen_time, s.end_time, s.active_seconds
+                FROM sessions s
+                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+                WHERE s.active_seconds > 0
             """).fetchall()
             daily_totals, hourly_totals = build_activity_rollups(activity_rows)
 
@@ -3220,6 +3288,8 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 selected_month_start.replace(day=28) + timedelta(days=4)
             ).replace(day=1) - timedelta(days=1)
             selected_month_key = selected_month_start.strftime("%Y-%m")
+            previous_month_end = selected_month_start - timedelta(days=1)
+            previous_month_start = previous_month_end.replace(day=1)
             last_year_ago = (today - timedelta(days=364)).isoformat()
             year_daily = [
                 {"day": day, "total_seconds": total_seconds}
@@ -3273,13 +3343,17 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             goal_week_start, goal_week_end = get_week_range(today, week_start_weekday)
             month_start_key = selected_month_start.isoformat()
             month_end_key = selected_month_end.isoformat()
+            previous_month_start_key = previous_month_start.isoformat()
+            previous_month_end_key = previous_month_end.isoformat()
 
             today_session_seconds = []
             today_project_names = set()
             month_per_project = {}
+            previous_month_per_project = {}
             for row in activity_rows:
                 row_today_seconds = 0.0
                 row_month_seconds = 0.0
+                row_previous_month_seconds = 0.0
                 end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
                 for day_key, _hour, seconds in allocate_session_activity(
                     row["start_time"],
@@ -3290,12 +3364,19 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                         row_today_seconds += seconds
                     if month_start_key <= day_key <= month_end_key:
                         row_month_seconds += seconds
+                    if previous_month_start_key <= day_key <= previous_month_end_key:
+                        row_previous_month_seconds += seconds
                 if row_today_seconds > 0:
                     today_session_seconds.append(row_today_seconds)
                     today_project_names.add(row["project_name"])
                 if row_month_seconds > 0:
                     project_name = row["project_name"]
                     month_per_project[project_name] = month_per_project.get(project_name, 0.0) + row_month_seconds
+                if row_previous_month_seconds > 0:
+                    project_name = row["project_name"]
+                    previous_month_per_project[project_name] = (
+                        previous_month_per_project.get(project_name, 0.0) + row_previous_month_seconds
+                    )
 
             today_session_count = len(today_session_seconds)
             today_avg_session_seconds = (
@@ -3343,12 +3424,16 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 streak += 1
                 cursor_day -= timedelta(days=1)
 
+            production_run = calculate_production_run(daily_totals, today)
+
             now_ts = time.time()
 
             # Currently active session (end_time IS NULL)
             live = conn.execute("""
-                SELECT project_name, start_time, last_seen_time, active_seconds
-                FROM sessions
+                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
+                       s.start_time, s.last_seen_time, s.active_seconds
+                FROM sessions s
+                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
                 WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
             """).fetchone()
             live_duration_seconds = 0.0
@@ -3364,6 +3449,23 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 )
                 ableton_has_project = bool((live["project_name"] or "").strip())
             ableton_running = True if ableton_has_project else is_ableton_running()
+
+            display_names = {
+                row["project_name"]: project_metadata.get(row["project_name"], {}).get(
+                    "display_name", row["project_name"]
+                )
+                for row in projects
+            }
+            campaign_names = sorted(
+                month_per_project,
+                key=lambda name: (-month_per_project[name], display_names.get(name, name).casefold(), name.casefold()),
+            )
+            previous_campaign_names = sorted(
+                previous_month_per_project,
+                key=lambda name: (-previous_month_per_project[name], display_names.get(name, name).casefold(), name.casefold()),
+            )
+            month_ranks = {name: rank for rank, name in enumerate(campaign_names, 1)}
+            previous_month_ranks = {name: rank for rank, name in enumerate(previous_campaign_names, 1)}
 
             project_rows = []
             for row in projects:
@@ -3394,6 +3496,20 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 project.update(_project_deadline_summary(metadata, today))
                 project["project_tasks"] = project_tasks.get(project["project_name"], [])
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
+                project["previous_month_seconds"] = previous_month_per_project.get(project["project_name"], 0)
+                project["month_rank"] = month_ranks.get(project["project_name"])
+                project["previous_month_rank"] = previous_month_ranks.get(project["project_name"])
+                project["rank_delta"] = (
+                    previous_month_ranks[project["project_name"]] - month_ranks[project["project_name"]]
+                    if project["project_name"] in month_ranks and project["project_name"] in previous_month_ranks
+                    else None
+                )
+                project["month_share_percent"] = (
+                    project["month_seconds"] / month_s * 100.0 if month_s else 0.0
+                )
+                project["is_live_project"] = bool(
+                    live and project["project_name"] == live["project_name"]
+                )
                 project_rows.append(project)
 
             recent_rows = []
@@ -3484,6 +3600,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "selected_month_is_current": selected_month_key == current_month_start.strftime("%Y-%m"),
                     "project_count":  len(projects),
                     "streak_days":    streak,
+                    "production_run": production_run,
                     "live_project":   live["project_name"] if live else None,
                     "live_session_start_time": live_start_time,
                     "live_session_duration_seconds": live_duration_seconds,

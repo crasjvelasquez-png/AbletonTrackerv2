@@ -1534,6 +1534,49 @@ header{
 .streak-mini-bar.is-active{background:var(--accent)}
 .streak-mini-labels{display:flex;gap:4px;width:100%}
 .streak-mini-labels span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:.02em}
+
+/* Tracker's game layer uses recorded time only: one run, one quest, one campaign. */
+.production-run-card{min-height:176px}
+.production-run-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+.production-run-rule{font-size:12px;color:var(--ink-4);font-weight:650;margin-top:5px}
+.run-record{text-align:right}.run-record strong{display:block;font-family:var(--font-display);font-size:20px;letter-spacing:-.03em}
+.run-record span{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-4)}
+.run-nodes,.quest-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:20px}
+.run-node,.quest-day{display:grid;justify-items:center;gap:6px;min-width:0;color:var(--ink-4)}
+.run-node-dot,.quest-day-dot{width:18px;height:18px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink-4) 38%,transparent);background:transparent;transition:transform .24s cubic-bezier(.2,0,0,1),background-color .18s ease,border-color .18s ease}
+.run-node.is-qualified .run-node-dot,.run-node.is-completed .run-node-dot,.quest-day.is-logged .quest-day-dot{background:var(--accent);border-color:var(--accent)}
+.run-node.is-partial .run-node-dot{border-color:var(--accent);background:linear-gradient(90deg,var(--accent) var(--run-progress),transparent var(--run-progress))}
+.run-node.is-missed .run-node-dot{border-style:dashed;opacity:.55}
+.run-node.is-future{opacity:.4}.run-node.is-today .run-node-dot,.quest-day.is-today .quest-day-dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+.run-node span,.quest-day span{font-size:10px;font-weight:750;text-transform:uppercase;white-space:nowrap}
+.production-run-card.is-advancing .card-value,.run-node.is-newly-qualified .run-node-dot{transform:scale(1.06)}
+
+.weekly-quest{margin-top:18px}.weekly-quest .chart-wrap{min-height:0}
+.quest-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.quest-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.quest-summary{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(110px,.5fr));gap:12px;margin-top:20px}
+.quest-primary,.quest-stat{border:1px solid var(--border);background:color-mix(in srgb,var(--control-bg) 72%,transparent);border-radius:18px;padding:16px}
+.quest-primary strong{display:block;font-family:var(--font-display);font-size:clamp(30px,4vw,46px);line-height:1;letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.quest-primary span,.quest-stat span{display:block;margin-top:7px;color:var(--ink-4);font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.quest-stat strong{display:block;font-family:var(--font-display);font-size:23px;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.quest-track{position:relative;height:12px;border-radius:999px;background:color-mix(in srgb,var(--ink-4) 15%,transparent);margin:22px 9px 0}
+.quest-track-fill{height:100%;width:var(--quest-progress);max-width:100%;border-radius:inherit;background:var(--accent);transition:width .3s cubic-bezier(.2,0,0,1)}
+.quest-checkpoints{position:absolute;inset:-5px 0 auto;display:grid;grid-template-columns:repeat(4,1fr);transform:translateX(12.5%)}
+.quest-checkpoint{width:22px;height:22px;border-radius:50%;border:2px solid var(--surface);background:var(--border-strong);box-shadow:0 0 0 1px var(--border);transform:translateX(-50%);transition:transform .28s cubic-bezier(.2,0,0,1),background-color .18s ease}
+.quest-checkpoint.is-met{background:var(--accent)}.quest-checkpoint.is-crossed{transform:translateX(-50%) scale(1.16)}
+.quest-checkpoint-labels{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 0 0}.quest-checkpoint-labels span{text-align:right;font-size:10px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.quest-day strong{font-size:11px;font-variant-numeric:tabular-nums;color:var(--ink-3)}
+.quest-edit-row{display:flex;justify-content:flex-end;margin-top:16px}.quest-edit{display:grid;gap:10px;width:min(420px,100%)}.quest-edit[hidden]{display:none}.quest-edit-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.quest-edit .goal-presets{display:flex;gap:6px;flex:1}
+
+.campaign-head{align-items:flex-start}.campaign-summary{color:var(--ink-3);font-size:13px;font-weight:650;text-align:right}
+.campaign-list{display:grid}.campaign-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:14px;align-items:center;padding:15px 4px;border-top:1px solid var(--border);position:relative;transition:transform .22s cubic-bezier(.2,0,0,1),opacity .18s ease}
+.campaign-row:first-child{border-top:0}.campaign-row.is-live{padding-left:12px}.campaign-row.is-live::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:3px;background:var(--live)}
+.campaign-rank{font-family:var(--font-display);font-size:24px;font-weight:650;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.campaign-project{min-width:0}.campaign-project-name{display:flex;align-items:center;gap:8px;font-weight:750;min-width:0}.campaign-project-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.campaign-live-dot{width:8px;height:8px;border-radius:50%;background:var(--live);flex:none}
+.campaign-meta{display:flex;align-items:center;gap:8px;margin-top:5px;color:var(--ink-4);font-size:11px;font-weight:650}.campaign-category-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.campaign-values{text-align:right}.campaign-time{font-family:var(--font-display);font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.campaign-share{font-size:11px;color:var(--ink-4);margin-top:4px}.campaign-move{color:var(--ink-3)}.campaign-move.is-new{color:var(--accent)}
+@media(max-width:700px){.quest-summary{grid-template-columns:1fr 1fr}.quest-primary{grid-column:1/-1}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-summary{display:none}}
+@media(prefers-reduced-motion:reduce){.run-node-dot,.quest-day-dot,.quest-track-fill,.quest-checkpoint,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
   border:1px dashed var(--border);border-radius:16px;font-size:13px;
@@ -3861,7 +3904,11 @@ const weeklyTargetState = {
   historyRequestToken: 0,
   historyRows: [],
   dailyRows: [],
+  lastRenderedWeek: null,
+  lastCheckpointIndex: null,
 };
+let productionRunRenderState = null;
+let campaignRenderState = { month: null, ranks: new Map() };
 
 function debounce(fn, wait = 120) {
   let timer = null;
@@ -4613,7 +4660,8 @@ function clamp(value, min, max) {
 function monthProjectRows(projects) {
   return [...(projects || [])]
     .filter(project => (project.month_seconds || 0) > 0)
-    .sort((a, b) => (b.month_seconds || 0) - (a.month_seconds || 0));
+    .sort((a, b) => (a.month_rank || Number.MAX_SAFE_INTEGER) - (b.month_rank || Number.MAX_SAFE_INTEGER)
+      || String(a.display_name || a.project_name).localeCompare(String(b.display_name || b.project_name)));
 }
 
 function currentMonthDays(yearDaily, today = new Date()) {
@@ -4656,27 +4704,6 @@ function detailRow({ title, meta, value, color, pct }) {
         <div class="detail-bar" style="--detail-color:${color || 'var(--accent)'};--detail-pct:${width}%"><span></span></div>
       </div>
       <div class="detail-row-value">${value}</div>
-    </div>
-  `;
-}
-
-function renderTopProjectDetail({ summary, projects }) {
-  const rows = monthProjectRows(projects);
-  const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
-  if (rows.length === 0) return `<div class="detail-empty">No project activity in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
-  return `
-    <div class="detail-list">
-      ${rows.map((project, index) => {
-        const seconds = project.month_seconds || 0;
-        const pct = total > 0 ? (seconds / total) * 100 : 0;
-        return detailRow({
-          title: project.project_name || 'Untitled',
-          meta: project.category_label || getCategoryMeta(project.category_key)?.label || 'Uncategorized',
-          value: `${fmt.dur(seconds)} · ${Math.round(pct)}%`,
-          color: projectColor(project, index),
-          pct,
-        });
-      }).join('')}
     </div>
   `;
 }
@@ -4788,6 +4815,14 @@ function buildWeeklyTargetModel(target) {
     : progressSeconds;
   const requiredPerDaySeconds = hasGoal && remainingDays > 0 ? Math.ceil(shortfallSeconds / remainingDays) : 0;
   const status = weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek });
+  const checkpointRatios = [0.25, 0.5, 0.75, 1];
+  const checkpoints = checkpointRatios.map(ratio => ({
+    ratio,
+    seconds: hasGoal ? Math.round(goalHours * 3600 * ratio) : 0,
+    met: hasGoal && progressRatio >= ratio,
+  }));
+  const nextCheckpointIndex = checkpoints.findIndex(checkpoint => !checkpoint.met);
+  const nextCheckpoint = nextCheckpointIndex >= 0 ? checkpoints[nextCheckpointIndex] : null;
   return {
     weekStart,
     weekEnd,
@@ -4813,6 +4848,10 @@ function buildWeeklyTargetModel(target) {
     projectedSeconds,
     requiredPerDaySeconds,
     status,
+    checkpoints,
+    checkpointIndex: checkpoints.filter(checkpoint => checkpoint.met).length - 1,
+    nextCheckpoint,
+    nextCheckpointSeconds: nextCheckpoint ? Math.max(0, nextCheckpoint.seconds - progressSeconds) : 0,
   };
 }
 
@@ -4859,6 +4898,7 @@ function renderWeekStrip(model) {
           <div class="${classes}" title="${dayLabel} · ${fmt.dur(seconds)}">
             <i class="week-dot" aria-hidden="true"></i>
             <span>${dayLabel.slice(0, 3)}</span>
+            <strong>${fmt.dur(seconds)}</strong>
           </div>
         `;
       }).join('')}
@@ -4960,113 +5000,26 @@ function renderBestDayDetail({ summary, year_daily }) {
   `;
 }
 
-function renderThisMonthDetail({ summary, projects }) {
-  const rows = monthProjectRows(projects);
-  const total = summary.month_seconds || rows.reduce((sum, project) => sum + (project.month_seconds || 0), 0);
-  const activeProjectCount = summary.month_project_count || rows.length;
-  const monthDate = selectedMonthDate(summary);
-  const dayCount = summary.selected_month_is_current
-    ? new Date().getDate()
-    : new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const average = total > 0 ? Math.round(total / dayCount) : 0;
-  const buckets = new Map();
-  rows.forEach(project => {
-    const seconds = project.month_seconds || 0;
-    if (seconds <= 0) return;
-    const key = project.category_key || '__uncategorized';
-    const meta = project.category_key ? getCategoryMeta(project.category_key) : null;
-    if (!buckets.has(key)) {
-      buckets.set(key, {
-        label: meta?.label || project.category_label || 'Uncategorized',
-        color: meta?.color || project.category_color || '#8E8E93',
-        total_seconds: 0,
-      });
-    }
-    buckets.get(key).total_seconds += seconds;
-  });
-  const categories = [...buckets.values()].sort((a, b) => b.total_seconds - a.total_seconds);
-  return `
-    <div class="detail-stack">
-      <div class="detail-kpis">
-        <div class="detail-kpi"><span>Total time</span><strong>${fmt.dur(total)}</strong></div>
-        <div class="detail-kpi"><span>Projects</span><strong>${activeProjectCount}</strong></div>
-        <div class="detail-kpi"><span>Daily average</span><strong>${fmt.dur(average)}</strong></div>
-      </div>
-      <div>
-        <div class="detail-section-title">Category breakdown</div>
-        ${categories.length === 0
-          ? `<div class="detail-empty">No category activity in ${escapeHtml(selectedMonthLabel(summary))}.</div>`
-          : `<div class="detail-list">
-              ${categories.map(category => {
-                const pct = total > 0 ? (category.total_seconds / total) * 100 : 0;
-                return detailRow({
-                  title: category.label,
-                  meta: `${Math.round(pct)}% of month`,
-                  value: fmt.dur(category.total_seconds),
-                  color: category.color,
-                  pct,
-                });
-              }).join('')}
-            </div>`}
-      </div>
-    </div>
-  `;
-}
-
-function renderStreakDetail({ summary, year_daily }) {
-  const best = longestStreak(year_daily);
-  const cur = summary.streak_days || 0;
-  const total = Math.max(best, cur, 1);
-
-  const markers = Array.from({ length: total }, (_, i) => {
-    const dayNum = i + 1;
-    const isActive = dayNum <= cur;
-    const isRecord = isActive && cur > best && dayNum === cur;
-    return { dayNum, isActive, isRecord };
-  });
-
-  let narrative;
-  if (best === 0 && cur === 0) {
-    narrative = `<strong>Start your first streak.</strong> Open Ableton and log a session to begin.`;
-  } else if (cur === 0 && best > 0) {
-    narrative = `Your best streak was <strong>${best} day${best !== 1 ? 's' : ''}</strong>. Streak broken — start again today.`;
-  } else if (cur > best) {
-    narrative = `<strong>New record!</strong> You've surpassed your previous best.`;
-  } else if (cur === best && best > 0) {
-    narrative = `<strong>Tied with your personal best.</strong>`;
-  } else {
-    const daysLeft = best - cur;
-    narrative = `<strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong> until you match your personal best.`;
-  }
+function renderProductionRunDetail({ summary }) {
+  const run = summary.production_run || {};
+  const cur = run.current_days || 0;
+  const best = run.best_days || 0;
+  const days = Array.isArray(run.recent_days) ? run.recent_days : [];
 
   return `
     <div class="detail-stack">
       <div class="detail-kpis" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
-        <div class="detail-kpi"><span>Current streak</span><strong>${cur} day${cur !== 1 ? 's' : ''}</strong></div>
+        <div class="detail-kpi"><span>Production Run</span><strong>Day ${cur}</strong></div>
         <div class="detail-kpi"><span>Personal best</span><strong>${best} day${best !== 1 ? 's' : ''}</strong></div>
       </div>
-      <div class="streak-vinyl-section">
-        <div class="streak-vinyl-track">
-          <div class="streak-vinyl-labels">
-            ${markers.map(m => `<div class="streak-vinyl-day">${m.dayNum}</div>`).join('')}
-          </div>
-          <div class="streak-vinyl-markers">
-            ${markers.map(m => {
-              const cls = m.isRecord ? 'is-record' : m.isActive ? 'is-active' : '';
-              return `<div class="streak-vinyl-marker ${cls}"></div>`;
-            }).join('')}
-          </div>
-        </div>
-      </div>
+      <div class="detail-section-title">15 recorded minutes qualifies a local day</div>
+      <div class="detail-list">${days.map(day => detailRow({title:longDailyTargetLabel(day.day),meta:day.qualifies?'Qualified':day.is_today&&day.seconds>0?'In progress':day.is_today?'Ready when you are':'No qualifying session',value:`${fmt.dur(day.seconds||0)} / 15m`,color:day.qualifies?'var(--accent)':'var(--ink-4)',pct:clamp((day.seconds||0)/(run.qualifying_seconds||900)*100,0,100)})).join('')}</div>
     </div>
   `;
 }
 
 function renderDetail(kind, data) {
   const monthName = selectedMonthLabel(data.summary || {});
-  if (kind === 'top-project') {
-    return { title: 'Top Project', subtitle: `All active projects in ${monthName}`, body: renderTopProjectDetail(data) };
-  }
   if (kind === 'daily-target') {
     return { title: 'Recent Dates', subtitle: 'Daily target results across recent dates', body: renderDailyTargetDetail() };
   }
@@ -5076,11 +5029,8 @@ function renderDetail(kind, data) {
   if (kind === 'best-day') {
     return { title: 'Best Day', subtitle: `Top days and the ${monthName} shape`, body: renderBestDayDetail(data) };
   }
-  if (kind === 'this-month') {
-    return { title: 'Month', subtitle: `${monthName} total, pace, and category mix`, body: renderThisMonthDetail(data) };
-  }
-  if (kind === 'streak') {
-    return { title: 'Streak', subtitle: '', body: renderStreakDetail(data) };
+  if (kind === 'production-run') {
+    return { title: 'Production Run', subtitle: 'Qualifying days from recorded Ableton time', body: renderProductionRunDetail(data) };
   }
   return null;
 }
@@ -8796,171 +8746,80 @@ function render(data) {
   const monthSub = summary.selected_month_is_current ? 'this month' : monthName;
   const monthlyProjects = monthProjectRows(projects);
   const monthlyProjectCount = summary.month_project_count || monthlyProjects.length;
-  const pace = lastMonthPace(year_daily, selectedMonth);
-  let paceChip;
-  if (!pace) {
-    paceChip = `<div class="card-chip">— vs last month</div>`;
-  } else {
-    const sign = pace.pct > 0 ? '+' : '';
-    const cls = pace.positive ? ' card-chip--good' : '';
-    paceChip = `<div class="card-chip${cls}">${sign}${pace.pct}% vs last month</div>`;
-  }
+  const run = summary.production_run || {
+    current_days: 0, best_days: 0, qualifying_seconds: 900,
+    today_seconds: 0, today_qualifies: false, today_progress_ratio: 0,
+    remaining_seconds: 900, recent_days: [],
+  };
+  const priorRun = productionRunRenderState;
+  const runAdvanced = priorRun && !priorRun.todayQualifies && run.today_qualifies;
+  productionRunRenderState = { todayQualifies: !!run.today_qualifies, currentDays: run.current_days };
+  const recordDistance = Math.max(0, (run.best_days || 0) - (run.current_days || 0));
+  const runRecordCopy = run.current_days > 0 && run.current_days >= run.best_days
+    ? 'New record'
+    : recordDistance > 0
+      ? `${recordDistance} day${recordDistance === 1 ? '' : 's'} to your record`
+      : 'Your next session starts it';
+  const recentRunDays = Array.isArray(run.recent_days) ? run.recent_days : [];
 
-  const best = longestStreak(year_daily);
-  const cur = summary.streak_days || 0;
-
-  // Top project this month (uses month_seconds field added server-side)
-  const topProject = monthlyProjects[0];
-  const topProjectShare = topProject && summary.month_seconds > 0
-    ? Math.round((topProject.month_seconds / summary.month_seconds) * 100)
-    : 0;
-
-  // ── Streak ──
-  const isRecord = cur > 0 && cur >= best;
-  const pbIconClass = isRecord ? 'pb-icon is-record' : 'pb-icon';
-  const pbIconLabel = isRecord ? 'NEW' : 'PB';
-  
-  const streakTrackDays = [];
-  const todayDate = new Date();
-  todayDate.setHours(12, 0, 0, 0);
-  const startTrack = addDays(todayDate, -6);
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(startTrack, i);
-    const key = localDateKey(d);
-    const hasActivity = year_daily.some(x => x.day === key && (x.total_seconds || 0) > 0);
-    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
-    streakTrackDays.push({ dayName, hasActivity });
-  }
-
-  const streakTrackHTML = `
-    <div class="streak-mini-track">
-      <div class="streak-mini-bars">
-        ${streakTrackDays.map(d => `<div class="streak-mini-bar ${d.hasActivity ? 'is-active' : ''}"></div>`).join('')}
-      </div>
-      <div class="streak-mini-labels">
-        ${streakTrackDays.map(d => `<span>${d.dayName}</span>`).join('')}
-      </div>
-    </div>
-  `;
+  const campaignRows = monthlyProjects.filter(project => (project.month_seconds || 0) > 0);
+  const campaignMonthChanged = campaignRenderState.month !== null && campaignRenderState.month !== summary.selected_month;
+  const previousCampaignRanks = campaignRenderState.ranks;
+  const nextCampaignRanks = new Map(campaignRows.map(project => [project.project_name, project.month_rank]));
+  campaignRenderState = { month: summary.selected_month, ranks: nextCampaignRanks };
 
   document.getElementById('appDashboard').innerHTML = `
     <div class="cards">
-      <div class="card card--streak" role="button" tabindex="0" data-detail="streak">
-        <div class="streak-card-top">
-          <div class="streak-card-main">
-            <div class="card-label" style="padding-top: 0; margin-bottom: 4px;">Current Streak</div>
-            <div class="card-value">${cur}<span class="unit">day${cur !== 1 ? 's' : ''}</span></div>
+      <div class="card card--streak production-run-card${runAdvanced ? ' is-advancing' : ''}" role="button" tabindex="0" data-detail="production-run">
+        <div class="production-run-head">
+          <div>
+            <div class="card-label" style="padding-top:0;margin-bottom:4px">Production Run</div>
+            <div class="card-value">Day ${run.current_days || 0}</div>
+            <div class="production-run-rule">Today · ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)}</div>
           </div>
-          <div class="streak-card-pb">
-            <div class="${pbIconClass}">${pbIconLabel}</div>
-            <div class="pb-label">Personal Best</div>
-            <div class="pb-value">${best} Day${best !== 1 ? 's' : ''}</div>
-          </div>
+          <div class="run-record"><span>Personal record</span><strong>${run.best_days || 0} day${run.best_days === 1 ? '' : 's'}</strong><div class="production-run-rule">${runRecordCopy}</div></div>
         </div>
-        ${streakTrackHTML}
-      </div>
-      <div class="card" role="button" tabindex="0" data-detail="top-project">
-        ${topProject
-          ? `<div class="card-value card-value--text" title="${escapeHtml(topProject.project_name)}">${escapeHtml(topProject.project_name)}</div>
-             <div class="card-chip">${fmt.dur(topProject.month_seconds)} · ${topProjectShare}% of month</div>
-             <div class="card-sub"><span class="proj-dot" style="background:${projectColor(topProject, 0)}"></span>${topProject.category_label || 'Uncategorized'}</div>`
-          : `<div class="card-value">—</div>
-             <div class="card-chip">No projects yet</div>
-             <div class="card-sub">${monthSub}</div>`}
-        <div class="card-label">Top Project</div>
-      </div>
-      <div class="card" role="button" tabindex="0" data-detail="this-month">
-        <div class="card-value accent">${fmt.dur(summary.month_seconds)}</div>
-        ${paceChip}
-        <div class="card-sub">${monthlyProjectCount} project${monthlyProjectCount !== 1 ? 's' : ''} · ${monthSub}</div>
-        <div class="card-label">${summary.selected_month_is_current ? 'This Month' : 'Month'}</div>
-      </div>
-    </div>
-
-    <div class="rings-row">
-      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
-        <div class="section-head daily-target-head">
-          <h3 class="section-title">Weekly <em>Pace</em></h3>
-          <div class="daily-target-head-side">
-            <div class="section-meta">
-              <span id="weeklyTargetRangeLabel">Current Week</span>
-            </div>
-          </div>
+        <div class="run-nodes" aria-label="Recent Production Run days">
+          ${recentRunDays.map(day => {
+            const cls = ['run-node', day.state ? `is-${day.state}` : '', day.is_today ? 'is-today' : '', runAdvanced && day.is_today ? 'is-newly-qualified' : ''].filter(Boolean).join(' ');
+            const ratio = clamp((Number(day.seconds) || 0) / (run.qualifying_seconds || 900), 0, 1);
+            const dayDate = day.day ? dateFromKey(day.day) : new Date();
+            const dayLabel = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
+            return `<div class="${cls}" style="--run-progress:${Math.round(ratio * 100)}%" title="${escapeHtml(`${day.day || ''} · ${fmt.dur(day.seconds || 0)}`)}"><i class="run-node-dot" aria-hidden="true"></i><span>${dayLabel}</span></div>`;
+          }).join('')}
         </div>
-        <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
       </div>
-      <div class="chart-card target-card pace-card" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
-        <div class="section-head daily-target-head">
-          <h3 class="section-title">Today's <em>Required</em></h3>
-          <div class="daily-target-head-side">
-            <div class="daily-target-nav" aria-label="Weekly target date navigation">
-              <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
-              <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M8.75 2.5L4.25 7l4.5 4.5"></path>
-                </svg>
-              </button>
-              <button class="daily-target-nav-btn" id="weeklyTargetNext" type="button" aria-label="Show next week">
-                <svg viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M5.25 2.5L9.75 7l-4.5 4.5"></path>
-                </svg>
-              </button>
-            </div>
-            <div class="section-meta">
-              <span id="weeklyRequiredContext">This week</span>
-            </div>
-          </div>
+    </div>
+
+    <div class="chart-card chart-card-wide weekly-quest" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="quest-head">
+        <div><h3 class="section-title">Weekly <em>Quest</em></h3><span class="section-meta" id="weeklyTargetRangeLabel">Current Week</span></div>
+        <div class="quest-nav" aria-label="Weekly Quest navigation">
+          <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
+          <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M8.75 2.5L4.25 7l4.5 4.5"></path></svg></button>
+          <button class="daily-target-nav-btn" id="weeklyTargetNext" type="button" aria-label="Show next week"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M5.25 2.5L9.75 7l-4.5 4.5"></path></svg></button>
         </div>
-        <div class="chart-wrap"><div id="dailyGoalCard" class="daily-target-panel"></div></div>
       </div>
+      <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
     </div>
 
-    <div class="chart-card chart-card-wide">
-      <div class="section-head">
-        <h3 class="section-title">Activity</h3>
-        <span class="section-meta" id="activityHeatmapWeekLabel2">Weekly rhythm</span>
+    <div class="table-card monthly-campaign">
+      <div class="section-head campaign-head">
+        <h3 class="section-title">Monthly <em>Campaign</em></h3>
+        <div class="campaign-summary">${fmt.dur(summary.month_seconds || 0)} · ${monthlyProjectCount} project${monthlyProjectCount === 1 ? '' : 's'}<br>${escapeHtml(monthName)}</div>
       </div>
-      <div class="chart-wrap"><div id="activityHeatmap"></div></div>
-    </div>
-
-    <div class="chart-card chart-card-wide">
-      <div class="section-head">
-        <h3 class="section-title">By <em>category</em></h3>
-        <span class="section-meta">hours in ${escapeHtml(monthName)}</span>
-      </div>
-      <div class="chart-wrap"><div id="categoryChart"></div></div>
-    </div>
-
-    <div class="table-card">
-      <div class="section-head">
-        <h3 class="section-title">Projects</h3>
-      </div>
-      ${projects.length === 0
-        ? '<div class="empty"><p>No projects yet</p><small>waiting for a live session</small></div>'
-        : `<div class="table-scroll"><table>
-            <thead><tr>
-              <th style="width:40px">#</th>
-              <th>Project</th>
-              <th style="text-align:right">Total</th>
-              <th style="text-align:right">Sessions</th>
-            </tr></thead>
-            <tbody>
-              ${projects.map((p,i) => {
-                return `
-                <tr>
-                  <td><span class="rank">${String(i+1).padStart(2,'0')}</span></td>
-                  <td>
-                    <div class="proj-badge-wrap">
-                      ${projectBadge(p, i)}
-                    </div>
-                  </td>
-                  <td class="dur">${fmt.dur(p.total_seconds)}</td>
-                  <td class="num">${p.session_count}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table></div>
-          ${data.recent_has_more ? '<div class="table-more"><button class="btn small" id="btnLoadOlderRecent" type="button">Load older entries</button></div>' : ''}`}
+      ${campaignRows.length === 0 ? `<div class="empty"><p>No campaign activity</p><small>recorded time in ${escapeHtml(monthName)} will appear here</small></div>` : `<div class="campaign-list">${campaignRows.map((project, index) => {
+        const movement = project.previous_month_rank == null ? 'New' : project.rank_delta > 0 ? `Up ${project.rank_delta}` : project.rank_delta < 0 ? `Down ${Math.abs(project.rank_delta)}` : 'Unchanged';
+        const moveClass = project.previous_month_rank == null ? ' is-new' : '';
+        const color = project.category_color || projectColor(project, index);
+        const priorRank = previousCampaignRanks.get(project.project_name);
+        const rankOffset = campaignMonthChanged && priorRank ? (priorRank - (project.month_rank || index + 1)) * 70 : 0;
+        return `<div class="campaign-row${project.is_live_project ? ' is-live' : ''}${campaignMonthChanged && rankOffset ? ' is-month-change' : ''}" data-campaign-project="${encodeURIComponent(project.project_name || '')}"${rankOffset ? ` style="transform:translateY(${rankOffset}px);opacity:.72"` : ''}>
+          <div class="campaign-rank">${project.month_rank || index + 1}</div>
+          <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(project.project_name)}</span></div><div class="campaign-meta"><i class="campaign-category-dot" style="background:${color}"></i>${escapeHtml(project.category_label || 'Uncategorized')}<span class="campaign-move${moveClass}">${movement}</span></div></div>
+          <div class="campaign-values"><div class="campaign-time">${fmt.dur(project.month_seconds)}</div><div class="campaign-share">${Number(project.month_share_percent || 0).toFixed(1).replace(/\.0$/, '')}% of month</div></div>
+        </div>`;
+      }).join('')}</div>`}
     </div>
 
     <div class="table-card">
@@ -9024,7 +8883,8 @@ function render(data) {
                 </tr>`;
               }).join('')}
             </tbody>
-          </table></div>`}
+          </table></div>
+          ${data.recent_has_more ? '<div class="table-more"><button class="btn small" id="btnLoadOlderRecent" type="button">Load older entries</button></div>' : ''}`}
     </div>
 
     <div class="data-actions">
@@ -9061,10 +8921,16 @@ function render(data) {
   bindRowDeleteTriggers();
   bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
+  if (campaignMonthChanged && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelectorAll('.campaign-row.is-month-change').forEach(row => {
+        row.style.transform = 'translateY(0)';
+        row.style.opacity = '1';
+      });
+    }));
+  }
 
-  renderWeeklyRhythm(year_daily, year_hourly);
   renderWeeklyGoal(summary, year_daily);
-  renderCategoryChart(projects, summary);
 }
 
 function updateSessionStatus(summary) {
@@ -9462,118 +9328,46 @@ function updateWeeklyTargetMeta({ weekStart }) {
 
 function renderWeeklyTargetCard(target) {
   const mount = document.getElementById('weeklyGoalCard');
-  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
 
   const model = buildWeeklyTargetModel(target);
   const progressPct = model.hasGoal ? clamp(Math.round(model.progressRatio * 100), 0, 100) : 0;
-  const progressLabel = model.hasGoal ? `${Math.min(model.percent, 999)}%` : 'No goal';
-  const goalLabel = model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : 'Goal';
   const editGoalHours = model.hasGoal ? model.goalHours : 20;
-  const projectedLabel = model.hasGoal ? fmt.dur(model.projectedSeconds) : '--';
-  const remainingLabel = model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--';
-  const requiredLabel = model.hasGoal ? fmt.dur(model.requiredPerDaySeconds) : '--';
-  const requiredContext = document.getElementById('weeklyRequiredContext');
-  const requiredHeadline = !model.hasGoal
-    ? 'Set a weekly goal'
-    : model.isPastWeek
-      ? 'Final result'
-      : model.isFutureWeek
-        ? 'Starts soon'
-        : model.isMet
-          ? '0m'
-          : requiredLabel;
-  const requiredCopy = !model.hasGoal
-    ? 'Add a weekly target to turn progress into a daily pace.'
-    : model.isPastWeek
-      ? `${model.progressText} logged.`
-      : model.isFutureWeek
-        ? `Week starts ${shortDate(model.weekStart)}.`
-        : model.isMet
-          ? 'Weekly goal met. Extra time is optional.'
-          : `needed per remaining day · ${model.remainingDays} day${model.remainingDays === 1 ? '' : 's'} left`;
+  const priorWeek = weeklyTargetState.lastRenderedWeek;
+  const priorCheckpoint = weeklyTargetState.lastCheckpointIndex;
+  const newlyCrossed = priorWeek === model.weekStart && priorCheckpoint != null && model.checkpointIndex > priorCheckpoint
+    ? model.checkpointIndex : -1;
+  weeklyTargetState.lastRenderedWeek = model.weekStart;
+  weeklyTargetState.lastCheckpointIndex = model.checkpointIndex;
 
-  updateWeeklyTargetMeta({
-    weekStart: model.weekStart,
-    weekEnd: model.weekEnd,
-  });
-  if (requiredContext) {
-    requiredContext.textContent = model.isCurrentWeek ? 'This week' : humanWeeklyTargetLabel(model.weekStart);
-  }
+  updateWeeklyTargetMeta({ weekStart: model.weekStart, weekEnd: model.weekEnd });
+  const primaryCopy = !model.hasGoal ? 'Set a weekly goal' : model.isMet ? 'Quest complete' : model.nextCheckpoint ? `Next checkpoint · ${fmt.dur(model.nextCheckpointSeconds)}` : 'Quest complete';
 
   mount.innerHTML = `
-    <div class="pace-panel" style="--pace-accent:${model.status.accent};--target-accent:${model.status.accent};--pace-progress:${progressPct}%">
-      <div class="pace-hero">
-        <div class="pace-kicker">${model.hasGoal ? 'Logged / goal' : 'Logged this week'}</div>
-        <div class="pace-value">${fmt.dur(model.progressSeconds)} <small>/ ${goalLabel}</small></div>
-        <div class="pace-bar" aria-label="${escapeHtml(progressLabel)} complete">
-          <div class="pace-bar-fill"></div>
-        </div>
-        <div class="pace-subline">
-          <span class="pace-status">${escapeHtml(model.status.label)}</span>
-          <span>${progressLabel}</span>
-        </div>
+    <div style="--quest-progress:${progressPct}%">
+      <div class="quest-summary">
+        <div class="quest-primary"><strong>${escapeHtml(primaryCopy)}</strong><span>${model.hasGoal ? `${Math.min(model.percent, 999)}% of ${formatHoursNumber(model.goalHours)}h` : 'Recorded time stays intact'}</span></div>
+        <div class="quest-stat"><strong>${fmt.dur(model.progressSeconds)}</strong><span>Logged</span></div>
+        <div class="quest-stat"><strong>${model.hasGoal ? fmt.dur(model.shortfallSeconds) : '—'}</strong><span>Remaining</span></div>
       </div>
-      <div class="pace-stats">
-        <div class="pace-stat">
-          <span>Projected</span>
-          <strong>${projectedLabel}</strong>
-        </div>
-        <div class="pace-stat">
-          <span>Remaining</span>
-          <strong>${remainingLabel}</strong>
-        </div>
-      </div>
-      <div class="pace-goal-edit">
-        <div class="goal-input-row">
-          <label class="goal-label" for="weeklyGoalCardInput">
-            <strong>Weekly goal</strong>
-          </label>
-          <div class="goal-input-wrap">
-            <input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${editGoalHours}">
-            <span class="goal-unit">hours</span>
-          </div>
-        </div>
-        <div class="goal-presets">
-          ${[10, 20, 30, 40].map(hours => `
-            <button class="goal-chip ${Math.abs(editGoalHours - hours) < 0.01 ? 'is-active' : ''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>
-          `).join('')}
-        </div>
+      <div class="quest-track" role="progressbar" aria-label="Weekly Quest progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}"><div class="quest-track-fill"></div><div class="quest-checkpoints">${model.checkpoints.map((checkpoint,index) => `<i class="quest-checkpoint${checkpoint.met ? ' is-met' : ''}${index === newlyCrossed ? ' is-crossed' : ''}" title="${Math.round(checkpoint.ratio * 100)}% checkpoint"></i>`).join('')}</div></div>
+      <div class="quest-checkpoint-labels">${model.checkpoints.map(checkpoint => `<span>${Math.round(checkpoint.ratio * 100)}%</span>`).join('')}</div>
+      ${renderWeekStrip(model).replaceAll('week-', 'quest-')}
+      <div class="quest-edit-row"><button class="btn small" id="weeklyGoalEditBtn" type="button" aria-expanded="false" aria-controls="weeklyGoalEdit">${model.hasGoal ? `Goal ${formatHoursNumber(model.goalHours)}h` : 'Set goal'}</button></div>
+      <div class="quest-edit" id="weeklyGoalEdit" hidden>
+        <label class="goal-label" for="weeklyGoalCardInput"><strong>Weekly goal</strong></label>
+        <div class="quest-edit-actions"><div class="goal-input-wrap"><input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${editGoalHours}"><span class="goal-unit">hours</span></div><div class="goal-presets">${[10,20,30,40].map(hours => `<button class="goal-chip ${Math.abs(editGoalHours-hours)<.01?'is-active':''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>`).join('')}</div><button class="btn small" id="weeklyGoalCancelBtn" type="button">Cancel</button></div>
       </div>
     </div>
   `;
 
-  if (requiredMount) {
-    requiredMount.innerHTML = `
-      <div class="pace-panel" style="--pace-accent:${model.status.accent};--target-accent:${model.status.accent}">
-        <div class="pace-hero">
-          <div class="pace-kicker">${model.isCurrentWeek ? 'Today' : 'Selected week'}</div>
-          <div class="pace-value">${requiredHeadline}</div>
-          <div class="required-note">${requiredCopy}</div>
-        </div>
-        ${renderWeekStrip(model)}
-        <div class="pace-stats">
-          <div class="pace-stat">
-            <span>Goal</span>
-            <strong>${model.hasGoal ? `${formatHoursNumber(model.goalHours)}h` : '--'}</strong>
-          </div>
-          <div class="pace-stat">
-            <span>${model.isPastWeek ? 'Shortfall' : 'Left'}</span>
-            <strong>${model.hasGoal ? fmt.dur(model.shortfallSeconds) : '--'}</strong>
-          </div>
-        </div>
-      </div>
-    `;
-    requiredMount.classList.remove('is-fresh');
-    void requiredMount.offsetWidth;
-    requiredMount.classList.add('is-fresh');
-  }
-
-  mount.classList.remove('is-fresh');
-  void mount.offsetWidth;
-  mount.classList.add('is-fresh');
-
   const input = mount.querySelector('#weeklyGoalCardInput');
+  const editBtn = mount.querySelector('#weeklyGoalEditBtn');
+  const editPanel = mount.querySelector('#weeklyGoalEdit');
+  const cancelBtn = mount.querySelector('#weeklyGoalCancelBtn');
+  const setEditing = editing => { editPanel.hidden = !editing; editBtn.setAttribute('aria-expanded', String(editing)); if (editing) input.focus(); };
+  editBtn?.addEventListener('click', event => { event.stopPropagation(); setEditing(true); });
+  cancelBtn?.addEventListener('click', event => { event.stopPropagation(); setEditing(false); });
   const repaint = async nextValue => {
     const normalized = clamp(Math.round((Number(nextValue) || editGoalHours) * 10) / 10, 1, 100);
     mount.classList.add('is-loading');
@@ -9600,7 +9394,6 @@ function renderWeeklyTargetCard(target) {
 
 async function loadWeeklyTarget(summary = {}, yearDaily = []) {
   const mount = document.getElementById('weeklyGoalCard');
-  const requiredMount = document.getElementById('dailyGoalCard');
   if (!mount) return;
   weeklyTargetState.dailyRows = Array.isArray(yearDaily) ? yearDaily : [];
   if (!weeklyTargetState.currentWeekStartDate) {
@@ -9615,7 +9408,6 @@ async function loadWeeklyTarget(summary = {}, yearDaily = []) {
     note: 'Loading target…',
   });
   mount.classList.add('is-loading');
-  if (requiredMount) requiredMount.classList.add('is-loading');
   mount.setAttribute('aria-busy', 'true');
   const token = ++weeklyTargetState.requestToken;
   try {
@@ -9634,12 +9426,10 @@ async function loadWeeklyTarget(summary = {}, yearDaily = []) {
       note: 'Could not load target',
     });
     mount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
-    if (requiredMount) requiredMount.innerHTML = '<div class="chart-empty">Unable to load this weekly target right now.</div>';
     toast(error.message || 'Failed to load weekly target');
   } finally {
     if (token === weeklyTargetState.requestToken) {
       mount.classList.remove('is-loading');
-      if (requiredMount) requiredMount.classList.remove('is-loading');
       mount.removeAttribute('aria-busy');
     }
   }
@@ -9856,145 +9646,6 @@ function renderDailyGoal(summary) {
   });
 
   loadDailyTarget(summary);
-}
-
-function renderCategoryChart(projects, summary = {}) {
-  const mount = document.getElementById('categoryChart');
-  if (!mount) return;
-
-  const buckets = new Map();
-  projects.forEach(project => {
-    const seconds = project.month_seconds || 0;
-    if (seconds <= 0) return;
-    const key = project.category_key || '__uncategorized';
-    const meta = project.category_key ? CATEGORY_BY_KEY[project.category_key] : null;
-    const label = meta?.label || project.category_label || 'Uncategorized';
-    const color = meta?.color || project.category_color || '#8E8E93';
-    if (!buckets.has(key)) {
-      buckets.set(key, { key, label, color, total_seconds: 0 });
-    }
-    buckets.get(key).total_seconds += seconds;
-  });
-
-  let entries = [...buckets.values()]
-    .filter(entry => entry.total_seconds > 0)
-    .sort((a, b) => b.total_seconds - a.total_seconds);
-
-  if (entries.length === 0) {
-    mount.innerHTML = `<div class="chart-empty">No category data in ${escapeHtml(selectedMonthLabel(summary))}.</div>`;
-    return;
-  }
-
-  if (entries.length > 6) {
-    const topEntries = entries.slice(0, 5);
-    const otherSeconds = entries.slice(5).reduce((sum, entry) => sum + entry.total_seconds, 0);
-    if (otherSeconds > 0) {
-      topEntries.push({
-        key: '__other',
-        label: 'Other',
-        color: '#8E8E93',
-        total_seconds: otherSeconds,
-      });
-    }
-    entries = topEntries;
-  }
-
-  const totalSeconds = entries.reduce((sum, entry) => sum + entry.total_seconds, 0) || 1;
-  const formatPercent = value => {
-    const rounded = value < 10 ? value.toFixed(1) : value.toFixed(0);
-    return rounded.replace(/\.0$/, '');
-  };
-  let startPercent = 0;
-  const chartEntries = entries.map((entry, index) => {
-    const percent = (entry.total_seconds / totalSeconds) * 100;
-    const endPercent = index === entries.length - 1 ? 100 : startPercent + percent;
-    const chartEntry = {
-      ...entry,
-      percent,
-      start_percent: startPercent,
-      end_percent: endPercent,
-    };
-    startPercent = endPercent;
-    return chartEntry;
-  });
-  const totalHours = Math.round((totalSeconds / 3600) * 10) / 10;
-
-  mount.innerHTML = `
-    <div class="donut-layout">
-      <div class="bar-column">
-        <div class="bar-header">
-          <div class="donut-total">${totalHours}h</div>
-          <div class="donut-caption">${escapeHtml(selectedMonthLabel(summary))}</div>
-        </div>
-        <div id="donutChart" class="donut-chart">
-          ${chartEntries.map((entry, index) => `
-            <div class="bar-segment" data-segment-index="${index}" style="width:${entry.percent.toFixed(3)}%;background:${entry.color}"></div>
-          `).join('')}
-        </div>
-      </div>
-      <div class="donut-legend">
-        ${chartEntries.map((entry, index) => {
-          const hours = Math.round((entry.total_seconds / 3600) * 10) / 10;
-          const barWidth = Math.max(1, Math.min(100, entry.percent));
-          return `
-            <div class="legend-item" data-legend-index="${index}" style="--legend-color:${entry.color};--legend-width:${barWidth.toFixed(3)}%">
-              <span class="legend-bar"></span>
-              <span class="legend-swatch" style="background:${entry.color}"></span>
-              <span class="legend-name">${escapeHtml(entry.label)}</span>
-              <span class="legend-value">${hours}h</span>
-              <span class="legend-percent">${formatPercent(entry.percent)}%</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-
-  const chart = mount.querySelector('#donutChart');
-  const segments = [...mount.querySelectorAll('.bar-segment')];
-  const legendItems = [...mount.querySelectorAll('.legend-item')];
-  if (!chart || legendItems.length === 0) return;
-
-  const setHighlight = activeIndex => {
-    const hasActive = Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < legendItems.length;
-    legendItems.forEach((item, index) => {
-      item.classList.toggle('is-active', hasActive && index === activeIndex);
-      item.classList.toggle('is-muted', hasActive && index !== activeIndex);
-    });
-    segments.forEach((seg, index) => {
-      seg.classList.toggle('is-muted', hasActive && index !== activeIndex);
-    });
-    chart.classList.toggle('is-hovered', hasActive);
-  };
-
-  const findSegmentIndex = event => {
-    const rect = chart.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    if (x < 0 || x > rect.width) return -1;
-    const percent = (x / rect.width) * 100;
-    return chartEntries.findIndex(entry =>
-      percent >= entry.start_percent &&
-      (percent < entry.end_percent || entry.end_percent === 100)
-    );
-  };
-
-  legendItems.forEach(item => {
-    const index = Number(item.dataset.legendIndex);
-    item.addEventListener('mouseenter', () => setHighlight(index));
-    item.addEventListener('mouseleave', () => setHighlight(-1));
-  });
-
-  segments.forEach(seg => {
-    const index = Number(seg.dataset.segmentIndex);
-    seg.addEventListener('mouseenter', () => setHighlight(index));
-    seg.addEventListener('mouseleave', () => setHighlight(-1));
-  });
-
-  chart.addEventListener('mousemove', event => {
-    const index = findSegmentIndex(event);
-    setHighlight(index);
-  });
-  chart.addEventListener('mouseleave', () => setHighlight(-1));
 }
 
 load();

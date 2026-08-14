@@ -131,6 +131,7 @@ def build_bundle(app_name: str, config: dict[str, object], icns: Path) -> Path:
     launcher = macos / "launcher"
     launcher.write_text(f"""#!/bin/bash
 set -u
+export PYTHONDONTWRITEBYTECODE=1
 PYTHON="{python_path}"
 APP_SOURCE="$(cd "$(dirname "$0")/../Resources/app" && pwd)"
 LOG_DIR="$HOME/.ableton_tracker"
@@ -148,7 +149,11 @@ def main() -> None:
     for app_name, config in APPS.items():
         icns = build_icon(app_name, str(config["accent"]))
         bundle = build_bundle(app_name, config, icns)
-        print(f"Built {bundle}")
+        subprocess.run(
+            ["codesign", "--force", "--deep", "--sign", "-", str(bundle)],
+            check=True,
+        )
+        print(f"Built and signed {bundle}")
 
 
 if __name__ == "__main__":

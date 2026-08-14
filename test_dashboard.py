@@ -1697,6 +1697,83 @@ class DashboardRolloverTests(unittest.TestCase):
 
         self.assertEqual(stats["summary"]["streak_days"], 2)
 
+    def test_production_run_requires_fifteen_minutes_and_keeps_midnight_grace(self):
+        today = date(2026, 4, 25)
+        result = dashboard.calculate_production_run(
+            {
+                "2026-04-21": 900.0,
+                "2026-04-22": 1200.0,
+                "2026-04-23": 899.0,
+                "2026-04-24": 900.0,
+                "2026-04-25": 450.0,
+            },
+            today,
+        )
+
+        self.assertEqual(result["current_days"], 1)
+        self.assertEqual(result["best_days"], 2)
+        self.assertEqual(result["qualifying_seconds"], 900)
+        self.assertEqual(result["today_seconds"], 450.0)
+        self.assertFalse(result["today_qualifies"])
+        self.assertEqual(result["today_progress_ratio"], 0.5)
+        self.assertEqual(result["remaining_seconds"], 450.0)
+        self.assertEqual(len(result["recent_days"]), 7)
+        self.assertEqual(result["recent_days"][-1]["state"], "partial")
+
+    def test_production_run_exact_threshold_advances_and_sets_record(self):
+        result = dashboard.calculate_production_run(
+            {
+                "2026-04-23": 900.0,
+                "2026-04-24": 901.0,
+                "2026-04-25": 900.0,
+            },
+            date(2026, 4, 25),
+        )
+
+        self.assertEqual(result["current_days"], 3)
+        self.assertEqual(result["best_days"], 3)
+        self.assertTrue(result["today_qualifies"])
+        self.assertEqual(result["today_progress_ratio"], 1.0)
+        self.assertEqual(result["remaining_seconds"], 0.0)
+
+    def test_production_run_empty_and_broken_history_are_neutral(self):
+        empty = dashboard.calculate_production_run({}, date(2026, 4, 25))
+        broken = dashboard.calculate_production_run(
+            {"2026-04-20": 900.0, "2026-04-22": 900.0, "2026-04-26": 900.0},
+            date(2026, 4, 25),
+        )
+
+        self.assertEqual(empty["current_days"], 0)
+        self.assertEqual(empty["best_days"], 0)
+        self.assertEqual(empty["remaining_seconds"], 900.0)
+        self.assertEqual(broken["current_days"], 0)
+        self.assertEqual(broken["best_days"], 1)
+
+    def test_cross_midnight_fragments_qualify_independently_for_production_run(self):
+        start_ts = datetime(2026, 4, 24, 23, 40).timestamp()
+        end_ts = datetime(2026, 4, 25, 0, 20).timestamp()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Boundary", start_ts, end_ts, end_ts, 1800.0),
+            )
+            conn.commit()
+
+        class FrozenDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 4, 25)
+
+        with patch.object(dashboard, "date", FrozenDate):
+            run = dashboard.get_stats()["summary"]["production_run"]
+
+        self.assertEqual(run["today_seconds"], 900.0)
+        self.assertTrue(run["today_qualifies"])
+        self.assertEqual(run["current_days"], 2)
+
     def test_today_reflection_stats_use_only_todays_allocated_time(self):
         late_start_ts = datetime(2026, 4, 24, 23, 50).timestamp()
         late_end_ts = datetime(2026, 4, 25, 0, 10).timestamp()
@@ -1778,6 +1855,59 @@ class DashboardRolloverTests(unittest.TestCase):
         self.assertEqual(may_stats["summary"]["month_seconds"], 5400.0)
         self.assertEqual(may_projects["Boundary Song"], 1800.0)
         self.assertEqual(may_projects["May Song"], 3600.0)
+
+    def test_monthly_campaign_ranks_previous_month_aliases_shares_and_live_project(self):
+        def ts(month, day, hour):
+            return datetime(2026, month, day, hour, 0).timestamp()
+
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                "INSERT INTO project_aliases (alias_name, canonical_name) VALUES (?, ?)",
+                ("Alpha Old", "Alpha"),
+            )
+            conn.executemany(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    ("Alpha Old", ts(4, 2, 10), ts(4, 2, 12), ts(4, 2, 12), 7200.0),
+                    ("Beta", ts(4, 3, 10), ts(4, 3, 11), ts(4, 3, 11), 3600.0),
+                    ("Alpha", ts(5, 2, 10), ts(5, 2, 11), ts(5, 2, 11), 3600.0),
+                    ("Alpha Old", ts(5, 3, 10), ts(5, 3, 11), ts(5, 3, 11), 3600.0),
+                    ("Beta", ts(5, 4, 10), ts(5, 4, 13), ts(5, 4, 13), 10800.0),
+                    ("Gamma", ts(5, 5, 10), ts(5, 5, 11), ts(5, 5, 11), 3600.0),
+                    ("Delta", ts(5, 6, 10), ts(5, 6, 11), ts(5, 6, 11), 3600.0),
+                    ("Beta", ts(5, 10, 10), ts(5, 10, 10), None, 60.0),
+                ],
+            )
+            conn.commit()
+
+        class FrozenDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 5, 10)
+
+        with patch.object(dashboard, "date", FrozenDate), patch.object(dashboard.time, "time", return_value=ts(5, 10, 10)):
+            stats = dashboard.get_stats("2026-05")
+
+        rows = {row["project_name"]: row for row in stats["projects"]}
+        self.assertNotIn("Alpha Old", rows)
+        self.assertEqual(rows["Alpha"]["month_seconds"], 7200.0)
+        self.assertEqual(rows["Alpha"]["previous_month_seconds"], 7200.0)
+        self.assertEqual(rows["Alpha"]["month_rank"], 2)
+        self.assertEqual(rows["Alpha"]["previous_month_rank"], 1)
+        self.assertEqual(rows["Alpha"]["rank_delta"], -1)
+        self.assertEqual(rows["Beta"]["month_rank"], 1)
+        self.assertEqual(rows["Beta"]["previous_month_rank"], 2)
+        self.assertEqual(rows["Beta"]["rank_delta"], 1)
+        self.assertTrue(rows["Beta"]["is_live_project"])
+        self.assertIsNone(rows["Gamma"]["previous_month_rank"])
+        self.assertIsNone(rows["Gamma"]["rank_delta"])
+        self.assertEqual(rows["Delta"]["month_rank"], 3)
+        self.assertEqual(rows["Gamma"]["month_rank"], 4)
+        campaign_rows = [row for row in rows.values() if row["month_rank"] is not None]
+        self.assertAlmostEqual(sum(row["month_share_percent"] for row in campaign_rows), 100.0)
 
 
 class ConsolidateSessionsTests(unittest.TestCase):
@@ -2197,6 +2327,43 @@ class MultiProjectMergeTests(unittest.TestCase):
         projects = dashboard.get_project_list_recent()
 
         self.assertEqual([item["project_name"] for item in projects], ["Newest", "Middle", "Old"])
+
+
+class DashboardGamificationTemplateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = (tracker.Path(__file__).parent / "templates" / "dashboard.html").read_text()
+        cls.render_source = cls.source.split("function render(data) {", 1)[1].split("function updateSessionStatus", 1)[0]
+
+    def test_weekly_quest_is_the_only_primary_weekly_mount(self):
+        self.assertEqual(self.render_source.count('id="weeklyGoalCard"'), 1)
+        self.assertIn("Weekly <em>Quest</em>", self.render_source)
+        self.assertNotIn("Today's <em>Required</em>", self.render_source)
+        self.assertNotIn("Weekly <em>Pace</em>", self.render_source)
+        self.assertIn("/api/weekly-target", self.source)
+        self.assertIn('id="weeklyTargetPrev"', self.render_source)
+        self.assertIn('id="weeklyTargetNext"', self.render_source)
+        self.assertIn("quest-checkpoint", self.source)
+
+    def test_production_run_contract_and_reduced_motion_are_present(self):
+        self.assertIn("summary.production_run", self.render_source)
+        self.assertIn("Production Run", self.render_source)
+        self.assertIn("data-detail=\"production-run\"", self.render_source)
+        self.assertNotIn("Current Streak", self.render_source)
+        self.assertIn("@media(prefers-reduced-motion:reduce)", self.source)
+        self.assertIn("run-node.is-newly-qualified", self.source)
+
+    def test_monthly_campaign_replaces_fragmented_month_surfaces(self):
+        self.assertIn("Monthly <em>Campaign</em>", self.render_source)
+        self.assertIn("project.month_rank", self.render_source)
+        self.assertIn("project.month_share_percent", self.render_source)
+        self.assertIn("project.is_live_project", self.render_source)
+        self.assertNotIn('data-detail="top-project"', self.render_source)
+        self.assertNotIn('id="categoryChart"', self.render_source)
+        self.assertNotIn('<h3 class="section-title">Projects</h3>', self.render_source)
+        recent = self.render_source.index("Recent <em>entries</em>")
+        load_older = self.render_source.index("Load older entries")
+        self.assertGreater(load_older, recent)
 
 
 class DashboardLaneOrderTests(unittest.TestCase):
