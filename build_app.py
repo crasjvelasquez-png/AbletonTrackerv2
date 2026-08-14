@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 APP_DIR = Path(__file__).resolve().parent
 DIST_DIR = APP_DIR / "dist"
 MASTER_SIZE = 1024
+ICON_INSET = 92  # Matches the 82% visual footprint used by Latency.app.
 SOURCE_FILES = (
     "dashboard.py",
     "dashboard_window.py",
@@ -47,7 +48,7 @@ def build_icon(app_name: str, accent: str) -> Path:
 
     image = Image.new("RGBA", (MASTER_SIZE, MASTER_SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    inset = 104
+    inset = ICON_INSET
     draw.rounded_rectangle(
         (inset, inset, MASTER_SIZE - inset, MASTER_SIZE - inset),
         radius=210,
