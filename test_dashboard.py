@@ -2362,6 +2362,8 @@ class DashboardLaneOrderTests(unittest.TestCase):
         source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
         self.assertIn('class="lane-drag-handle"', source)
         self.assertIn('tabindex="0" draggable="true"', source)
+        self.assertIn('const cleanupProjectDrag = () =>', source)
+        self.assertIn("board.addEventListener('dragend'", source)
 
     def test_pointer_and_keyboard_lane_reorders_complete_hidden_lane_order(self):
         source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
@@ -2382,6 +2384,16 @@ class DashboardLaneOrderTests(unittest.TestCase):
         self.assertIn("[data-category-trigger], [data-project-completion]", source)
         self.assertIn("/api/project-completion", source)
         self.assertIn("prefers-reduced-motion", source)
+
+
+class DashboardAppSplitTests(unittest.TestCase):
+    def test_template_exposes_only_tracker_and_planner_modes(self):
+        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
+        self.assertIn("const APP_MODE = new URLSearchParams", source)
+        self.assertIn("APP_MODE === 'planner' ? 'planner' : 'dashboard'", source)
+        self.assertNotIn('id="navSettings"', source)
+        self.assertNotIn('id="appSettings"', source)
+        self.assertNotIn('/static/js/settings.js', source)
 
 
 if __name__ == "__main__":

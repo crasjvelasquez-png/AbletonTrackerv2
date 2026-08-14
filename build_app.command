@@ -13,5 +13,10 @@ if ! python3 -c "import webview" 2>/dev/null; then
 fi
 
 python3 "$DIR/build_app.py"
+
+echo
+echo "Built standalone app bundles:"
+echo "  $DIR/dist/Tracker.app"
+echo "  $DIR/dist/Planner.app"
 echo ""
 read -rp "Press Enter to close..."

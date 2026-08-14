@@ -320,6 +320,7 @@ class DashboardProcessTests(unittest.TestCase):
         args = mock_popen.call_args[0][0]
         self.assertEqual(args[0], sys.executable)
         self.assertEqual(args[1], str(DASHBOARD_WINDOW_SCRIPT))
+        self.assertEqual(args[2], "tracker")
         self.assertEqual(mock_popen.call_args[1]["cwd"], APP_DIR)
 
 
@@ -589,7 +590,7 @@ class AbletonTrackerAppInitTests(_AppTestBase):
         app = AbletonTrackerApp()
         self.assertEqual(app.pause_item.key, "p")
         keyed_items = {item.title: item.key for item in app.menu if item and item.key}
-        self.assertEqual(keyed_items["Open Dashboard"], "d")
+        self.assertEqual(keyed_items["Open Tracker"], "d")
         self.assertEqual(keyed_items["Quit"], "q")
 
 

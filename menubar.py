@@ -178,7 +178,7 @@ class DashboardProcess:
     def open(self):
         if self.proc is None or self.proc.poll() is not None:
             self.proc = subprocess.Popen(
-                [sys.executable, str(DASHBOARD_WINDOW_SCRIPT)],
+                [sys.executable, str(DASHBOARD_WINDOW_SCRIPT), "tracker"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
@@ -232,7 +232,7 @@ class AbletonTrackerApp(rumps.App):
             self.week_item,
             self.streak_item,
             None,
-            rumps.MenuItem("Open Dashboard", callback=self.open_dashboard, key="d"),
+            rumps.MenuItem("Open Tracker", callback=self.open_dashboard, key="d"),
             self.pause_item,
             None,
             rumps.MenuItem("Quit", callback=self.quit_app, key="q"),
@@ -240,6 +240,8 @@ class AbletonTrackerApp(rumps.App):
 
         self.tracker_thread.start()
         self.dashboard.prewarm()
+        if os.environ.get("ABLETON_TRACKER_OPEN_WINDOW") == "1":
+            self.dashboard.open()
         self.refresh_timer = rumps.Timer(self._refresh, REFRESH_INTERVAL)
         self.refresh_timer.start()
         self._refresh(None)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Native desktop window for the Ableton Tracker dashboard."""
+"""Native desktop window for the Tracker or Planner surface."""
 
+import argparse
 import subprocess
 import sys
 import time
@@ -64,7 +65,7 @@ def start_dashboard_if_needed() -> subprocess.Popen | None:
     return proc
 
 
-def run_window() -> None:
+def run_window(app_mode: str = "tracker") -> None:
     server_proc = start_dashboard_if_needed()
 
     if not dashboard_ready(timeout=1.0):
@@ -76,10 +77,12 @@ def run_window() -> None:
         log("ERROR: pywebview is not installed. Run: python3 -m pip install --user pywebview")
         raise RuntimeError("pywebview is not installed") from exc
 
-    log("Opening embedded dashboard window")
+    app_name = "Planner" if app_mode == "planner" else "Tracker"
+    app_url = f"{DASHBOARD_URL}/?app={app_mode}#{'planner' if app_mode == 'planner' else 'dashboard'}"
+    log(f"Opening embedded {app_name} window")
     webview.create_window(
-        "Ableton Tracker",
-        DASHBOARD_URL,
+        app_name,
+        app_url,
         width=1280,
         height=860,
         min_size=(900, 650),
@@ -92,12 +95,15 @@ def run_window() -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("app_mode", nargs="?", choices=("tracker", "planner"), default="tracker")
+    args = parser.parse_args()
     try:
-        run_window()
+        run_window(args.app_mode)
         return 0
     except Exception as exc:
         log(f"ERROR: dashboard window failed: {exc}")
-        print(f"Ableton Tracker dashboard window failed: {exc}", file=sys.stderr)
+        print(f"{args.app_mode.title()} window failed: {exc}", file=sys.stderr)
         print(f"See log: {LOG_PATH}", file=sys.stderr)
         return 1
 
