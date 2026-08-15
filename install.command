@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install Ableton Tracker as a LaunchAgent that starts at login.
+# Build and open the standalone Tracker and Planner apps.
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -8,12 +8,11 @@ PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_ID.plist"
 LOG_DIR="$HOME/.ableton_tracker"
 PYTHON="$(command -v python3)"
 
-mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
+mkdir -p "$LOG_DIR"
 
 echo "Installing Ableton Tracker..."
 echo "  Python:    $PYTHON"
 echo "  App dir:   $DIR"
-echo "  LaunchAgent: $PLIST_PATH"
 echo ""
 
 # Ensure runtime packages are installed
@@ -27,45 +26,21 @@ if ! "$PYTHON" -c "import webview" 2>/dev/null; then
     "$PYTHON" -m pip install --user pywebview
 fi
 
-# Stop any old instance
+# Remove the pre-standalone LaunchAgent so it cannot create a second menu bar.
 launchctl unload "$PLIST_PATH" 2>/dev/null || true
-pkill -f "menubar.py" 2>/dev/null || true
+rm -f "$PLIST_PATH"
 # Clean up legacy background tracker started by start_tracker.command
 if [ -f "$LOG_DIR/tracker.pid" ]; then
     kill "$(cat "$LOG_DIR/tracker.pid")" 2>/dev/null || true
     rm -f "$LOG_DIR/tracker.pid"
 fi
 
-cat > "$PLIST_PATH" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>$PLIST_ID</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$PYTHON</string>
-        <string>$DIR/menubar.py</string>
-    </array>
-    <key>WorkingDirectory</key><string>$DIR</string>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>$LOG_DIR/menubar.log</string>
-    <key>StandardErrorPath</key><string>$LOG_DIR/menubar.log</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
-    </dict>
-</dict>
-</plist>
-EOF
+"$PYTHON" "$DIR/build_app.py"
+open "$DIR/dist/Tracker.app"
 
-launchctl load "$PLIST_PATH"
-
-echo "Installed. The ● icon should appear in your menu bar within a few seconds."
-echo "It will auto-start every time you log in."
+echo "Built Tracker.app and Planner.app. Tracker is now open."
 echo ""
-echo "Logs: $LOG_DIR/menubar.log"
-echo "Uninstall: run uninstall.command"
+echo "Apps: $DIR/dist"
+echo "Log:  $LOG_DIR/tracker.log"
 echo ""
 read -rp "Press Enter to close..."

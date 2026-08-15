@@ -62,8 +62,25 @@ from menubar import (
     TRACKER_WAKE_INTERVAL,
     APP_DIR,
     DASHBOARD_WINDOW_SCRIPT,
+    acquire_instance_lock,
 )
 import tracker
+
+
+class SingleInstanceTests(unittest.TestCase):
+    def test_second_lock_is_rejected_until_first_is_closed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = Path(tmpdir) / "tracker-app.lock"
+            first = acquire_instance_lock(lock_path)
+            self.assertIsNotNone(first)
+            try:
+                self.assertIsNone(acquire_instance_lock(lock_path))
+            finally:
+                first.close()
+
+            replacement = acquire_instance_lock(lock_path)
+            self.assertIsNotNone(replacement)
+            replacement.close()
 
 
 # ---------------------------------------------------------------------------

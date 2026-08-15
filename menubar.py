@@ -7,6 +7,7 @@ import signal
 import threading
 import subprocess
 import os
+import fcntl
 from datetime import date, datetime
 from pathlib import Path
 
@@ -39,6 +40,19 @@ REFRESH_INTERVAL = 5
 TRACKER_WAKE_INTERVAL = 5
 NOTIFICATION_CHECK_INTERVAL = 5 * 60
 NOTIFICATION_STATE_PATH = Path.home() / ".ableton_tracker" / "notification_state.json"
+INSTANCE_LOCK_PATH = Path.home() / ".ableton_tracker" / "tracker-app.lock"
+
+
+def acquire_instance_lock(path: Path = INSTANCE_LOCK_PATH):
+    """Hold an exclusive lock for the lifetime of the Tracker menu-bar app."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = path.open("a+")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    return lock_file
 
 
 def fmt_dur(seconds: float) -> str:
@@ -412,4 +426,8 @@ class AbletonTrackerApp(rumps.App):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+    instance_lock = acquire_instance_lock()
+    if instance_lock is None:
+        print("Tracker is already running; ignoring duplicate launch.")
+        sys.exit(0)
     AbletonTrackerApp().run()
