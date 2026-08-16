@@ -32,18 +32,17 @@ if [ -f "$PLIST_PATH" ]; then
     echo ""
     echo "Menu bar log:  $DATA_DIR/menubar.log"
 else
-    echo "Mode: standalone tracker.py"
+    echo "Mode: standalone Tracker.app / menu bar"
     if [ -f "$PID_FILE" ]; then
         PID="$(cat "$PID_FILE")"
         kill "$PID" 2>/dev/null || true
         rm -f "$PID_FILE"
     fi
-    pkill -f "tracker.py" 2>/dev/null || true
+    pkill -f "menubar.py" 2>/dev/null || true
     sleep 1
-    nohup "$PYTHON" "$DIR/tracker.py" >> "$TRACKER_LOG" 2>&1 &
-    PID=$!
-    echo "$PID" > "$PID_FILE"
-    echo "Relaunched tracker.py (PID $PID)."
+    "$PYTHON" "$DIR/build_app.py"
+    open -gj "$DIR/dist/Tracker.app"
+    echo "Relaunched Tracker.app menu bar."
     echo ""
     echo "Tracker log:   $TRACKER_LOG"
 fi

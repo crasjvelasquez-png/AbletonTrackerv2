@@ -26,7 +26,9 @@ if ! "$PYTHON" -c "import webview" 2>/dev/null; then
     "$PYTHON" -m pip install --user pywebview
 fi
 
-# Remove the pre-standalone LaunchAgent so it cannot create a second menu bar.
+# Replace the pre-standalone LaunchAgent with one that opens Tracker.app at login.
+# Using `open` keeps the app in its bundle context, which rumps needs to present
+# the status-bar menu reliably.
 launchctl unload "$PLIST_PATH" 2>/dev/null || true
 rm -f "$PLIST_PATH"
 # Clean up legacy background tracker started by start_tracker.command
@@ -36,9 +38,25 @@ if [ -f "$LOG_DIR/tracker.pid" ]; then
 fi
 
 "$PYTHON" "$DIR/build_app.py"
-open "$DIR/dist/Tracker.app"
 
-echo "Built Tracker.app and Planner.app. Tracker is now open."
+cat > "$PLIST_PATH" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>Label</key><string>$PLIST_ID</string>
+    <key>ProgramArguments</key><array>
+        <string>/usr/bin/open</string>
+        <string>-gj</string>
+        <string>$DIR/dist/Tracker.app</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+</dict></plist>
+EOF
+
+pkill -f "menubar.py" 2>/dev/null || true
+launchctl load "$PLIST_PATH"
+
+echo "Built Tracker.app and Planner.app. Tracker is now open and will start at login."
 echo ""
 echo "Apps: $DIR/dist"
 echo "Log:  $LOG_DIR/tracker.log"
