@@ -1536,12 +1536,13 @@ header{
 .streak-mini-labels span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:.02em}
 
 /* Tracker's game layer uses recorded time only: one run, one quest, one campaign. */
-.production-run-card{grid-column:1/-1;min-height:176px}
+.production-run-card{grid-column:1/-1;min-height:148px;display:grid;grid-template-columns:minmax(300px,.8fr) minmax(420px,1.2fr);align-items:center;gap:32px;padding-block:20px 16px}
 .production-run-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
 .production-run-rule{font-size:12px;color:var(--ink-4);font-weight:650;margin-top:5px}
 .run-record{text-align:right}.run-record strong{display:block;font-family:var(--font-display);font-size:20px;letter-spacing:-.03em}
 .run-record span{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-4)}
 .run-nodes,.quest-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:20px}
+.production-run-card .run-nodes{width:100%;margin-top:0}
 .run-node,.quest-day{display:grid;justify-items:center;gap:6px;min-width:0;color:var(--ink-4)}
 .run-node-dot,.quest-day-dot{width:18px;height:18px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink-4) 38%,transparent);background:transparent;transition:transform .24s cubic-bezier(.2,0,0,1),background-color .18s ease,border-color .18s ease}
 .run-node.is-qualified .run-node-dot,.run-node.is-completed .run-node-dot,.quest-day.is-logged .quest-day-dot{background:var(--accent);border-color:var(--accent)}
@@ -1575,7 +1576,7 @@ header{
 .campaign-project{min-width:0}.campaign-project-name{display:flex;align-items:center;gap:8px;font-weight:750;min-width:0}.campaign-project-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.campaign-live-dot{width:8px;height:8px;border-radius:50%;background:var(--live);flex:none}
 .campaign-meta{display:flex;align-items:center;gap:8px;margin-top:5px;color:var(--ink-4);font-size:11px;font-weight:650}.campaign-category-dot{width:7px;height:7px;border-radius:50%;flex:none}
 .campaign-values{text-align:right}.campaign-time{font-family:var(--font-display);font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.campaign-share{font-size:11px;color:var(--ink-4);margin-top:4px}.campaign-move{color:var(--ink-3)}.campaign-move.is-new{color:var(--accent)}
-@media(max-width:700px){.quest-summary{grid-template-columns:1fr 1fr}.quest-primary{grid-column:1/-1}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-summary{display:none}}
+@media(max-width:820px){.card.production-run-card{display:flex;align-items:stretch;min-height:auto;padding-block:20px;gap:0}.production-run-card .run-nodes{margin-top:16px}.quest-summary{grid-template-columns:1fr 1fr}.quest-primary{grid-column:1/-1}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-summary{display:none}}
 @media(prefers-reduced-motion:reduce){.run-node-dot,.quest-day-dot,.quest-track-fill,.quest-checkpoint,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
