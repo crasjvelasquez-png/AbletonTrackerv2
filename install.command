@@ -26,9 +26,8 @@ if ! "$PYTHON" -c "import webview" 2>/dev/null; then
     "$PYTHON" -m pip install --user pywebview
 fi
 
-# Replace the pre-standalone LaunchAgent with one that opens Tracker.app at login.
-# Using `open` keeps the app in its bundle context, which rumps needs to present
-# the status-bar menu reliably.
+# Open Tracker through LaunchServices so macOS gives it the bundle identity and
+# status-bar permissions. `-W` keeps the LaunchAgent alive until Tracker exits.
 launchctl unload "$PLIST_PATH" 2>/dev/null || true
 rm -f "$PLIST_PATH"
 # Clean up legacy background tracker started by start_tracker.command
@@ -46,6 +45,7 @@ cat > "$PLIST_PATH" <<EOF
     <key>Label</key><string>$PLIST_ID</string>
     <key>ProgramArguments</key><array>
         <string>/usr/bin/open</string>
+        <string>-W</string>
         <string>-gj</string>
         <string>$DIR/dist/Tracker.app</string>
     </array>

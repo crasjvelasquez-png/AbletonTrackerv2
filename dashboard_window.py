@@ -18,6 +18,34 @@ LOG_DIR = Path.home() / ".ableton_tracker"
 LOG_PATH = LOG_DIR / "dashboard.log"
 
 
+def configure_macos_app_icon(app_mode: str) -> bool:
+    """Use the bundle artwork instead of Python's default Dock icon."""
+    if sys.platform != "darwin":
+        return False
+
+    try:
+        from AppKit import NSApplication, NSImage
+    except ImportError:
+        log("AppKit unavailable; keeping the default application icon")
+        return False
+
+    app_name = "Planner" if app_mode == "planner" else "Tracker"
+    bundled_icon = APP_DIR.parent / "icon.icns"
+    source_icon = APP_DIR / "dist" / f"{app_name}.icns"
+    icon_path = bundled_icon if bundled_icon.exists() else source_icon
+    if not icon_path.exists():
+        log(f"Application icon not found: {icon_path}")
+        return False
+
+    icon = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
+    if icon is None:
+        log(f"Application icon could not be loaded: {icon_path}")
+        return False
+
+    NSApplication.sharedApplication().setApplicationIconImage_(icon)
+    return True
+
+
 def log(message: str) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -80,6 +108,7 @@ def run_window(app_mode: str = "tracker") -> None:
     app_name = "Planner" if app_mode == "planner" else "Tracker"
     app_url = f"{DASHBOARD_URL}/?app={app_mode}#{'planner' if app_mode == 'planner' else 'dashboard'}"
     log(f"Opening embedded {app_name} window")
+    configure_macos_app_icon(app_mode)
     webview.create_window(
         app_name,
         app_url,
