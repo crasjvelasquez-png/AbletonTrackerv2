@@ -26,8 +26,9 @@ if ! "$PYTHON" -c "import webview" 2>/dev/null; then
     "$PYTHON" -m pip install --user pywebview
 fi
 
-# Let launchd supervise Tracker's persistent bundle launcher directly. Using
-# /usr/bin/open here leaves launchd supervising a short-lived helper instead.
+# Have launchd run Tracker's persistent bundle launcher directly.  `/usr/bin/open`
+# can return successfully before LaunchServices has actually started an
+# LSUIElement app, which leaves the login job exited and no menu-bar tracker.
 launchctl unload "$PLIST_PATH" 2>/dev/null || true
 rm -f "$PLIST_PATH"
 # Clean up legacy background tracker started by start_tracker.command
@@ -45,14 +46,17 @@ cat > "$PLIST_PATH" <<EOF
     <key>Label</key><string>$PLIST_ID</string>
     <key>ProgramArguments</key><array>
         <string>$DIR/dist/Tracker.app/Contents/MacOS/launcher</string>
+        <string>--background</string>
     </array>
     <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>10</integer>
+    <key>StandardOutPath</key><string>$LOG_DIR/menubar.log</string>
+    <key>StandardErrorPath</key><string>$LOG_DIR/menubar.log</string>
 </dict></plist>
 EOF
 
 pkill -f "menubar.py" 2>/dev/null || true
-sleep 1
-pkill -9 -f "menubar.py" 2>/dev/null || true
 launchctl load "$PLIST_PATH"
 
 echo "Built Tracker.app and Planner.app. Tracker is now open and will start at login."

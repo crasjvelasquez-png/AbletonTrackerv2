@@ -1535,12 +1535,10 @@ header{
 .streak-mini-labels{display:flex;gap:4px;width:100%}
 .streak-mini-labels span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:.02em}
 
-/* Tracker's game layer uses recorded time only: one run, one quest, one campaign. */
-.production-run-card{grid-column:1/-1;min-height:148px;display:grid;grid-template-columns:minmax(300px,.8fr) minmax(420px,1.2fr);align-items:center;gap:32px;padding-block:20px 16px}
-.production-run-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+/* The overview follows the user's scan: weekly pace, streak, then project focus. */
+.production-run-card{min-height:0;display:grid;grid-template-columns:minmax(190px,.55fr) minmax(320px,1.45fr);align-items:center;gap:24px;padding:16px 20px;margin:10px 0 28px}
+.production-run-head{display:flex;align-items:center;gap:18px}
 .production-run-rule{font-size:12px;color:var(--ink-4);font-weight:650;margin-top:5px}
-.run-record{text-align:right}.run-record strong{display:block;font-family:var(--font-display);font-size:20px;letter-spacing:-.03em}
-.run-record span{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-4)}
 .run-nodes,.quest-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:20px}
 .production-run-card .run-nodes{width:100%;margin-top:0}
 .run-node,.quest-day{display:grid;justify-items:center;gap:6px;min-width:0;color:var(--ink-4)}
@@ -1552,32 +1550,32 @@ header{
 .run-node span,.quest-day span{font-size:10px;font-weight:750;text-transform:uppercase;white-space:nowrap}
 .production-run-card.is-advancing .card-value,.run-node.is-newly-qualified .run-node-dot{transform:scale(1.06)}
 
-.weekly-quest{margin-top:18px}.weekly-quest .chart-wrap{min-height:0}
+.weekly-quest{margin-top:18px;margin-bottom:0}.weekly-quest .chart-wrap{min-height:0}
 .quest-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .quest-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.quest-summary{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(110px,.5fr));gap:12px;margin-top:20px}
-.quest-primary,.quest-stat{border:1px solid var(--border);background:color-mix(in srgb,var(--control-bg) 72%,transparent);border-radius:18px;padding:16px}
-.quest-primary strong{display:block;font-family:var(--font-display);font-size:clamp(30px,4vw,46px);line-height:1;letter-spacing:-.045em;font-variant-numeric:tabular-nums}
-.quest-primary span,.quest-stat span{display:block;margin-top:7px;color:var(--ink-4);font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
-.quest-stat strong{display:block;font-family:var(--font-display);font-size:23px;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
-.quest-track{position:relative;height:12px;border-radius:999px;background:color-mix(in srgb,var(--ink-4) 15%,transparent);margin:22px 9px 0}
+.quest-summary{margin-top:20px}
+.quest-primary strong{display:block;font-family:var(--font-display);font-size:36px;line-height:1.08;letter-spacing:-.035em;font-variant-numeric:tabular-nums;text-wrap:balance}
+.quest-primary span{display:block;margin-top:7px;color:var(--ink-4);font-size:12px;font-weight:650}
+.quest-track{position:relative;height:12px;border-radius:999px;background:color-mix(in srgb,var(--ink-4) 15%,transparent);margin:18px 0 0}
 .quest-track-fill{height:100%;width:var(--quest-progress);max-width:100%;border-radius:inherit;background:var(--accent);transition:width .3s cubic-bezier(.2,0,0,1)}
-.quest-checkpoints{position:absolute;inset:-5px 0 auto;display:grid;grid-template-columns:repeat(4,1fr);transform:translateX(12.5%)}
-.quest-checkpoint{width:22px;height:22px;border-radius:50%;border:2px solid var(--surface);background:var(--border-strong);box-shadow:0 0 0 1px var(--border);transform:translateX(-50%);transition:transform .28s cubic-bezier(.2,0,0,1),background-color .18s ease}
-.quest-checkpoint.is-met{background:var(--accent)}.quest-checkpoint.is-crossed{transform:translateX(-50%) scale(1.16)}
-.quest-checkpoint-labels{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 0 0}.quest-checkpoint-labels span{text-align:right;font-size:10px;color:var(--ink-4);font-variant-numeric:tabular-nums}
 .quest-day strong{font-size:11px;font-variant-numeric:tabular-nums;color:var(--ink-3)}
 .quest-edit-row{display:flex;justify-content:flex-end;margin-top:16px}.quest-edit{display:grid;gap:10px;width:min(420px,100%)}.quest-edit[hidden]{display:none}.quest-edit-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.quest-edit .goal-presets{display:flex;gap:6px;flex:1}
 
-.campaign-head{align-items:flex-start}.campaign-summary{color:var(--ink-3);font-size:13px;font-weight:650;text-align:right}
+.campaign-head{align-items:center}.campaign-head-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}.campaign-summary{color:var(--ink-3);font-size:13px;font-weight:650;text-align:right}
 .campaign-list{display:grid}.campaign-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:14px;align-items:center;padding:15px 4px;border-top:1px solid var(--border);position:relative;transition:transform .22s cubic-bezier(.2,0,0,1),opacity .18s ease}
 .campaign-row:first-child{border-top:0}.campaign-row.is-live{padding-left:12px}.campaign-row.is-live::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:3px;background:var(--live)}
 .campaign-rank{font-family:var(--font-display);font-size:24px;font-weight:650;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .campaign-project{min-width:0}.campaign-project-name{display:flex;align-items:center;gap:8px;font-weight:750;min-width:0}.campaign-project-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.campaign-live-dot{width:8px;height:8px;border-radius:50%;background:var(--live);flex:none}
 .campaign-meta{display:flex;align-items:center;gap:8px;margin-top:5px;color:var(--ink-4);font-size:11px;font-weight:650}.campaign-category-dot{width:7px;height:7px;border-radius:50%;flex:none}
-.campaign-values{text-align:right}.campaign-time{font-family:var(--font-display);font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.campaign-share{font-size:11px;color:var(--ink-4);margin-top:4px}.campaign-move{color:var(--ink-3)}.campaign-move.is-new{color:var(--accent)}
-@media(max-width:820px){.card.production-run-card{display:flex;align-items:stretch;min-height:auto;padding-block:20px;gap:0}.production-run-card .run-nodes{margin-top:16px}.quest-summary{grid-template-columns:1fr 1fr}.quest-primary{grid-column:1/-1}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-summary{display:none}}
-@media(prefers-reduced-motion:reduce){.run-node-dot,.quest-day-dot,.quest-track-fill,.quest-checkpoint,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
+.campaign-values{text-align:right}.campaign-time{font-family:var(--font-display);font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.campaign-share{font-size:11px;color:var(--ink-4);margin-top:4px}
+.overview-disclosure{margin-top:14px;border-top:1px solid var(--border)}
+.overview-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 2px 2px;color:var(--ink-3);font-size:13px;font-weight:700;cursor:pointer;list-style:none}
+.overview-disclosure>summary::-webkit-details-marker{display:none}.overview-disclosure>summary::after{content:'+';font-size:18px;font-weight:500;color:var(--ink-4)}.overview-disclosure[open]>summary::after{content:'−'}
+.overview-disclosure>summary:hover,.overview-disclosure>summary:focus-visible{color:var(--ink)}.overview-disclosure>summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:6px}
+.overview-disclosure[open]>.campaign-list,.overview-disclosure[open]>.history-content{margin-top:10px}
+.history-card{padding-bottom:18px}.history-content>.table-scroll{margin-top:0}
+@media(max-width:820px){.card.production-run-card{display:flex;align-items:stretch;min-height:auto;padding:16px 18px}.production-run-card .run-nodes{margin-top:14px}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-head{align-items:flex-start}.campaign-head-actions{justify-content:flex-start}.campaign-summary{display:none}}
+@media(prefers-reduced-motion:reduce){.run-node-dot,.quest-day-dot,.quest-track-fill,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
   border:1px dashed var(--border);border-radius:16px;font-size:13px;
@@ -3569,6 +3567,47 @@ select.planner-goal-input{
 
 html[data-hide-heatmap="true"] #heatmapCard { display: none !important; }
 html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
+/* Folder browser: the Planner's single organization surface. */
+.finder-shell{display:grid;grid-template-columns:220px minmax(0,1fr);border:1px solid var(--border);border-radius:16px;background:var(--bg-card);min-height:600px}
+.finder-sidebar{padding:22px 12px;background:var(--surface-hover);border-right:1px solid var(--border);border-radius:16px 0 0 16px;min-width:0}
+.finder-sidebar-title{font-size:13px;font-weight:600;color:var(--ink-3);padding:0 12px 12px}
+.finder-tree-row{display:flex;padding-left:calc(var(--depth)*12px);min-width:0}
+.finder-tree-link{display:flex;align-items:center;gap:8px;min-width:0;width:100%;padding:8px;border:0;border-radius:6px;background:none;color:var(--ink-2);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.finder-tree-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.finder-root{margin-bottom:8px}
+.finder-tree-link:hover,.finder-disclosure:hover{background:var(--surface-hover)}
+.finder-tree-row.is-current,.finder-root.is-current{background:var(--accent-soft);border-radius:6px;color:var(--accent)}
+.finder-disclosure{width:20px;flex-shrink:0;background:none;border:0;cursor:pointer;color:var(--ink-3)}
+.finder-disclosure:disabled{visibility:hidden}.finder-disclosure svg{width:14px;fill:none;stroke:currentColor;stroke-width:1.5}
+.finder-icon{width:20px;height:20px;flex-shrink:0;color:var(--ink-3)}
+.finder-sidebar-new{margin:20px 8px 0}.finder-main{min-width:0;padding:24px}
+.finder-breadcrumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink-3);font-size:12px;margin-bottom:22px}
+.finder-breadcrumbs button,.finder-note button{border:0;background:none;color:var(--ink-2);font:inherit;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.finder-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.finder-heading h2{font-size:26px;letter-spacing:-.025em;overflow-wrap:anywhere}
+.finder-description{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch;margin:12px 0;color:var(--ink-2)}
+.finder-muted{font-size:13px;line-height:1.5;color:var(--ink-3);margin:10px 0}
+.finder-totals{display:flex;flex-wrap:wrap;gap:12px 24px;margin:18px 0 12px;font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums}.finder-totals strong{color:var(--ink);font-weight:600}
+.finder-statuses{display:flex;gap:8px 16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}.finder-statuses strong{margin-left:4px}
+.finder-overview{padding-bottom:24px}.finder-overview-details{margin-top:16px;font-size:13px}.finder-overview-details summary{cursor:pointer;color:var(--ink-2);padding:5px 0;font-weight:500}
+.finder-detail-row{display:flex;width:100%;justify-content:space-between;gap:16px;padding:10px 0;border:0;border-bottom:1px solid var(--border);background:none;color:var(--ink-2);font:inherit;text-align:left;cursor:pointer}
+.finder-overdue,.finder-error{color:var(--danger,#b42318)}.finder-note{padding:12px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.finder-note small,.finder-destination small{display:block;color:var(--ink-3);margin:4px 0}.finder-note p{max-width:72ch}
+.finder-main .today-mission{margin-bottom:24px;padding:18px;border-radius:12px;animation:none;box-shadow:none}.finder-main .today-mission:hover{transform:none;box-shadow:none}
+.finder-contents{border-top:1px solid var(--border);padding-top:18px}.finder-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.finder-toolbar input{flex:1;min-width:160px}.finder-toolbar select{width:auto}.finder-view-toggle{display:flex;gap:4px}.finder-view-toggle [aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.finder-selection{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;font-size:12px;color:var(--ink-3)}.finder-selection>span{margin-right:auto}.finder-selection .btn{font-size:11px}
+.finder-item{position:relative;display:grid;grid-template-columns:18px minmax(100px,1fr) minmax(65px,.45fr) minmax(65px,.45fr) auto auto;gap:12px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--border);font-size:12px;transition:background 120ms ease}
+.finder-item:hover{background:var(--surface-hover)}.finder-item.is-selected{background:var(--accent-soft)}.finder-item.is-dragging{opacity:.5}
+.finder-item-name{display:flex;gap:10px;align-items:center;min-width:0;border:0;background:none;font:inherit;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:left}.finder-item-name>span{overflow-wrap:anywhere;min-width:0}.finder-item-name small{display:block;color:var(--ink-3);font-size:11px;margin-top:4px;font-weight:400}
+.finder-item-status,.finder-item-time,.finder-item-date{color:var(--ink-3);font-variant-numeric:tabular-nums}.finder-item-menu summary{cursor:pointer;color:var(--ink-2);list-style:none;padding:4px}.finder-item-menu summary::-webkit-details-marker{display:none}
+.finder-item-menu[open]{z-index:3}.finder-item-menu>div{position:absolute;right:8px;top:calc(100% - 8px);min-width:180px;padding:6px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:8px}.finder-item-menu button{display:block;width:100%;padding:9px;text-align:left;background:none;border:0;font:inherit;color:var(--ink-2);cursor:pointer}.finder-item-menu button:hover{background:var(--surface-hover)}
+.finder-items.is-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}.is-cards .finder-item{grid-template-columns:18px 1fr auto;border:1px solid var(--border);border-radius:12px;padding:16px}.is-cards .finder-item-name{grid-column:2/4;min-height:36px;align-items:flex-start}.is-cards .finder-item-status,.is-cards .finder-item-time,.is-cards .finder-item-date{grid-column:2/4}.is-cards .finder-item-menu{grid-column:2/4;justify-self:end}
+.finder-empty{padding:40px 12px;text-align:center;grid-column:1/-1}.finder-empty h3{font-size:16px;font-weight:500}.finder-empty p{font-size:13px;color:var(--ink-3);margin:10px auto 18px;max-width:45ch;line-height:1.5}
+.finder-shell .is-drop-target{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.finder-dialog{margin:auto;width:min(560px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:24px;background:var(--surface-2);color:var(--ink);border:1px solid var(--border-strong);border-radius:16px;font-family:var(--font-body);box-shadow:0 20px 60px rgba(0,0,0,.18)}.finder-dialog::backdrop{background:rgba(0,0,0,.3)}
+.finder-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.finder-dialog-head h3{font-size:20px;letter-spacing:-.02em}.finder-field{display:grid;gap:8px;font-size:13px;margin:16px 0}.finder-destinations,.finder-merge-list{max-height:280px;overflow:auto;margin:12px 0}.finder-destination{display:flex;align-items:flex-start;gap:10px;padding:10px 6px;font-size:13px;overflow-wrap:anywhere;cursor:pointer}.finder-destination:hover{background:var(--surface-hover)}.finder-destination:has(input:disabled){opacity:.5;cursor:not-allowed}.finder-dialog-actions{display:flex;justify-content:space-between;gap:12px;margin-top:18px}.finder-merge-preview{font-size:13px;line-height:1.6;background:var(--surface-hover);padding:12px;margin:16px 0}.finder-error{font-size:13px;margin-top:12px}.finder-shell input,.finder-dialog input{accent-color:var(--accent);caret-color:var(--accent)}
+.finder-shell :focus-visible,.finder-dialog :focus-visible{outline:2px solid var(--accent);outline-offset:2px}.finder-shell button:disabled,.finder-dialog button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:1000px){.finder-shell{grid-template-columns:180px minmax(0,1fr)}.finder-main{padding:18px}.finder-item{grid-template-columns:18px minmax(100px,1fr) auto auto}.finder-item-time{grid-column:2}.finder-item-date{grid-column:3}.finder-item-menu{grid-column:4;grid-row:1/3}}
+@media(max-width:650px){.finder-shell{grid-template-columns:1fr}.finder-sidebar{border-right:0;border-bottom:1px solid var(--border);border-radius:16px 16px 0 0;max-height:210px;overflow:auto;padding:14px}.finder-main{padding:16px}.finder-heading h2{font-size:22px}.finder-toolbar input{flex-basis:100%}.finder-items.is-cards{grid-template-columns:1fr}.finder-item{gap:8px}.finder-detail-row{flex-wrap:wrap}.finder-selection .btn{padding:6px}.finder-sidebar-new{margin-top:10px}}
+@media(prefers-reduced-motion:reduce){.finder-item{transition:none}}
+
 </style>
 </head>
 <body>
@@ -3812,8 +3851,8 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
           <div class="project-planning-field"><label for="folderTypeInput">Type</label><select class="project-planning-input" id="folderTypeInput"></select></div>
           <div class="project-planning-field"><label for="folderPriorityInput">Priority</label><select class="project-planning-input" id="folderPriorityInput"><option value="">No priority</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></div>
           <div class="project-planning-field"><label for="folderDueInput">Due Date</label><input class="project-planning-input" id="folderDueInput" type="date"></div>
-          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderNoteInput">Global Notes</label><textarea class="notes-textarea" id="folderNoteInput" maxlength="3000" style="min-height:80px"></textarea></div>
-          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderProjectSearch">Projects</label><input class="project-planning-input" id="folderProjectSearch" type="search" placeholder="Search projects…"><div class="folder-members-list" id="folderMembersList"></div></div>
+          <div class="project-planning-field" style="grid-column:1/-1"><label for="folderNoteInput">Description</label><textarea class="notes-textarea" id="folderNoteInput" maxlength="3000" style="min-height:80px"></textarea></div>
+          <div class="project-planning-field" hidden style="grid-column:1/-1"><label for="folderProjectSearch">Projects</label><input class="project-planning-input" id="folderProjectSearch" type="search" placeholder="Search projects…"><div class="folder-members-list" id="folderMembersList"></div></div>
         </div>
       </form>
       <form class="task-form" id="folderTaskForm"><input class="task-input" id="folderTaskInput" maxlength="180" placeholder="Add a folder task"><input class="task-label-input" id="folderTaskLabelInput" maxlength="32" placeholder="Label (optional)"><label class="task-flag"><input id="folderTaskQuickInput" type="checkbox"> Quick</label><label class="task-flag"><input id="folderTaskWaitingInput" type="checkbox"> Waiting</label><button class="btn small" type="submit">Add</button></form>
@@ -3905,11 +3944,8 @@ const weeklyTargetState = {
   historyRequestToken: 0,
   historyRows: [],
   dailyRows: [],
-  lastRenderedWeek: null,
-  lastCheckpointIndex: null,
 };
 let productionRunRenderState = null;
-let campaignRenderState = { month: null, ranks: new Map() };
 
 function debounce(fn, wait = 120) {
   let timer = null;
@@ -4816,14 +4852,6 @@ function buildWeeklyTargetModel(target) {
     : progressSeconds;
   const requiredPerDaySeconds = hasGoal && remainingDays > 0 ? Math.ceil(shortfallSeconds / remainingDays) : 0;
   const status = weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSeconds, isPastWeek, isFutureWeek });
-  const checkpointRatios = [0.25, 0.5, 0.75, 1];
-  const checkpoints = checkpointRatios.map(ratio => ({
-    ratio,
-    seconds: hasGoal ? Math.round(goalHours * 3600 * ratio) : 0,
-    met: hasGoal && progressRatio >= ratio,
-  }));
-  const nextCheckpointIndex = checkpoints.findIndex(checkpoint => !checkpoint.met);
-  const nextCheckpoint = nextCheckpointIndex >= 0 ? checkpoints[nextCheckpointIndex] : null;
   return {
     weekStart,
     weekEnd,
@@ -4849,10 +4877,6 @@ function buildWeeklyTargetModel(target) {
     projectedSeconds,
     requiredPerDaySeconds,
     status,
-    checkpoints,
-    checkpointIndex: checkpoints.filter(checkpoint => checkpoint.met).length - 1,
-    nextCheckpoint,
-    nextCheckpointSeconds: nextCheckpoint ? Math.max(0, nextCheckpoint.seconds - progressSeconds) : 0,
   };
 }
 
@@ -5005,14 +5029,21 @@ function renderProductionRunDetail({ summary }) {
   const run = summary.production_run || {};
   const cur = run.current_days || 0;
   const best = run.best_days || 0;
+  const recordDistance = Math.max(0, best - cur);
+  const recordCopy = cur > 0 && cur >= best
+    ? 'You are at your personal record.'
+    : recordDistance > 0
+      ? `${recordDistance} day${recordDistance === 1 ? '' : 's'} to your record.`
+      : 'Your next qualifying day starts a new run.';
   const days = Array.isArray(run.recent_days) ? run.recent_days : [];
 
   return `
     <div class="detail-stack">
       <div class="detail-kpis" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
         <div class="detail-kpi"><span>Production Run</span><strong>Day ${cur}</strong></div>
-        <div class="detail-kpi"><span>Personal best</span><strong>${best} day${best !== 1 ? 's' : ''}</strong></div>
+        <div class="detail-kpi"><span>Personal record</span><strong>${best} day${best !== 1 ? 's' : ''}</strong></div>
       </div>
+      <div class="detail-section-title">${escapeHtml(recordCopy)}</div>
       <div class="detail-section-title">15 recorded minutes qualifies a local day</div>
       <div class="detail-list">${days.map(day => detailRow({title:longDailyTargetLabel(day.day),meta:day.qualifies?'Qualified':day.is_today&&day.seconds>0?'In progress':day.is_today?'Ready when you are':'No qualifying session',value:`${fmt.dur(day.seconds||0)} / 15m`,color:day.qualifies?'var(--accent)':'var(--ink-4)',pct:clamp((day.seconds||0)/(run.qualifying_seconds||900)*100,0,100)})).join('')}</div>
     </div>
@@ -6223,6 +6254,10 @@ function openProjectTasks(projectName) {
   const toggle = document.getElementById('taskToggleCompleted');
   const notesTextarea = document.getElementById('projectNotesTextarea');
   if (!modal || !projectName) return;
+  document.getElementById('plannerManageMergeButton')?.remove();
+  if ((latestDashboardData?.planner_aliases || []).some(a => a.canonical_name === projectName)) {
+    const mergeButton = document.createElement('button'); mergeButton.id = 'plannerManageMergeButton'; mergeButton.type = 'button'; mergeButton.className = 'btn small'; mergeButton.textContent = 'Manage merged projects'; mergeButton.onclick = () => plannerManageMerge(projectName); projectLabel.after(mergeButton);
+  }
 
   let isDirty = false;
   saveBtn.disabled = true;
@@ -7607,7 +7642,7 @@ function isTerminalProjectStatus(status) {
 async function confirmTerminalProjectMove(projectName, status) {
   return confirmDialog({
     title: `Move to <em>${escapeHtml(projectStatusLabel(status))}</em>?`,
-    body: `This removes <code>${escapeHtml(projectName)}</code> from the active Today and Project Board workflow until you move it back.`,
+    body: `This removes <code>${escapeHtml(projectName)}</code> from the active Today and Planner workflow until you move it back.`,
     confirmLabel: 'Move project',
   });
 }
@@ -7796,15 +7831,15 @@ document.getElementById('folderSaveBtn')?.addEventListener('click', async () => 
   try {
     const result = await postJson('/api/project-folders/save', { id: activeFolderModalId, name, status: document.getElementById('folderStatusInput').value, type: document.getElementById('folderTypeInput').value, priority: document.getElementById('folderPriorityInput').value, due_date: document.getElementById('folderDueInput').value, note: document.getElementById('folderNoteInput').value });
     const folderId = result.folder.id;
-    await postJson('/api/project-folders/members', { folder_id: folderId, projects: activeFolderMembers });
+
     closeFolderModal(); await load(); toast('Folder saved');
   } catch (error) { toast(error.message || 'Failed to save folder'); }
 });
 document.getElementById('folderDeleteBtn')?.addEventListener('click', async () => {
   if (!activeFolderModalId) return;
-  const ok = await confirmDialog({ title: 'Delete folder?', body: 'Projects will return to their existing lanes. No project or session data will be deleted.', confirmLabel: 'Delete folder' });
+  const ok = await confirmDialog({ title: 'Delete folder?', body: 'Projects and subfolders move to the parent location. Folder tasks are kept there. The folder description and settings will be removed; project files and sessions stay untouched.', confirmLabel: 'Delete folder' });
   if (!ok) return;
-  await postJson('/api/project-folders/delete', { folder_id: activeFolderModalId }); closeFolderModal(); await load();
+  try { await postJson('/api/project-folders/delete', { folder_id: activeFolderModalId }); closeFolderModal(); await load(); } catch (error) { toast(error.message || 'Could not delete folder'); }
 });
 document.getElementById('folderTaskForm')?.addEventListener('submit', async event => {
   event.preventDefault(); if (!activeFolderModalId) return toast('Save the folder before adding tasks');
@@ -7816,30 +7851,123 @@ document.getElementById('folderTaskForm')?.addEventListener('submit', async even
   input.value = ''; if (labelInput) labelInput.value = ''; if (quickInput) quickInput.checked = false; if (waitingInput) waitingInput.checked = false; refreshFolderTasks(activeFolderModalId); await load();
 });
 
+const plannerBrowser = {
+  folder: Number(localStorage.getItem('plannerFolder')) || null,
+  expanded: new Set(JSON.parse(localStorage.getItem('plannerExpanded') || '[]')),
+  view: localStorage.getItem('plannerView') === 'cards' ? 'cards' : 'list',
+  query: '', sort: 'name', selected: new Set(), anchor: null, dragging: null, busy: false,
+};
+const plannerFolderIcon = '<svg class="finder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/></svg>';
+const plannerProjectIcon = '<svg class="finder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z M14 3v5h4 M9 12v5m3-7v7m3-4v4"/></svg>';
+function plannerFolderPath(id, folders = latestDashboardData?.project_folders || []) {
+  const parts = []; const seen = new Set();
+  while (id != null && !seen.has(id)) {
+    seen.add(id); const folder = folders.find(f => f.id === id); if (!folder) break;
+    parts.unshift(folder); id = folder.parent_id;
+  }
+  return parts;
+}
+function plannerNavigate(id) {
+  plannerBrowser.folder = id; plannerBrowser.query = ''; plannerBrowser.selected.clear(); plannerBrowser.anchor = null;
+  plannerFolderPath(id).forEach(f => plannerBrowser.expanded.add(f.id));
+  localStorage.setItem('plannerFolder', id || '');
+  renderPlanner(latestDashboardData);
+}
+function plannerDialog(title, content) {
+  document.getElementById('finderDialog')?.close();
+  const prior = document.activeElement;
+  const dialog = document.createElement('dialog'); dialog.id = 'finderDialog'; dialog.className = 'finder-dialog';
+  dialog.setAttribute('aria-labelledby', 'finderDialogTitle');
+  dialog.innerHTML = `<form><div class="finder-dialog-head"><h3 id="finderDialogTitle">${escapeHtml(title)}</h3><button type="button" class="btn small" data-cancel aria-label="Close dialog">Close</button></div>${content}<p class="finder-error" role="alert"></p></form>`;
+  document.body.append(dialog);
+  dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+  dialog.addEventListener('close', () => { dialog.remove(); prior?.focus(); }, { once: true });
+  dialog.showModal(); return dialog;
+}
+function plannerSubmit(dialog, action) {
+  dialog.querySelector('form').onsubmit = async event => {
+    event.preventDefault(); const submit = dialog.querySelector('[type=submit]');
+    if (submit.disabled) return;
+    submit.disabled = true;
+    try { await action(); dialog.close(); }
+    catch (error) { dialog.querySelector('.finder-error').textContent = error.message || 'Could not save. Try again.'; }
+    finally { submit.disabled = false; }
+  };
+}
+function plannerNewFolder(parent = plannerBrowser.folder, onCreated = null) {
+  const dialog = plannerDialog('New folder', `<label class="finder-field">Folder name<input class="project-planning-input" name="name" maxlength="180" required autocomplete="off" placeholder="Untitled folder"></label><p class="finder-muted">In ${escapeHtml(['All projects', ...plannerFolderPath(parent).map(f => f.name)].join(' / '))}</p><button class="btn" type="submit">Create folder</button>`);
+  dialog.querySelector('input').focus();
+  plannerSubmit(dialog, async () => {
+    const result = await postJson('/api/project-folders/save', {name: dialog.querySelector('input').value.trim(), parent_id: parent});
+    await load(); plannerBrowser.expanded.add(parent); toast('Folder created');
+    if (onCreated) { dialog.close(); onCreated(result.folder.id); }
+    else plannerNavigate(result.folder.id);
+  });
+}
+function plannerSelectionPayload(keys) {
+  return { folders: keys.filter(k => k.startsWith('f:')).map(k => Number(k.slice(2))), projects: keys.filter(k => k.startsWith('p:')).map(k => k.slice(2)) };
+}
+function plannerValidDestination(keys, id) {
+  const selected = new Set(plannerSelectionPayload(keys).folders);
+  return !plannerFolderPath(id).some(f => selected.has(f.id));
+}
+async function plannerMove(keys, parent) {
+  if (plannerBrowser.busy) throw new Error('Wait for the current move to finish.');
+  plannerBrowser.busy = true;
+  try {
+    await postJson('/api/planner/move', { ...plannerSelectionPayload(keys), parent_id: parent });
+    plannerBrowser.selected.clear(); await load(); toast('Moved successfully');
+  } finally { plannerBrowser.busy = false; }
+}
+function plannerMoveDialog(keys, initial = plannerBrowser.folder) {
+  let destination = initial;
+  const folders = latestDashboardData.project_folders || [];
+  const options = [{id:null,name:'All projects'}, ...folders.slice().sort((a,b) => plannerFolderPath(a.id).map(f=>f.name).join('/').localeCompare(plannerFolderPath(b.id).map(f=>f.name).join('/')))];
+  const dialog = plannerDialog(`Move ${keys.length === 1 ? 'item' : `${keys.length} items`} to…`, `<div class="finder-destinations">${options.map(f => `<label class="finder-destination"><input type="radio" name="destination" value="${f.id || ''}" ${f.id === initial ? 'checked' : ''} ${plannerValidDestination(keys,f.id) ? '' : 'disabled'}>${plannerFolderIcon}<span>${escapeHtml(f.id ? plannerFolderPath(f.id).map(x=>x.name).join(' / ') : f.name)}</span></label>`).join('')}</div><div class="finder-dialog-actions"><button class="btn small" type="button" data-new-destination>New folder here</button><button class="btn" type="submit">Move here</button></div>`);
+  const update = () => { const selected = dialog.querySelector('input:checked:not(:disabled)'); destination = selected?.value ? Number(selected.value) : null; dialog.querySelector('[type=submit]').disabled = !selected; dialog.querySelector('[data-new-destination]').disabled = !selected; };
+  dialog.querySelectorAll('input').forEach(input => input.onchange = update); update();
+  dialog.querySelector('[data-new-destination]').onclick = () => { dialog.close(); plannerNewFolder(destination, id => plannerMoveDialog(keys,id)); };
+  plannerSubmit(dialog, () => plannerMove(keys,destination));
+}
+function plannerMergeDialog(names) {
+  const projects = latestDashboardData.projects || [];
+  const aliases = latestDashboardData.planner_aliases || [];
+  const sources = new Set(names); let target = names[0];
+  const dialog = plannerDialog('Merge projects', `<p class="finder-muted">Choose the projects to combine, then the name to keep. Their tracking history and tasks will appear together.</p><input class="project-planning-input" type="search" aria-label="Search projects to merge" placeholder="Search all projects…"><div class="finder-merge-list"></div><label class="finder-field">Keep this project<select class="project-planning-input" data-target></select></label><div class="finder-merge-preview" aria-live="polite"></div><button class="btn" type="submit">Merge projects</button>`);
+  const render = () => {
+    const query = dialog.querySelector('input[type=search]').value.toLowerCase();
+    dialog.querySelector('.finder-merge-list').innerHTML = projects.filter(p=>projectDisplayName(p).toLowerCase().includes(query)).map(p => `<label class="finder-destination"><input type="checkbox" value="${escapeHtml(p.project_name)}" ${sources.has(p.project_name)?'checked':''}>${escapeHtml(projectDisplayName(p))}</label>`).join('');
+    dialog.querySelectorAll('input[type=checkbox]').forEach(input=>input.onchange=()=>{if(input.checked)sources.add(input.value);else sources.delete(input.value);if(!sources.has(target))target=[...sources][0];render();});
+    dialog.querySelector('[data-target]').innerHTML = [...sources].map(name=>`<option value="${escapeHtml(name)}" ${name===target?'selected':''}>${escapeHtml(name)}</option>`).join('');
+    const seconds = projects.filter(p=>sources.has(p.project_name)).reduce((sum,p)=>sum+(p.total_seconds||0),0);
+    const folder = (latestDashboardData.project_folders||[]).find(f=>f.members.some(m=>m.project_name===target));
+    const groupedSource = [...sources].some(name=>name!==target && aliases.some(a=>a.canonical_name===name));
+    dialog.querySelector('.finder-merge-preview').textContent = `${sources.size} projects · ${fmt.dur(seconds)} total. Keeps ${target || 'the selected name'} in ${folder ? plannerFolderPath(folder.id).map(f=>f.name).join(' / ') : 'All projects'}. The main project keeps its status and description. You can separate projects later.${groupedSource ? ' Separate an existing merged group before using it as a source.' : ''}`;
+    dialog.querySelector('[type=submit]').disabled = sources.size < 2 || groupedSource;
+  };
+  dialog.querySelector('input[type=search]').oninput=render;
+  dialog.querySelector('[data-target]').onchange=event=>{target=event.target.value;render();};
+  plannerSubmit(dialog,async()=>{await postJson('/api/merge-projects',{canonical_name:target,aliases:[...sources].filter(n=>n!==target)});plannerBrowser.selected.clear();await load();toast('Projects merged');});
+  render();
+}
+function plannerManageMerge(name) {
+  const aliases = (latestDashboardData.planner_aliases||[]).filter(a=>a.canonical_name===name);
+  const dialog = plannerDialog('Manage merged projects', `<p class="finder-muted">Separate a version to restore its own project reference and history.</p>${aliases.map((a,i)=>`<label class="finder-destination"><input type="checkbox" value="${i}"><span><strong>${escapeHtml(a.alias_name)}</strong><small>${escapeHtml(projectStatusLabel(a.status||''))}</small><span class="finder-note">${escapeHtml(a.project_note||'No description')}</span></span></label>`).join('')}<button class="btn" type="submit" disabled>Separate selected projects</button>`);
+  dialog.querySelectorAll('input').forEach(input=>input.onchange=()=>dialog.querySelector('[type=submit]').disabled=!dialog.querySelector('input:checked'));
+  plannerSubmit(dialog,async()=>{const selected=[...dialog.querySelectorAll('input:checked')].map(i=>aliases[Number(i.value)].alias_name);await postJson('/api/unmerge-projects',{aliases:selected});await load();toast('Projects separated');});
+}
 function renderPlanner(data) {
-  const plannerEl = document.getElementById('appPlanner');
-  if (!plannerEl) return;
-  const projects = Array.isArray(data.projects) ? data.projects : [];
-  const folders = Array.isArray(data.project_folders) ? data.project_folders : [];
-  const plannerGoals = Array.isArray(data.planner_goals) ? data.planner_goals : [];
-  const activeProjects = plannerActiveProjects(projects);
-  const openTasks = plannerOpenTasks(projects);
-  const recentActive = activeProjects
-    .filter(project => {
-      const days = daysSinceTimestamp(project.last_seen);
-      return days != null && days <= 7;
-    })
-    .sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
-  const staleActive = activeProjects
-    .filter(project => {
-      const days = daysSinceTimestamp(project.last_seen);
-      return days == null || days >= 7;
-    })
-    .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
-  const deadlineProjects = plannerDeadlineProjects(projects);
+  const plannerEl = document.getElementById('appPlanner'); if (!plannerEl || !data) return;
+  const allFolders = data.project_folders || []; const allProjects = data.projects || [];
+  const current = allFolders.find(f=>f.id===plannerBrowser.folder);
+  if (!current) plannerBrowser.folder = null;
+  const id = plannerBrowser.folder;
+  const inScope = folderId => id === null || plannerFolderPath(folderId,allFolders).some(f=>f.id===id);
+  const memberLocation = new Map(allFolders.flatMap(f=>f.members.map(m=>[m.project_name,f.id])));
+  const projects = allProjects.filter(p=>inScope(memberLocation.get(p.project_name) ?? null));
+  const folders = allFolders.filter(f=>inScope(f.id));
   const todayMission = buildTodayMission(projects, folders);
   const todayMissionGroups = groupTodayMissionItems(todayMission.open);
-
   const renderMissionGroup = (group, index, isStart = false) => {
     const item = group.first;
     const due = todayMissionDueDisplay(item);
@@ -7877,228 +8005,74 @@ function renderPlanner(data) {
     return `<section class="planner-panel today-mission ${startGroup ? '' : 'is-clear'}"><div class="today-mission-head"><div class="today-mission-title">Today Queue</div><div class="today-progress" aria-label="${completed} of ${total} tasks complete"><strong data-today-progress-completed="${completed}">${completed} / ${total}</strong><span>complete</span></div></div>${missionBody}</section>`;
   };
 
-  const renderDeadlineRadar = () => {
-    if (deadlineProjects.length === 0) {
-      return '<div class="planner-empty">No client projects or deadlines yet.</div>';
-    }
-    return `<div class="planner-deadline-list">${deadlineProjects.map((project, index) => {
-      const dateValue = project.hard_deadline || project.due_date || '';
-      const label = projectDeadlineLabel(project) || (project.type === 'client' ? 'Client project' : 'Deadline');
-      const reasons = [
-        { label, className: deadlinePillClass(project.deadline_state) },
-        ...(project.priority ? [{ label: `${projectPriorityLabel(project.priority)} priority`, className: 'is-priority' }] : []),
-        ...projectDeadlineReasons(project),
-      ];
-      return `
-        <div class="planner-deadline-row">
-          <div class="planner-row-main">
-            <div class="planner-row-title">${projectBadge(project, index)}</div>
-            <div class="planner-row-meta">${escapeHtml(projectTypeLabel(project.type) || 'No type')} · ${escapeHtml(projectStatusLabel(project.status))} · ${escapeHtml(lastWorkedLabel(project))}</div>
-            ${plannerReasonPills(reasons)}
-          </div>
-          <div class="planner-deadline-date">
-            <span>${project.hard_deadline ? 'Hard' : project.due_date ? 'Due' : 'Date'}</span>
-            <strong>${escapeHtml(compactDateLabel(dateValue))}</strong>
-            ${projectTaskButton(project)}
-          </div>
-        </div>
-      `;
-    }).join('')}</div>`;
-  };
 
-  const renderBoardProject = (project, index) => {
-    if (project.is_folder) {
-      return `<div class="planner-board-project is-folder" draggable="${boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-folder="${project.id}" data-folder-id="${project.id}" data-current-status="${escapeHtml(project.status || '')}"><div class="board-card-header"><div class="board-card-title-wrap"><span class="folder-card-icon"></span><span class="board-card-title">${escapeHtml(project.name)}</span></div><div class="board-card-meta"><div class="board-card-meta-left"><span>${project.member_count} project${project.member_count === 1 ? '' : 's'}</span>${project.due_date ? `<span class="board-card-due">${escapeHtml(projectDueDateText(project))}</span>` : ''}</div></div></div></div>`;
-    }
-    const encodedProject = encodeURIComponent(project.project_name || '');
-    const dueClass = projectDuePillClass(project);
-    const terminalClass = project.deadline_state === 'overdue' || projectDueDelta(project) < 0
-      ? 'is-overdue'
-      : dueClass === 'is-due-soon' ? 'is-due-soon' : '';
-    const metaBits = [
-      project.due_date ? `<span class="board-card-due" title="Due date">${escapeHtml(projectDueDateText(project))}</span>` : '',
-      categoryTag(project),
-    ].filter(Boolean);
-    const metaHtml = metaBits.length
-      ? `<div class="board-card-meta"><div class="board-card-meta-left">${metaBits.join('')}</div></div>`
-      : '';
-
-    return `
-      <div class="planner-board-project ${terminalClass} ${project.status === 'finished' ? 'is-completed' : ''}" draggable="${project.status === 'finished' || boardSearchQuery || boardTypeFilter ? 'false' : 'true'}" data-open-project="${encodedProject}" data-project-name="${encodedProject}" data-current-status="${project.status || ''}">
-        <div class="board-card-header">
-          <div class="board-card-title-wrap">
-            <button type="button" class="project-completion-check" data-project-completion="${encodedProject}" aria-label="${project.status === 'finished' ? 'Reopen' : 'Complete'} ${escapeHtml(projectDisplayName(project))}" aria-pressed="${project.status === 'finished' ? 'true' : 'false'}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.5"/></svg>
-            </button>
-            <span class="board-card-title" title="${escapeHtml(project.project_name || '')}">${escapeHtml(projectDisplayName(project))}</span>
-          </div>
-          ${metaHtml}
-        </div>
-      </div>
-    `;
-  };
-
-  const collapsedColumns = (() => {
-    try {
-      const stored = localStorage.getItem('boardCollapsedColumns');
-      return stored ? JSON.parse(stored) : [];
-    } catch(e) {
-      return [];
-    }
-  })();
-  const hiddenColumns = (() => {
-    try {
-      const stored = localStorage.getItem('boardHiddenColumns');
-      return stored ? JSON.parse(stored) : ['paused', 'abandoned'];
-    } catch(e) {
-      return ['paused', 'abandoned'];
-    }
-  })();
-
-  const renderBoardColumn = ({ value, label, projects: groupProjects }) => {
-    const isCollapsed = collapsedColumns.includes(value);
-    const canHide = isTerminalProjectStatus(value);
-    
-    let emptyHtml = '';
-    if (value === '') {
-      emptyHtml = '<div class="board-empty-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>Drag projects here or set status</div>';
-    } else if (value === 'finishing' || value === 'final_touches') {
-      emptyHtml = '<div class="board-empty-hint">Move projects here when they are close to done</div>';
-    } else {
-      emptyHtml = '<div class="board-empty-hint">No projects</div>';
-    }
-
-    return `
-      <div class="planner-board-column ${isCollapsed ? 'is-collapsed' : ''}" data-planner-status="${value}" style="--status-color:${LANE_HEADER_COLORS[value] || DEFAULT_LANE_HEADER_COLORS[value] || '#8e8e93'}">
-        <div class="planner-board-head">
-          <button type="button" class="lane-drag-handle" data-lane-drag="${escapeHtml(value)}" aria-label="Drag ${escapeHtml(label)} lane to reorder" title="Drag to reorder lane" tabindex="0" draggable="true">
-            <svg viewBox="0 0 10 16" fill="currentColor"><circle cx="3" cy="1.5" r="1.5"/><circle cx="7" cy="1.5" r="1.5"/><circle cx="3" cy="6.5" r="1.5"/><circle cx="7" cy="6.5" r="1.5"/><circle cx="3" cy="11.5" r="1.5"/><circle cx="7" cy="11.5" r="1.5"/></svg>
-          </button>
-          <span>${escapeHtml(label)}</span>
-          <div>
-            <span class="planner-board-count">${groupProjects.length}</span>
-            ${canHide ? `
-              <button type="button" class="board-column-toggle" data-hide-column="${value}" aria-label="Hide ${escapeHtml(label)} lane">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.6 10.6A2 2 0 0 0 13.4 13.4"/><path d="M9.9 4.2A11.3 11.3 0 0 1 12 4c5 0 9 4.5 10 8a12.8 12.8 0 0 1-2.1 3.7"/><path d="M6.2 6.2A12.9 12.9 0 0 0 2 12c1 3.5 5 8 10 8 1.5 0 2.9-.4 4.1-1"/></svg>
-              </button>
-            ` : ''}
-            <button type="button" class="board-column-toggle" data-toggle-column="${value}" aria-label="Toggle column">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="planner-board-column-content">
-          ${groupProjects.length ? groupProjects.map(renderBoardProject).join('') : emptyHtml}
-        </div>
-      </div>
-    `;
-  };
-
-  const boardMatches = p => {
-    if (boardSearchQuery && !`${projectDisplayName(p)} ${p.project_name || ''}`.toLowerCase().includes(boardSearchQuery.toLowerCase())) return false;
-    if (boardTypeFilter && p.type !== boardTypeFilter) return false;
-    return true;
-  };
-  const folderedProjects = new Set(folders.flatMap(folder => (folder.members || []).map(member => member.project_name)));
-  const completedProjects = projects.filter(project => (project.status || '') === 'finished').filter(boardMatches);
-  let boardProjects = projects.filter(project => (project.status || '') !== 'finished' && !folderedProjects.has(project.project_name)).concat(folders).filter(boardMatches);
-
-  boardProjects.sort((a, b) => {
-    const aOrder = Number(a.board_order || 0);
-    const bOrder = Number(b.board_order || 0);
-    if (aOrder && bOrder && aOrder !== bOrder) return aOrder - bOrder;
-    if (aOrder !== bOrder) return aOrder ? -1 : 1;
-    return (b.last_seen || 0) - (a.last_seen || 0);
+  const path = plannerFolderPath(id,allFolders);
+  const sortedFolders = parent => allFolders.filter(f=>(f.parent_id??null)===parent).sort((a,b)=>a.name.localeCompare(b.name));
+  const tree = (parent, depth=0) => sortedFolders(parent).map(f=>{
+    const children = sortedFolders(f.id).length; const expanded=plannerBrowser.expanded.has(f.id);
+    return `<div class="finder-tree-row ${f.id===id?'is-current':''}" style="--depth:${depth}"><button class="finder-disclosure" data-expand="${f.id}" ${children?'':'disabled'} aria-label="${expanded?'Collapse':'Expand'} ${escapeHtml(f.name)}" aria-expanded="${expanded}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${expanded?'m4 6 4 4 4-4':'m6 4 4 4-4 4'}"/></svg></button><button class="finder-tree-link" data-nav="${f.id}" data-drop="${f.id}" ${f.id===id?'aria-current="location"':''}>${plannerFolderIcon}<span>${escapeHtml(f.name)}</span></button></div>${children&&expanded?tree(f.id,depth+1):''}`;
+  }).join('');
+  const query = plannerBrowser.query.toLowerCase().trim();
+  let items = [
+    ...allFolders.filter(f=>query ? f.id!==id && inScope(f.id) : (f.parent_id??null)===id).map(f=>({key:`f:${f.id}`,name:f.name,folder:f,seconds:0,status:f.status,due:f.hard_deadline||f.due_date||'',parent:f.parent_id})),
+    ...allProjects.filter(p=>query ? inScope(memberLocation.get(p.project_name)??null) : (memberLocation.get(p.project_name)??null)===id).map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),project:p,seconds:p.total_seconds||0,status:p.status,due:p.hard_deadline||p.due_date||'',parent:memberLocation.get(p.project_name)??null})),
+  ].filter(item=>!query || `${item.name} ${item.project?.project_name||''}`.toLowerCase().includes(query));
+  items.sort((a,b)=>Number(!!b.folder)-Number(!!a.folder) || (plannerBrowser.sort==='time'?b.seconds-a.seconds:plannerBrowser.sort==='status'?(a.status||'').localeCompare(b.status||''):0) || a.name.localeCompare(b.name));
+  const validKeys=new Set(items.map(i=>i.key)); plannerBrowser.selected=new Set([...plannerBrowser.selected].filter(k=>validKeys.has(k)));
+  const statuses = new Map(); projects.forEach(p=>statuses.set(p.status||'',(statuses.get(p.status||'')||0)+1));
+  const taskOwners=[...projects.map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),tasks:p.project_tasks||[]})),...folders.map(f=>({key:`f:${f.id}`,name:f.name,tasks:f.project_tasks||[]}))];
+  if(id===null)taskOwners.push({key:'root',name:'All projects',tasks:data.planner_root_tasks||[]});
+  const tasks=taskOwners.flatMap(o=>o.tasks.map(t=>({...t,owner:o})));
+  const done=tasks.filter(t=>t.status==='done').length;
+  const dates=[...projects.map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),date:p.hard_deadline||p.due_date})),...folders.map(f=>({key:`f:${f.id}`,name:f.name,date:f.hard_deadline||f.due_date})),...tasks.filter(t=>t.status!=='done').map(t=>({key:t.owner.key,name:`${t.owner.name} · ${t.title}`,date:t.due_date}))].filter(x=>x.date).sort((a,b)=>a.date.localeCompare(b.date));
+  const notes=[...projects.filter(p=>p.project_note).map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),note:p.project_note,path:memberLocation.get(p.project_name)})),...folders.filter(f=>f.note).map(f=>({key:`f:${f.id}`,name:f.name,note:f.note,path:f.parent_id})),...(data.planner_aliases||[]).filter(a=>a.project_note&&projects.some(p=>p.project_name===a.canonical_name)).map(a=>({key:`p:${a.canonical_name}`,name:`${a.alias_name} (merged into ${a.canonical_name})`,note:a.project_note,path:memberLocation.get(a.canonical_name)}))];
+  plannerEl.innerHTML=`<div class="finder-shell"><aside class="finder-sidebar" aria-label="Project folders"><div class="finder-sidebar-title">Folders</div><button class="finder-tree-link finder-root ${id===null?'is-current':''}" data-nav="" data-drop="" ${id===null?'aria-current="location"':''}>${plannerFolderIcon}All projects</button>${tree(null)}<button class="btn small finder-sidebar-new" data-new>New folder</button></aside><div class="finder-main"><nav class="finder-breadcrumbs" aria-label="Folder path"><button data-nav="" data-drop="">All projects</button>${path.map(f=>`<span>/</span><button data-nav="${f.id}" data-drop="${f.id}">${escapeHtml(f.name)}</button>`).join('')}</nav><section class="finder-overview"><div class="finder-heading"><h2>${escapeHtml(current?.name||'All projects')}</h2>${current?'<button class="btn small" data-edit-current>Edit folder</button>':''}</div>${current?.note?`<p class="finder-description">${escapeHtml(current.note)}</p>`:''}${current?`<p class="finder-muted">${escapeHtml([projectStatusLabel(current.status||''),projectTypeLabel(current.type||''),current.priority,current.due_date?`Due ${current.due_date}`:''].filter(Boolean).join(' · '))}</p>`:''}<div class="finder-totals"><span><strong>${projects.length}</strong> projects</span><span><strong>${fmt.dur(projects.reduce((sum,p)=>sum+(p.total_seconds||0),0))}</strong> tracked</span><span><strong>${tasks.length-done}</strong> open tasks</span><span><strong>${done}</strong> completed tasks</span></div><div class="finder-statuses">${[...statuses].map(([status,count])=>`<span>${escapeHtml(projectStatusLabel(status))} <strong>${count}</strong></span>`).join('')}</div>${dates.length?`<details class="finder-overview-details"><summary>Deadlines · ${dates.length}</summary>${dates.map(d=>`<button data-owner="${escapeHtml(d.key)}" class="finder-detail-row"><span>${escapeHtml(d.name)}</span><span class="${d.date<localDateKey(new Date())?'finder-overdue':''}">${escapeHtml(d.date)}${d.date<localDateKey(new Date())?' · overdue':''}</span></button>`).join('')}</details>`:''}${notes.length?`<details class="finder-overview-details"><summary>Notes and descriptions · ${notes.length}</summary>${notes.map(n=>`<article class="finder-note"><button data-owner="${escapeHtml(n.key)}">${escapeHtml(n.name)}</button><small>${escapeHtml(['All projects',...plannerFolderPath(n.path).map(f=>f.name)].join(' / '))}</small><p>${escapeHtml(n.note)}</p></article>`).join('')}</details>`:''}</section>${todayMission.open.length||todayMission.completed.length?renderTodayMission():''}<section class="finder-contents" aria-label="Folder contents"><div class="finder-toolbar"><input id="finderSearch" class="project-planning-input" type="search" aria-label="Search this folder and subfolders" placeholder="Search this folder…" value="${escapeHtml(plannerBrowser.query)}"><button class="btn small" data-new>New folder</button><select id="finderSort" class="project-planning-input" aria-label="Sort contents">${[['name','Name'],['time','Tracked time'],['status','Status']].map(([v,l])=>`<option value="${v}" ${plannerBrowser.sort===v?'selected':''}>${l}</option>`).join('')}</select><div class="finder-view-toggle" role="group" aria-label="View"><button class="btn small" data-view="list" aria-pressed="${plannerBrowser.view==='list'}">List</button><button class="btn small" data-view="cards" aria-pressed="${plannerBrowser.view==='cards'}">Cards</button></div></div><div class="finder-selection" aria-live="polite"><span>${plannerBrowser.selected.size?`${plannerBrowser.selected.size} selected`:`${items.length} items`}</span><button class="btn small" data-bulk-move ${plannerBrowser.selected.size?'':'disabled'}>Move To…</button><button class="btn small" data-bulk-merge ${plannerBrowser.selected.size>=2&&[...plannerBrowser.selected].every(k=>k.startsWith('p:'))?'':'disabled'}>Merge projects</button><button class="btn small" data-clear ${plannerBrowser.selected.size?'':'disabled'}>Clear</button></div><div class="finder-items ${plannerBrowser.view==='cards'?'is-cards':''}">${items.length?items.map(item=>`<article class="finder-item ${plannerBrowser.selected.has(item.key)?'is-selected':''}" data-key="${escapeHtml(item.key)}" draggable="true" ${item.folder?`data-drop="${item.folder.id}"`:''}><input class="finder-select" type="checkbox" aria-label="Select ${escapeHtml(item.name)}" ${plannerBrowser.selected.has(item.key)?'checked':''}><button class="finder-item-name" data-open="${escapeHtml(item.key)}">${item.folder?plannerFolderIcon:plannerProjectIcon}<span>${escapeHtml(item.name)}${query?`<small>${escapeHtml(['All projects',...plannerFolderPath(item.parent).map(f=>f.name)].join(' / '))}</small>`:''}</span></button><span class="finder-item-status">${escapeHtml(projectStatusLabel(item.status||''))}</span><span class="finder-item-time">${item.folder?`${allFolders.filter(f=>f.parent_id===item.folder.id).length} folders · ${allProjects.filter(p=>memberLocation.get(p.project_name)===item.folder.id).length} projects`:fmt.dur(item.seconds)}</span><span class="finder-item-date">${escapeHtml(item.due||'')}</span><details class="finder-item-menu"><summary aria-label="Actions for ${escapeHtml(item.name)}">Actions</summary><div><button data-move="${escapeHtml(item.key)}">Move To…</button>${item.folder?`<button data-edit="${item.folder.id}">Edit folder</button><button data-new-in="${item.folder.id}">New subfolder</button><button data-delete="${item.folder.id}">Delete folder</button>`:`<button data-merge="${escapeHtml(item.project.project_name)}">Merge with…</button>${(data.planner_aliases||[]).some(a=>a.canonical_name===item.project.project_name)?`<button data-manage="${escapeHtml(item.project.project_name)}">Manage merged projects</button>`:''}`}</div></details></article>`).join(''):`<div class="finder-empty"><h3>${query?'No matches in this folder':'This folder is ready for your projects'}</h3><p>${query?'Try another project or folder name.':'Create a folder here, or use Move To on any project to bring it here.'}</p>${query?'<button class="btn small" data-reset-search>Clear search</button>':'<button class="btn small" data-new>Create a folder</button>'}</div>`}</div></section></div></div>`;
+  const openOwner=key=>{if(key.startsWith('f:'))openFolderModal(allFolders.find(f=>f.id===Number(key.slice(2))));else if(key==='root')openProjectTasks('__planner_root__');else openProjectTasks(key.slice(2));};
+  plannerEl.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>plannerNavigate(b.dataset.nav?Number(b.dataset.nav):null));
+  plannerEl.querySelectorAll('[data-expand]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.expand);if(plannerBrowser.expanded.has(id))plannerBrowser.expanded.delete(id);else plannerBrowser.expanded.add(id);localStorage.setItem('plannerExpanded',JSON.stringify([...plannerBrowser.expanded]));renderPlanner(data);});
+  plannerEl.querySelectorAll('[data-new]').forEach(b=>b.onclick=()=>plannerNewFolder());
+  plannerEl.querySelectorAll('[data-new-in]').forEach(b=>b.onclick=()=>plannerNewFolder(Number(b.dataset.newIn)));
+  plannerEl.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{plannerBrowser.view=b.dataset.view;localStorage.setItem('plannerView',plannerBrowser.view);renderPlanner(data);});
+  plannerEl.querySelectorAll('[data-owner]').forEach(b=>b.onclick=()=>openOwner(b.dataset.owner));
+  plannerEl.querySelectorAll('[data-open]').forEach(b=>b.onclick=event=>{if(event.metaKey||event.ctrlKey||event.shiftKey){selectItem(b.closest('[data-key]').dataset.key,event);return;}const key=b.dataset.open;if(key.startsWith('f:'))plannerNavigate(Number(key.slice(2)));else openOwner(key);});
+  plannerEl.querySelector('[data-edit-current]')?.addEventListener('click',()=>openFolderModal(current));
+  plannerEl.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openFolderModal(allFolders.find(f=>f.id===Number(b.dataset.edit))));
+  plannerEl.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>plannerMoveDialog([b.dataset.move]));
+  plannerEl.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>plannerMergeDialog([b.dataset.merge]));
+  plannerEl.querySelectorAll('[data-manage]').forEach(b=>b.onclick=()=>plannerManageMerge(b.dataset.manage));
+  plannerEl.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
+    const folder=allFolders.find(f=>f.id===Number(b.dataset.delete));
+    const ok=await confirmDialog({title:`Delete ${folder.name}?`,body:'Its projects and subfolders move to the parent location. Folder tasks are kept there. The folder description and settings will be removed; project files and sessions stay untouched.',confirmLabel:'Delete folder'});
+    if(ok)try{await postJson('/api/project-folders/delete',{folder_id:folder.id});await load();toast('Folder deleted');}catch(e){toast(e.message);}
   });
-
-  const statusLabelMap = Object.fromEntries(PROJECT_STATUS_OPTIONS.filter(([v]) => v || true).map(([v, l]) => [v, l]));
-  const unsortedProjects = boardProjects.filter(project => !(project.status || ''));
-  const laneOrder = Array.isArray(data.project_board_lane_order) && data.project_board_lane_order.length > 0
-    ? data.project_board_lane_order
-    : ['', ...PROJECT_STATUS_OPTIONS.filter(([v]) => v).map(([v]) => v)];
-
-  const orderedColumns = [];
-  for (const status of laneOrder) {
-    if (status === '') {
-      orderedColumns.push({ value: '', label: 'Unsorted', projects: unsortedProjects });
-    } else if (status !== 'finished' && !hiddenColumns.includes(status) && statusLabelMap[status]) {
-      orderedColumns.push({
-        value: status,
-        label: statusLabelMap[status],
-        projects: boardProjects.filter(project => (project.status || '') === status),
-      });
-    }
-  }
-  const hiddenStatusOptions = PROJECT_STATUS_OPTIONS.filter(([value]) => value !== 'finished' && hiddenColumns.includes(value));
-  completedProjects.sort((a, b) => {
-    const aCompleted = Number(a.completed_at || 0);
-    const bCompleted = Number(b.completed_at || 0);
-    if (aCompleted && bCompleted && aCompleted !== bCompleted) return bCompleted - aCompleted;
-    if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
-    return Number(a.board_order || 0) - Number(b.board_order || 0);
+  const search=plannerEl.querySelector('#finderSearch');search.oninput=()=>{const position=search.selectionStart;plannerBrowser.query=search.value;renderPlanner(data);const replacement=plannerEl.querySelector('#finderSearch');replacement.focus();try{replacement.setSelectionRange(position,position);}catch(e){}};
+  plannerEl.querySelector('[data-reset-search]')?.addEventListener('click',()=>{plannerBrowser.query='';renderPlanner(data);});
+  plannerEl.querySelector('#finderSort').onchange=event=>{plannerBrowser.sort=event.target.value;renderPlanner(data);};
+  const selectItem=(key,event)=>{
+    if(event.shiftKey && plannerBrowser.anchor && validKeys.has(plannerBrowser.anchor)){
+      const start=items.findIndex(i=>i.key===plannerBrowser.anchor),end=items.findIndex(i=>i.key===key);items.slice(Math.min(start,end),Math.max(start,end)+1).forEach(i=>plannerBrowser.selected.add(i.key));
+    }else{if(plannerBrowser.selected.has(key))plannerBrowser.selected.delete(key);else plannerBrowser.selected.add(key);plannerBrowser.anchor=key;}
+    renderPlanner(data);
+    [...plannerEl.querySelectorAll('[data-key]')].find(el=>el.dataset.key===key)?.querySelector('.finder-select').focus();
+  };
+  plannerEl.querySelectorAll('[data-key]').forEach(row=>{
+    row.querySelector('.finder-select').onclick=event=>selectItem(row.dataset.key,event);
+    row.onclick=event=>{if(!event.target.closest('button,details,input'))selectItem(row.dataset.key,event);};
+    row.ondragstart=event=>{const key=row.dataset.key;plannerBrowser.dragging=plannerBrowser.selected.has(key)?[...plannerBrowser.selected]:[key];event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('application/x-ableton-planner',JSON.stringify(plannerBrowser.dragging));row.classList.add('is-dragging');};
+    row.ondragend=()=>{plannerBrowser.dragging=null;plannerEl.querySelectorAll('.is-drop-target,.is-dragging').forEach(el=>el.classList.remove('is-drop-target','is-dragging'));};
   });
-  const completedVisible = localStorage.getItem('boardCompletedVisible') === 'true';
-
-  plannerEl.innerHTML = `
-    <div class="planner-shell">
-      ${renderTodayMission()}
-
-      <details class="planner-panel" hidden>
-        <summary class="planner-panel-head"><div><div class="planner-panel-title">Deadline Radar</div><div class="planner-panel-meta">Client deadlines and delivery risk</div></div></summary>
-        ${renderDeadlineRadar()}
-      </details>
-
-      <details class="planner-panel" hidden>
-        <summary class="planner-panel-head"><div><div class="planner-panel-title">Planner Goals</div><div class="planner-panel-meta">Small targets alongside tracked time</div></div></summary>
-        ${renderPlannerGoalForm()}
-        ${renderPlannerGoalRows(plannerGoals)}
-      </details>
-
-      <details class="board-shell" open>
-        <summary class="planner-panel-head">
-          <div>
-            <div class="planner-panel-title">Project Board</div>
-          </div>
-        </summary>
-        <div class="board-toolbar">
-          <input type="text" class="board-search" id="boardSearchInput" placeholder="Search projects…" value="${escapeHtml(boardSearchQuery)}">
-          <button type="button" class="btn small" id="newFolderBtn">New Folder</button>
-          <label class="board-type-filter">
-            <span class="board-type-filter-label">Type</span>
-            <select class="board-sort-control" id="boardTypeFilter" aria-label="Filter projects by type">
-              <option value="" ${boardTypeFilter === '' ? 'selected' : ''}>All</option>
-              ${PROJECT_TYPE_OPTIONS.filter(([val]) => val).map(([val, label]) => `
-                <option value="${val}" ${boardTypeFilter === val ? 'selected' : ''}>${escapeHtml(label)}</option>
-              `).join('')}
-            </select>
-          </label>
-          ${hiddenStatusOptions.length ? `
-            <details class="hidden-lanes-control">
-              <summary>Hidden lanes</summary>
-              <div class="hidden-lanes-menu">
-                ${hiddenStatusOptions.map(([value, label]) => `<button class="hidden-lane-chip" type="button" data-show-hidden-lane="${value}">Show ${escapeHtml(label)}</button>`).join('')}
-              </div>
-            </details>
-          ` : ''}
-        </div>
-        <div class="planner-board" id="projectBoard" role="region" aria-label="Project Board Kanban">
-          ${orderedColumns.map(renderBoardColumn).join('')}
-        </div>
-        <section class="completed-projects" aria-label="Completed projects">
-          <button type="button" class="completed-projects-toggle" data-toggle-completed aria-expanded="${completedVisible}">${completedVisible ? 'Hide completed' : `Show completed (${completedProjects.length})`}</button>
-          ${completedVisible ? `<div class="completed-projects-grid">${completedProjects.map(renderBoardProject).join('') || '<div class="board-empty-hint">No completed projects</div>'}</div>` : ''}
-        </section>
-        <div class="sr-only" id="boardAriaLive" aria-live="assertive" aria-atomic="true"></div>
-      </details>
-    </div>
-  `;
+  plannerEl.querySelectorAll('[data-drop]').forEach(target=>{
+    const destination=target.dataset.drop?Number(target.dataset.drop):null;
+    target.ondragover=event=>{if(plannerBrowser.dragging && plannerValidDestination(plannerBrowser.dragging,destination)){event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('is-drop-target');}};
+    target.ondragleave=()=>target.classList.remove('is-drop-target');
+    target.ondrop=async event=>{event.preventDefault();event.stopPropagation();target.classList.remove('is-drop-target');const keys=plannerBrowser.dragging;plannerBrowser.dragging=null;if(keys&&plannerValidDestination(keys,destination))try{await plannerMove(keys,destination);}catch(e){toast(e.message);}};
+  });
+  plannerEl.querySelector('[data-bulk-move]').onclick=()=>plannerMoveDialog([...plannerBrowser.selected]);
+  plannerEl.querySelector('[data-bulk-merge]').onclick=()=>plannerMergeDialog([...plannerBrowser.selected].map(k=>k.slice(2)));
+  plannerEl.querySelector('[data-clear]').onclick=()=>{plannerBrowser.selected.clear();renderPlanner(data);};
   bindTodayWorklist(data);
-  bindProjectMetaControls();
-  bindProjectTaskTriggers();
-  bindCategoryTriggers();
-  bindPlannerGoals();
-  bindProjectBoard(data);
 }
+
 
 function captureTodayMissionLayout() {
   const snapshot = new Map();
@@ -8294,415 +8268,12 @@ function bindTodayWorklist(data) {
   }));
 }
 
-function bindProjectBoard(data) {
-  const searchInput = document.getElementById('boardSearchInput');
-  const typeFilter = document.getElementById('boardTypeFilter');
-  document.getElementById('newFolderBtn')?.addEventListener('click', () => openFolderModal());
-  document.querySelectorAll('[data-open-folder]').forEach(card => card.addEventListener('click', event => {
-    if (card.classList.contains('is-dragging')) return;
-    const folder = (data.project_folders || []).find(item => item.id === Number(card.dataset.openFolder));
-    if (folder) openFolderModal(folder);
-  }));
-  
-  if (searchInput) {
-    searchInput.addEventListener('input', () => {
-      boardSearchQuery = searchInput.value;
-      renderPlanner(data);
-      // Re-focus the input after re-render so typing isn't interrupted
-      const newSearchInput = document.getElementById('boardSearchInput');
-      if (newSearchInput) {
-        newSearchInput.focus();
-        const len = newSearchInput.value.length;
-        newSearchInput.setSelectionRange(len, len);
-      }
-    });
-  }
-  
-  if (typeFilter) {
-    typeFilter.addEventListener('change', () => {
-      boardTypeFilter = typeFilter.value;
-      renderPlanner(data);
-    });
-  }
-
-  document.querySelectorAll('[data-open-project]').forEach(trigger => {
-    trigger.addEventListener('click', event => {
-      if (event.target.closest('[data-category-trigger], [data-project-completion]')) return;
-      const projectName = decodeURIComponent(trigger.dataset.openProject || '');
-      if (projectName) openProjectTasks(projectName);
-    });
-  });
-
-  document.querySelector('[data-toggle-completed]')?.addEventListener('click', event => {
-    event.stopPropagation();
-    localStorage.setItem('boardCompletedVisible', String(event.currentTarget.getAttribute('aria-expanded') !== 'true'));
-    renderPlanner(data);
-  });
-
-  document.querySelectorAll('[data-project-completion]').forEach(control => {
-    const isolate = event => { event.stopPropagation(); };
-    control.addEventListener('pointerdown', isolate);
-    control.addEventListener('dragstart', isolate);
-    control.addEventListener('click', async event => {
-      isolate(event);
-      const projectName = decodeURIComponent(control.dataset.projectCompletion || '');
-      if (!projectName) return;
-      const completed = control.getAttribute('aria-pressed') !== 'true';
-      const wasPressed = control.getAttribute('aria-pressed');
-      control.setAttribute('aria-pressed', String(completed));
-      control.classList.add('is-pending');
-      control.disabled = true;
-      try {
-        await postJson('/api/project-completion', { project_name: projectName, completed });
-        await new Promise(resolve => setTimeout(resolve, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 170));
-        await load();
-      } catch (error) {
-        control.setAttribute('aria-pressed', wasPressed);
-        control.classList.remove('is-pending');
-        control.disabled = false;
-        toast(error.message || 'Failed to update project completion');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-show-hidden-lane]').forEach(button => {
-    button.addEventListener('click', () => {
-      const status = button.dataset.showHiddenLane;
-      let hidden;
-      try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
-      } catch(err) {
-        hidden = ['paused', 'abandoned'];
-      }
-      hidden = hidden.filter(value => value !== status);
-      localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
-      renderPlanner(data);
-    });
-  });
-
-  document.querySelectorAll('[data-hide-column]').forEach(button => {
-    button.addEventListener('click', event => {
-      event.stopPropagation();
-      const status = button.dataset.hideColumn;
-      let hidden;
-      try {
-        hidden = JSON.parse(localStorage.getItem('boardHiddenColumns') || '["paused","abandoned"]');
-      } catch(err) {
-        hidden = ['paused', 'abandoned'];
-      }
-      if (!hidden.includes(status)) hidden.push(status);
-      localStorage.setItem('boardHiddenColumns', JSON.stringify(hidden));
-      renderPlanner(data);
-    });
-  });
-
-  document.querySelectorAll('[data-toggle-column]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const col = btn.dataset.toggleColumn;
-      let collapsed;
-      try {
-        const stored = localStorage.getItem('boardCollapsedColumns');
-        collapsed = stored ? JSON.parse(stored) : [];
-      } catch(err) {
-        collapsed = [];
-      }
-      if (collapsed.includes(col)) {
-        collapsed = collapsed.filter(c => c !== col);
-      } else {
-        collapsed.push(col);
-      }
-      localStorage.setItem('boardCollapsedColumns', JSON.stringify(collapsed));
-      renderPlanner(data);
-    });
-  });
-
-  let dragSrcEl = null;
-  let laneDragSrcEl = null;
-  let laneDragInsertIndex = -1;
-  const cleanupProjectDrag = () => {
-    if (dragSrcEl) dragSrcEl.classList.remove('is-dragging');
-    document.querySelectorAll('.planner-board-column').forEach(col => {
-      col.classList.remove('drag-over');
-    });
-    dragSrcEl = null;
-  };
-  document.querySelectorAll('.planner-board-project[draggable]').forEach(card => {
-    card.addEventListener('dragstart', (e) => {
-      dragSrcEl = card;
-      card.classList.add('is-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', card.dataset.folderId ? `folder:${card.dataset.folderId}` : `project:${card.dataset.projectName}`);
-    });
-    card.addEventListener('dragend', () => {
-      cleanupProjectDrag();
-    });
-  });
-
-  document.querySelectorAll('.planner-board-column').forEach(col => {
-    col.addEventListener('dragover', (e) => {
-      if (laneDragSrcEl) return;
-      if (e.preventDefault) { e.preventDefault(); }
-      e.dataTransfer.dropEffect = 'move';
-      col.classList.add('drag-over');
-      return false;
-    });
-    col.addEventListener('dragenter', (e) => {
-      if (laneDragSrcEl) return;
-      col.classList.add('drag-over');
-    });
-    col.addEventListener('dragleave', (e) => {
-      if (laneDragSrcEl) return;
-      if (!col.contains(e.relatedTarget)) {
-        col.classList.remove('drag-over');
-      }
-    });
-    col.addEventListener('drop', async (e) => {
-      if (laneDragSrcEl) return;
-      e.preventDefault();
-      if (e.stopPropagation) e.stopPropagation();
-      col.classList.remove('drag-over');
-      
-      const draggedCard = dragSrcEl;
-      const draggedValue = e.dataTransfer.getData('text/plain');
-      const newStatus = col.dataset.plannerStatus;
-      cleanupProjectDrag();
-      
-      if (draggedCard && draggedValue) {
-        const currentStatus = draggedCard.dataset.currentStatus || '';
-        if (draggedValue.startsWith('folder:')) {
-          const folderId = Number(draggedValue.slice(7));
-          const folder = (data.project_folders || []).find(item => item.id === folderId);
-          if (!folder) return false;
-          const cards = [...col.querySelectorAll('[data-folder-id]')].filter(card => card !== draggedCard);
-          const before = cards.find(card => e.clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2);
-          const orderedFolders = cards.map(card => Number(card.dataset.folderId));
-          orderedFolders.splice(before ? orderedFolders.indexOf(Number(before.dataset.folderId)) : orderedFolders.length, 0, folderId);
-          try { await postJson('/api/project-folders/reorder', { folder_id: folderId, status: newStatus, ordered_folders: orderedFolders }); await load(); }
-          catch (error) { toast(error.message || 'Failed to move folder'); }
-          return false;
-        }
-        const projectName = draggedValue.slice(8);
-        const decodedName = decodeURIComponent(projectName);
-        const project = (data.projects || []).find(p => p.project_name === decodedName);
-        if (project) {
-          try {
-            if (currentStatus !== newStatus && isTerminalProjectStatus(newStatus)) {
-              const ok = await confirmTerminalProjectMove(decodedName, newStatus);
-              if (!ok) return false;
-            }
-            const cards = [...col.querySelectorAll('.planner-board-project')].filter(card => card !== draggedCard);
-            const before = cards.find(card => e.clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2);
-            const orderedProjects = cards.map(card => decodeURIComponent(card.dataset.projectName || ''));
-            const insertAt = before ? orderedProjects.indexOf(decodeURIComponent(before.dataset.projectName || '')) : orderedProjects.length;
-            orderedProjects.splice(insertAt, 0, decodedName);
-            toast(`${currentStatus === newStatus ? 'Reordering' : 'Moving'} ${decodedName}...`);
-            await postJson('/api/project-board/reorder', {
-              project_name: decodedName,
-              status: newStatus,
-              ordered_projects: orderedProjects,
-            });
-            load();
-          } catch (error) {
-            toast(error.message || 'Failed to move project');
-          }
-        }
-      }
-      return false;
-    });
-  });
-
-  const announceLaneReorder = (msg) => {
-    const live = document.getElementById('boardAriaLive');
-    if (live) { live.textContent = ''; void live.offsetWidth; live.textContent = msg; }
-  };
-
-  const completeLaneOrder = visibleOrder => {
-    const configuredOrder = ['', ...PROJECT_STATUS_OPTIONS.filter(([value]) => value).map(([value]) => value)];
-    const fullOrder = Array.isArray(data.project_board_lane_order) && data.project_board_lane_order.length
-      ? data.project_board_lane_order
-      : configuredOrder;
-    const visible = [...new Set(visibleOrder.filter(status => fullOrder.includes(status)))];
-    const visibleSet = new Set(visible);
-    let visibleIndex = 0;
-    return fullOrder.map(status => visibleSet.has(status) ? visible[visibleIndex++] : status);
-  };
-
-  document.querySelectorAll('.lane-drag-handle').forEach(handle => {
-    handle.addEventListener('dragstart', (e) => {
-      const column = handle.closest('.planner-board-column');
-      if (!column) return;
-      laneDragSrcEl = column;
-      laneDragInsertIndex = -1;
-      column.classList.add('is-lane-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', `lane:${column.dataset.plannerStatus}`);
-      const ghost = document.createElement('div');
-      ghost.style.cssText = 'width:1px;height:1px;position:fixed;top:-100px;left:-100px;';
-      document.body.appendChild(ghost);
-      e.dataTransfer.setDragImage(ghost, 0, 0);
-      setTimeout(() => ghost.remove(), 0);
-    });
-
-    handle.addEventListener('dragend', () => {
-      cleanupLaneDrag();
-    });
-
-    handle.addEventListener('keydown', (e) => {
-      const column = handle.closest('.planner-board-column');
-      if (!column) return;
-      const board = column.closest('.planner-board');
-      if (!board) return;
-      const columns = [...board.querySelectorAll('.planner-board-column')];
-      const idx = columns.indexOf(column);
-      if (idx < 0) return;
-
-      let newIdx = idx;
-      if (e.key === 'ArrowLeft') newIdx = Math.max(0, idx - 1);
-      else if (e.key === 'ArrowRight') newIdx = Math.min(columns.length - 1, idx + 1);
-      else if (e.key === 'Home') newIdx = 0;
-      else if (e.key === 'End') newIdx = columns.length - 1;
-      else return;
-
-      if (newIdx === idx) return;
-      e.preventDefault();
-
-      const orderedVisible = columns.map(c => c.dataset.plannerStatus);
-      const [moved] = orderedVisible.splice(idx, 1);
-      orderedVisible.splice(newIdx, 0, moved);
-      const ordered = completeLaneOrder(orderedVisible);
-      const label = column.querySelector('.planner-board-head span')?.textContent || 'Lane';
-
-      postJson('/api/project-board/lane-order', { ordered_statuses: ordered })
-        .then(() => {
-          announceLaneReorder(`${label} moved`);
-          load().then(() => {
-            const newBoard = document.getElementById('projectBoard');
-            if (newBoard) {
-              const newColumns = [...newBoard.querySelectorAll('.planner-board-column')];
-              const targetCol = newColumns[newIdx];
-              if (targetCol) {
-                const targetHandle = targetCol.querySelector('.lane-drag-handle');
-                if (targetHandle) targetHandle.focus();
-              }
-            }
-          });
-        })
-        .catch(() => toast('Failed to reorder lane'));
-    });
-  });
-
-  function cleanupLaneDrag() {
-    if (laneDragSrcEl) laneDragSrcEl.classList.remove('is-lane-dragging');
-    document.querySelectorAll('.planner-board-column').forEach(col => {
-      col.classList.remove('lane-insert-before', 'lane-insert-after');
-    });
-    document.querySelectorAll('.planner-board').forEach(board => {
-      board.classList.remove('is-dragging-lane');
-    });
-    laneDragSrcEl = null;
-    laneDragInsertIndex = -1;
-  }
-
-  document.querySelectorAll('.planner-board').forEach(board => {
-    board.addEventListener('dragover', (e) => {
-      if (!laneDragSrcEl) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      board.classList.add('is-dragging-lane');
-
-      const columns = [...board.querySelectorAll('.planner-board-column')];
-      if (columns.length === 0) return;
-
-      columns.forEach(col => {
-        col.classList.remove('lane-insert-before', 'lane-insert-after');
-      });
-
-      // Auto-scroll near board edges
-      const boardRect = board.getBoundingClientRect();
-      const scrollThreshold = 70;
-      const SCROLL_SPEED = 24;
-      if (e.clientX - boardRect.left < scrollThreshold) {
-        board.scrollLeft -= SCROLL_SPEED;
-      } else if (boardRect.right - e.clientX < scrollThreshold) {
-        board.scrollLeft += SCROLL_SPEED;
-      }
-
-      let insertBefore = columns.length;
-      for (let i = 0; i < columns.length; i++) {
-        const colRect = columns[i].getBoundingClientRect();
-        const colMid = colRect.left + colRect.width / 2;
-        if (e.clientX < colMid) {
-          insertBefore = i;
-          break;
-        }
-      }
-
-      laneDragInsertIndex = insertBefore;
-
-      if (insertBefore < columns.length) {
-        columns[insertBefore].classList.add('lane-insert-before');
-      } else if (columns.length > 0) {
-        columns[columns.length - 1].classList.add('lane-insert-after');
-      }
-    });
-
-    board.addEventListener('dragleave', (e) => {
-      if (!board.contains(e.relatedTarget)) {
-        board.classList.remove('is-dragging-lane');
-        board.querySelectorAll('.planner-board-column').forEach(col => {
-          col.classList.remove('lane-insert-before', 'lane-insert-after');
-        });
-      }
-    });
-
-    board.addEventListener('drop', async (e) => {
-      if (!laneDragSrcEl) return;
-      e.preventDefault();
-      if (e.stopPropagation) e.stopPropagation();
-
-      board.classList.remove('is-dragging-lane');
-      board.querySelectorAll('.planner-board-column').forEach(col => {
-        col.classList.remove('lane-insert-before', 'lane-insert-after');
-      });
-
-      const sourceLane = laneDragSrcEl;
-      const insertIndex = laneDragInsertIndex;
-      cleanupLaneDrag();
-
-      if (!sourceLane || insertIndex < 0) {
-        return false;
-      }
-
-      const columns = [...board.querySelectorAll('.planner-board-column')];
-      const srcIdx = columns.indexOf(sourceLane);
-      if (srcIdx < 0) return false;
-
-      const orderedVisible = columns.map(c => c.dataset.plannerStatus);
-      const [moved] = orderedVisible.splice(srcIdx, 1);
-      const insertIdx = srcIdx < insertIndex ? insertIndex - 1 : insertIndex;
-      orderedVisible.splice(insertIdx, 0, moved);
-      const ordered = completeLaneOrder(orderedVisible);
-      const label = sourceLane.querySelector('.planner-board-head span')?.textContent || 'Lane';
-
-      try {
-        await postJson('/api/project-board/lane-order', { ordered_statuses: ordered });
-        toast(`${label} moved`);
-        load();
-      } catch (error) {
-        toast(error.message || 'Failed to reorder lane');
-      }
-
-      return false;
-    });
-    board.addEventListener('dragend', () => {
-      cleanupProjectDrag();
-      cleanupLaneDrag();
-    });
-  });
-}
 
 function render(data) {
+  const monthNav = document.getElementById('monthNav');
+  if (monthNav && monthNav.closest('#appDashboard')) {
+    document.querySelector('.intro')?.appendChild(monthNav);
+  }
   if (detailModalAbort) {
     detailModalAbort.abort();
     detailModalAbort = null;
@@ -8755,47 +8326,26 @@ function render(data) {
   const priorRun = productionRunRenderState;
   const runAdvanced = priorRun && !priorRun.todayQualifies && run.today_qualifies;
   productionRunRenderState = { todayQualifies: !!run.today_qualifies, currentDays: run.current_days };
-  const recordDistance = Math.max(0, (run.best_days || 0) - (run.current_days || 0));
-  const runRecordCopy = run.current_days > 0 && run.current_days >= run.best_days
-    ? 'New record'
-    : recordDistance > 0
-      ? `${recordDistance} day${recordDistance === 1 ? '' : 's'} to your record`
-      : 'Your next session starts it';
   const recentRunDays = Array.isArray(run.recent_days) ? run.recent_days : [];
 
   const campaignRows = monthlyProjects.filter(project => (project.month_seconds || 0) > 0);
-  const campaignMonthChanged = campaignRenderState.month !== null && campaignRenderState.month !== summary.selected_month;
-  const previousCampaignRanks = campaignRenderState.ranks;
-  const nextCampaignRanks = new Map(campaignRows.map(project => [project.project_name, project.month_rank]));
-  campaignRenderState = { month: summary.selected_month, ranks: nextCampaignRanks };
+  const campaignRowHtml = (project, index) => {
+    const color = project.category_color || projectColor(project, index);
+    const categoryLabel = project.category_label && project.category_label !== 'Uncategorized'
+      ? `<div class="campaign-meta"><i class="campaign-category-dot" style="background:${color}"></i>${escapeHtml(project.category_label)}</div>`
+      : '';
+    return `<div class="campaign-row${project.is_live_project ? ' is-live' : ''}" data-campaign-project="${encodeURIComponent(project.project_name || '')}">
+      <div class="campaign-rank">${project.month_rank || index + 1}</div>
+      <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(project.project_name)}</span></div>${categoryLabel}</div>
+      <div class="campaign-values"><div class="campaign-time">${fmt.dur(project.month_seconds)}</div><div class="campaign-share">${Number(project.month_share_percent || 0).toFixed(1).replace(/\.0$/, '')}% of month</div></div>
+    </div>`;
+  };
 
   document.getElementById('appDashboard').innerHTML = `
-    <div class="cards">
-      <div class="card card--streak production-run-card${runAdvanced ? ' is-advancing' : ''}" role="button" tabindex="0" data-detail="production-run">
-        <div class="production-run-head">
-          <div>
-            <div class="card-label" style="padding-top:0;margin-bottom:4px">Production Run</div>
-            <div class="card-value">Day ${run.current_days || 0}</div>
-            <div class="production-run-rule">Today · ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)}</div>
-          </div>
-          <div class="run-record"><span>Personal record</span><strong>${run.best_days || 0} day${run.best_days === 1 ? '' : 's'}</strong><div class="production-run-rule">${runRecordCopy}</div></div>
-        </div>
-        <div class="run-nodes" aria-label="Recent Production Run days">
-          ${recentRunDays.map(day => {
-            const cls = ['run-node', day.state ? `is-${day.state}` : '', day.is_today ? 'is-today' : '', runAdvanced && day.is_today ? 'is-newly-qualified' : ''].filter(Boolean).join(' ');
-            const ratio = clamp((Number(day.seconds) || 0) / (run.qualifying_seconds || 900), 0, 1);
-            const dayDate = day.day ? dateFromKey(day.day) : new Date();
-            const dayLabel = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
-            return `<div class="${cls}" style="--run-progress:${Math.round(ratio * 100)}%" title="${escapeHtml(`${day.day || ''} · ${fmt.dur(day.seconds || 0)}`)}"><i class="run-node-dot" aria-hidden="true"></i><span>${dayLabel}</span></div>`;
-          }).join('')}
-        </div>
-      </div>
-    </div>
-
     <div class="chart-card chart-card-wide weekly-quest" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
       <div class="quest-head">
-        <div><h3 class="section-title">Weekly <em>Quest</em></h3><span class="section-meta" id="weeklyTargetRangeLabel">Current Week</span></div>
-        <div class="quest-nav" aria-label="Weekly Quest navigation">
+        <div><h3 class="section-title">Weekly <em>pace</em></h3><span class="section-meta" id="weeklyTargetRangeLabel">Current Week</span></div>
+        <div class="quest-nav" aria-label="Weekly pace navigation">
           <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
           <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M8.75 2.5L4.25 7l4.5 4.5"></path></svg></button>
           <button class="daily-target-nav-btn" id="weeklyTargetNext" type="button" aria-label="Show next week"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M5.25 2.5L9.75 7l-4.5 4.5"></path></svg></button>
@@ -8804,30 +8354,41 @@ function render(data) {
       <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
     </div>
 
-    <div class="table-card monthly-campaign">
-      <div class="section-head campaign-head">
-        <h3 class="section-title">Monthly <em>Campaign</em></h3>
-        <div class="campaign-summary">${fmt.dur(summary.month_seconds || 0)} · ${monthlyProjectCount} project${monthlyProjectCount === 1 ? '' : 's'}<br>${escapeHtml(monthName)}</div>
+    <div class="card card--streak production-run-card${runAdvanced ? ' is-advancing' : ''}" role="button" tabindex="0" data-detail="production-run" aria-haspopup="dialog" aria-controls="detailModal">
+      <div class="production-run-head">
+        <div>
+          <div class="card-label" style="padding-top:0;margin-bottom:4px">Production Run</div>
+          <div class="card-value">Day ${run.current_days || 0}</div>
+          <div class="production-run-rule">Today · ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)}</div>
+        </div>
       </div>
-      ${campaignRows.length === 0 ? `<div class="empty"><p>No campaign activity</p><small>recorded time in ${escapeHtml(monthName)} will appear here</small></div>` : `<div class="campaign-list">${campaignRows.map((project, index) => {
-        const movement = project.previous_month_rank == null ? 'New' : project.rank_delta > 0 ? `Up ${project.rank_delta}` : project.rank_delta < 0 ? `Down ${Math.abs(project.rank_delta)}` : 'Unchanged';
-        const moveClass = project.previous_month_rank == null ? ' is-new' : '';
-        const color = project.category_color || projectColor(project, index);
-        const priorRank = previousCampaignRanks.get(project.project_name);
-        const rankOffset = campaignMonthChanged && priorRank ? (priorRank - (project.month_rank || index + 1)) * 70 : 0;
-        return `<div class="campaign-row${project.is_live_project ? ' is-live' : ''}${campaignMonthChanged && rankOffset ? ' is-month-change' : ''}" data-campaign-project="${encodeURIComponent(project.project_name || '')}"${rankOffset ? ` style="transform:translateY(${rankOffset}px);opacity:.72"` : ''}>
-          <div class="campaign-rank">${project.month_rank || index + 1}</div>
-          <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(project.project_name)}</span></div><div class="campaign-meta"><i class="campaign-category-dot" style="background:${color}"></i>${escapeHtml(project.category_label || 'Uncategorized')}<span class="campaign-move${moveClass}">${movement}</span></div></div>
-          <div class="campaign-values"><div class="campaign-time">${fmt.dur(project.month_seconds)}</div><div class="campaign-share">${Number(project.month_share_percent || 0).toFixed(1).replace(/\.0$/, '')}% of month</div></div>
-        </div>`;
-      }).join('')}</div>`}
+      <div class="run-nodes" aria-label="Recent Production Run days">
+        ${recentRunDays.map(day => {
+          const cls = ['run-node', day.state ? `is-${day.state}` : '', day.is_today ? 'is-today' : '', runAdvanced && day.is_today ? 'is-newly-qualified' : ''].filter(Boolean).join(' ');
+          const ratio = clamp((Number(day.seconds) || 0) / (run.qualifying_seconds || 900), 0, 1);
+          const dayDate = day.day ? dateFromKey(day.day) : new Date();
+          const dayLabel = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
+          return `<div class="${cls}" style="--run-progress:${Math.round(ratio * 100)}%" title="${escapeHtml(`${day.day || ''} · ${fmt.dur(day.seconds || 0)}`)}"><i class="run-node-dot" aria-hidden="true"></i><span>${dayLabel}</span></div>`;
+        }).join('')}
+      </div>
     </div>
 
-    <div class="table-card">
-      <div class="section-head">
-        <h3 class="section-title">Recent <em>entries</em></h3>
-        <span class="recent-stats-inline">${fmt.dur(summary.today_average_session_seconds || 0)} avg · ${todaySessionCount} session${todaySessionCount !== 1 ? 's' : ''} · ${todayProjectCount} project${todayProjectCount !== 1 ? 's' : ''} today</span>
+    <div class="table-card monthly-campaign">
+      <div class="section-head campaign-head">
+        <h3 class="section-title">Projects <em>this month</em></h3>
+        <div class="campaign-head-actions"><div class="campaign-summary">${fmt.dur(summary.month_seconds || 0)} · ${monthlyProjectCount} project${monthlyProjectCount === 1 ? '' : 's'}</div><div id="projectsMonthNavSlot"></div></div>
       </div>
+      ${campaignRows.length === 0
+        ? `<div class="empty"><p>No project activity</p><small>Recorded time in ${escapeHtml(monthName)} will appear here.</small></div>`
+        : `<div class="campaign-list">${campaignRows.slice(0, 3).map(campaignRowHtml).join('')}</div>
+          <details class="overview-disclosure"><summary>View full project ranking <span>${campaignRows.length} project${campaignRows.length === 1 ? '' : 's'}</span></summary><div class="campaign-list">${campaignRows.map(campaignRowHtml).join('')}</div></details>`}
+    </div>
+
+    <div class="table-card history-card">
+      <details class="overview-disclosure">
+        <summary>View session history <span>${todaySessionCount} session${todaySessionCount !== 1 ? 's' : ''} today</span></summary>
+        <div class="history-content">
+          <div class="section-head"><span class="recent-stats-inline">${fmt.dur(summary.today_average_session_seconds || 0)} average · ${todayProjectCount} project${todayProjectCount !== 1 ? 's' : ''} today</span></div>
       ${recent.length === 0
         ? '<div class="empty"><p>No sessions logged</p><small>start Ableton to begin</small></div>'
         : `<div class="table-scroll"><table>
@@ -8886,12 +8447,14 @@ function render(data) {
             </tbody>
           </table></div>
           ${data.recent_has_more ? '<div class="table-more"><button class="btn small" id="btnLoadOlderRecent" type="button">Load older entries</button></div>' : ''}`}
-    </div>
 
-    <div class="data-actions">
-      <button class="btn small" id="btnClearUnsaved" ${unsavedCount === 0 ? 'disabled' : ''}>Clear unsaved${unsavedCount > 0 ? ` · ${unsavedCount}` : ''}</button>
-      <button class="btn small" id="btnClearPhantoms" ${phantomCount === 0 ? 'disabled' : ''}>Clean phantom logs${phantomCount > 0 ? ` · ${phantomCount}` : ''}</button>
-      <button class="btn small" id="btnClearRecent" ${closedSessionCount === 0 ? 'disabled' : ''}>Clear logs</button>
+          <div class="data-actions">
+            <button class="btn small" id="btnClearUnsaved" ${unsavedCount === 0 ? 'disabled' : ''}>Clear unsaved${unsavedCount > 0 ? ` · ${unsavedCount}` : ''}</button>
+            <button class="btn small" id="btnClearPhantoms" ${phantomCount === 0 ? 'disabled' : ''}>Clean phantom logs${phantomCount > 0 ? ` · ${phantomCount}` : ''}</button>
+            <button class="btn small" id="btnClearRecent" ${closedSessionCount === 0 ? 'disabled' : ''}>Clear logs</button>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="detail-modal-backdrop" id="detailModal" aria-hidden="true">
@@ -8908,6 +8471,8 @@ function render(data) {
     </div>
   `;
 
+  const monthNavSlot = document.getElementById('projectsMonthNavSlot');
+  if (monthNavSlot && monthNav) monthNavSlot.appendChild(monthNav);
   const br = document.getElementById('btnClearRecent');
   const bp = document.getElementById('btnClearPhantoms');
   const bu = document.getElementById('btnClearUnsaved');
@@ -8922,14 +8487,6 @@ function render(data) {
   bindRowDeleteTriggers();
   bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
-  if (campaignMonthChanged && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      document.querySelectorAll('.campaign-row.is-month-change').forEach(row => {
-        row.style.transform = 'translateY(0)';
-        row.style.opacity = '1';
-      });
-    }));
-  }
 
   renderWeeklyGoal(summary, year_daily);
 }
@@ -9334,25 +8891,21 @@ function renderWeeklyTargetCard(target) {
   const model = buildWeeklyTargetModel(target);
   const progressPct = model.hasGoal ? clamp(Math.round(model.progressRatio * 100), 0, 100) : 0;
   const editGoalHours = model.hasGoal ? model.goalHours : 20;
-  const priorWeek = weeklyTargetState.lastRenderedWeek;
-  const priorCheckpoint = weeklyTargetState.lastCheckpointIndex;
-  const newlyCrossed = priorWeek === model.weekStart && priorCheckpoint != null && model.checkpointIndex > priorCheckpoint
-    ? model.checkpointIndex : -1;
-  weeklyTargetState.lastRenderedWeek = model.weekStart;
-  weeklyTargetState.lastCheckpointIndex = model.checkpointIndex;
 
   updateWeeklyTargetMeta({ weekStart: model.weekStart, weekEnd: model.weekEnd });
-  const primaryCopy = !model.hasGoal ? 'Set a weekly goal' : model.isMet ? 'Quest complete' : model.nextCheckpoint ? `Next checkpoint · ${fmt.dur(model.nextCheckpointSeconds)}` : 'Quest complete';
+  const primaryCopy = model.hasGoal ? model.progressText : `${model.progressText} logged`;
+  const supportingCopy = model.hasGoal && model.shortfallSeconds > 0
+    ? `${fmt.dur(model.shortfallSeconds)} remaining`
+    : model.hasGoal
+      ? model.remainingLabel
+      : 'Set a weekly goal to compare your pace.';
 
   mount.innerHTML = `
     <div style="--quest-progress:${progressPct}%">
       <div class="quest-summary">
-        <div class="quest-primary"><strong>${escapeHtml(primaryCopy)}</strong><span>${model.hasGoal ? `${Math.min(model.percent, 999)}% of ${formatHoursNumber(model.goalHours)}h` : 'Recorded time stays intact'}</span></div>
-        <div class="quest-stat"><strong>${fmt.dur(model.progressSeconds)}</strong><span>Logged</span></div>
-        <div class="quest-stat"><strong>${model.hasGoal ? fmt.dur(model.shortfallSeconds) : '—'}</strong><span>Remaining</span></div>
+        <div class="quest-primary"><strong>${escapeHtml(primaryCopy)}</strong><span>${escapeHtml(supportingCopy)}</span></div>
       </div>
-      <div class="quest-track" role="progressbar" aria-label="Weekly Quest progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}"><div class="quest-track-fill"></div><div class="quest-checkpoints">${model.checkpoints.map((checkpoint,index) => `<i class="quest-checkpoint${checkpoint.met ? ' is-met' : ''}${index === newlyCrossed ? ' is-crossed' : ''}" title="${Math.round(checkpoint.ratio * 100)}% checkpoint"></i>`).join('')}</div></div>
-      <div class="quest-checkpoint-labels">${model.checkpoints.map(checkpoint => `<span>${Math.round(checkpoint.ratio * 100)}%</span>`).join('')}</div>
+      <div class="quest-track" role="progressbar" aria-label="Weekly pace progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}"><div class="quest-track-fill"></div></div>
       ${renderWeekStrip(model).replaceAll('week-', 'quest-')}
       <div class="quest-edit-row"><button class="btn small" id="weeklyGoalEditBtn" type="button" aria-expanded="false" aria-controls="weeklyGoalEdit">${model.hasGoal ? `Goal ${formatHoursNumber(model.goalHours)}h` : 'Set goal'}</button></div>
       <div class="quest-edit" id="weeklyGoalEdit" hidden>

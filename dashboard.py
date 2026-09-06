@@ -737,7 +737,8 @@ def ensure_project_folders_tables(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS project_folders (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            name          TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            name          TEXT NOT NULL COLLATE NOCASE,
+            parent_id     INTEGER REFERENCES project_folders(id),
             status        TEXT NOT NULL DEFAULT '',
             type          TEXT NOT NULL DEFAULT '',
             priority      TEXT NOT NULL DEFAULT '',
@@ -760,6 +761,31 @@ def ensure_project_folders_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Rebuild the legacy globally-unique name table without changing folder IDs.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(project_folders)")}
+    if "parent_id" not in columns:
+        schema = conn.execute("SELECT sql FROM sqlite_master WHERE name='project_folders'").fetchone()[0]
+        replacement = schema.replace("project_folders", "project_folders_nested", 1).replace(
+            "TEXT NOT NULL UNIQUE COLLATE NOCASE", "TEXT NOT NULL COLLATE NOCASE"
+        )
+        conn.execute("SAVEPOINT nested_folders")
+        try:
+            conn.execute(replacement)
+            old_sequence = conn.execute("SELECT seq FROM sqlite_sequence WHERE name='project_folders'").fetchone()
+            names = ", ".join(row[1] for row in conn.execute("PRAGMA table_info(project_folders)"))
+            conn.execute(f"INSERT INTO project_folders_nested ({names}) SELECT {names} FROM project_folders")
+            conn.execute("DROP TABLE project_folders")
+            conn.execute("ALTER TABLE project_folders_nested RENAME TO project_folders")
+            if old_sequence:
+                conn.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='project_folders'", (old_sequence[0],))
+            conn.execute("ALTER TABLE project_folders ADD COLUMN parent_id INTEGER REFERENCES project_folders(id)")
+            conn.execute("RELEASE nested_folders")
+        except Exception:
+            conn.execute("ROLLBACK TO nested_folders")
+            conn.execute("RELEASE nested_folders")
+            raise
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_sibling_name ON project_folders(COALESCE(parent_id, 0), name COLLATE NOCASE)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_folder_parent ON project_folders(parent_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_folder_members_folder ON project_folder_members(folder_id, sort_order)")
 
 
@@ -2121,7 +2147,7 @@ def get_project_folders(conn: sqlite3.Connection | None = None) -> list[dict]:
     conn.row_factory = sqlite3.Row
     folders = [dict(row) for row in conn.execute("SELECT * FROM project_folders ORDER BY board_order, id").fetchall()]
     members = conn.execute(
-        "SELECT folder_id, project_name, sort_order FROM project_folder_members ORDER BY folder_id, sort_order, project_name COLLATE NOCASE"
+        "SELECT folder_id, project_name, sort_order FROM project_folder_members WHERE project_name NOT IN (SELECT alias_name FROM project_aliases) ORDER BY folder_id, sort_order, project_name COLLATE NOCASE"
     ).fetchall()
     by_folder: dict[int, list[dict]] = {}
     for row in members:
@@ -2137,6 +2163,38 @@ def get_project_folders(conn: sqlite3.Connection | None = None) -> list[dict]:
     return folders
 
 
+def planner_folder_overviews(projects: list[dict], folders: list[dict], root_tasks: list[dict]) -> dict:
+    """Roll up canonical projects once, including all descendant folders."""
+    parents = {folder["id"]: folder.get("parent_id") for folder in folders}
+    memberships = {member["project_name"]: folder["id"] for folder in folders for member in folder["members"]}
+    result = {}
+    for selected in [None, *parents]:
+        descendants = set()
+        for candidate in parents:
+            current, seen = candidate, set()
+            while current is not None and current not in seen:
+                if current == selected:
+                    descendants.add(candidate)
+                    break
+                seen.add(current)
+                current = parents.get(current)
+        scoped = projects if selected is None else [p for p in projects if memberships.get(p["project_name"]) in descendants]
+        scoped_folders = folders if selected is None else [f for f in folders if f["id"] in descendants]
+        statuses = {}
+        tasks = {t["id"]: t for owner in [*scoped, *scoped_folders] for t in owner.get("project_tasks", [])}
+        if selected is None:
+            tasks.update({t["id"]: t for t in root_tasks})
+        for project in scoped:
+            status = project.get("status") or ""
+            statuses[status] = statuses.get(status, 0) + 1
+        done = sum(t.get("status") == "done" for t in tasks.values())
+        result[str(selected) if selected is not None else "root"] = {
+            "project_count": len(scoped), "total_seconds": sum(p.get("total_seconds", 0) or 0 for p in scoped),
+            "statuses": statuses, "open_tasks": len(tasks) - done, "completed_tasks": done,
+        }
+    return result
+
+
 def save_project_folder(payload: dict) -> dict:
     try:
         folder_id = int(payload.get("id") or 0)
@@ -2148,6 +2206,22 @@ def save_project_folder(payload: dict) -> dict:
     if len(name) > 180:
         return {"error": "Folder name must be 180 characters or fewer."}
     with db_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = None
+        if folder_id:
+            conn.row_factory = sqlite3.Row
+            existing = conn.execute("SELECT * FROM project_folders WHERE id=?", (folder_id,)).fetchone()
+            if not existing:
+                return {"error": "Folder not found."}
+            payload = {**dict(existing), **payload}
+        try:
+            parent_id = int(payload["parent_id"]) if payload.get("parent_id") is not None else None
+        except (TypeError, ValueError):
+            return {"error": "Invalid parent folder."}
+        if parent_id is not None and not conn.execute("SELECT 1 FROM project_folders WHERE id=?", (parent_id,)).fetchone():
+            return {"error": "Destination folder not found."}
+        if folder_id and parent_id != existing["parent_id"]:
+            return {"error": "Use Move To to change a folder's location."}
         statuses = get_project_status_options(conn)
         types = get_project_type_options(conn)
         status = str(payload.get("status") or "").strip()
@@ -2180,13 +2254,13 @@ def save_project_folder(payload: dict) -> dict:
                     return {"error": "Folder not found."}
             else:
                 cur = conn.execute(
-                    "INSERT INTO project_folders(name,status,type,priority,due_date,hard_deadline,turn_in_date,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    (name, status, folder_type, priority, *dates, note, now, now),
+                    "INSERT INTO project_folders(name,status,type,priority,due_date,hard_deadline,turn_in_date,note,created_at,updated_at,parent_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (name, status, folder_type, priority, *dates, note, now, now, parent_id),
                 )
                 folder_id = cur.lastrowid
             conn.commit()
         except sqlite3.IntegrityError:
-            return {"error": "A folder with that name already exists."}
+            return {"error": "A folder with that name already exists in this location."}
         folder = next(item for item in get_project_folders(conn) if item["id"] == folder_id)
         return {"ok": True, "folder": folder}
 
@@ -2207,7 +2281,7 @@ def set_project_folder_members(folder_id: object, projects: object) -> dict:
         known = {row[0] for row in conn.execute("SELECT DISTINCT project_name FROM sessions UNION SELECT project_name FROM project_metadata")}
         if any(name not in known for name in names):
             return {"error": "Unknown project."}
-        conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
+        conn.execute("DELETE FROM project_folder_members WHERE folder_id=? AND project_name NOT IN (SELECT alias_name FROM project_aliases)", (normalized_id,))
         for order, name in enumerate(names, 1):
             conn.execute(
                 "INSERT INTO project_folder_members(project_name,folder_id,sort_order) VALUES(?,?,?) ON CONFLICT(project_name) DO UPDATE SET folder_id=excluded.folder_id, sort_order=excluded.sort_order",
@@ -2217,17 +2291,95 @@ def set_project_folder_members(folder_id: object, projects: object) -> dict:
     return {"ok": True, "folder_id": normalized_id, "projects": names}
 
 
+def move_planner_items(payload: dict) -> dict:
+    """Move only selected references; validate the final tree before any writes."""
+    try:
+        destination = int(payload["parent_id"]) if payload.get("parent_id") is not None else None
+        folders = payload.get("folders", [])
+        projects = payload.get("projects", [])
+        if not isinstance(folders, list) or not isinstance(projects, list):
+            raise ValueError
+        folders = [int(value) for value in folders]
+        if len(set(folders)) != len(folders) or any(not isinstance(name, str) or not name for name in projects) or len(set(projects)) != len(projects):
+            raise ValueError
+        if not folders and not projects:
+            raise ValueError
+    except (TypeError, ValueError):
+        return {"error": "Select valid projects or folders to move."}
+    with db_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        tree = {row[0]: {"parent": row[1], "name": row[2]} for row in conn.execute("SELECT id,parent_id,name FROM project_folders")}
+        if destination is not None and destination not in tree:
+            return {"error": "Destination folder not found."}
+        if any(folder not in tree for folder in folders):
+            return {"error": "Folder not found."}
+        known = {row[0] for row in conn.execute("SELECT project_name FROM sessions UNION SELECT project_name FROM project_metadata")}
+        aliases = {row[0] for row in conn.execute("SELECT alias_name FROM project_aliases")}
+        if any(name not in known or name in aliases for name in projects):
+            return {"error": "Project not found or already merged. Refresh the Planner."}
+        # Selecting both an ancestor and child moves the ancestor as a unit.
+        selected = set(folders)
+        roots = []
+        for folder in folders:
+            ancestor = tree[folder]["parent"]
+            seen = set()
+            while ancestor is not None and ancestor not in selected and ancestor not in seen:
+                seen.add(ancestor)
+                ancestor = tree[ancestor]["parent"]
+            if ancestor not in selected:
+                roots.append(folder)
+        ancestor = destination
+        seen = set()
+        while ancestor is not None:
+            if ancestor in selected or ancestor in seen:
+                return {"error": "A folder cannot be moved into itself or its subfolders."}
+            seen.add(ancestor)
+            ancestor = tree[ancestor]["parent"]
+        for folder in roots:
+            tree[folder]["parent"] = destination
+        siblings = set()
+        for folder in tree.values():
+            key = (folder["parent"], folder["name"].translate(str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")))
+            if key in siblings:
+                return {"error": "A folder with that name exists at the destination. Rename it first."}
+            siblings.add(key)
+        now = int(time.time())
+        for folder in roots:
+            conn.execute("UPDATE project_folders SET parent_id=?,updated_at=? WHERE id=?", (destination, now, folder))
+        for name in projects:
+            if destination is None:
+                conn.execute("DELETE FROM project_folder_members WHERE project_name=?", (name,))
+            else:
+                conn.execute("INSERT INTO project_folder_members(project_name,folder_id,sort_order) VALUES(?,?,0) ON CONFLICT(project_name) DO UPDATE SET folder_id=excluded.folder_id", (name, destination))
+        conn.commit()
+    return {"ok": True, "parent_id": destination}
+
+
 def delete_project_folder(folder_id: object) -> dict:
     try:
         normalized_id = int(folder_id)
     except (TypeError, ValueError):
-        return {"error": "Folder id is required."}
+        return {"error": "Invalid folder id."}
     with db_connection() as conn:
-        conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
-        cur = conn.execute("DELETE FROM project_folders WHERE id=?", (normalized_id,))
-        conn.execute("DELETE FROM project_tasks WHERE project_name=?", (f"__folder__{normalized_id}",))
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT parent_id FROM project_folders WHERE id=?", (normalized_id,)).fetchone()
+        if not row:
+            return {"error": "Folder not found."}
+        parent = row[0]
+        try:
+            conn.execute("UPDATE project_folders SET parent_id=? WHERE parent_id=?", (parent, normalized_id))
+        except sqlite3.IntegrityError:
+            return {"error": "A child folder has the same name as a folder in the parent location. Rename it first."}
+        if parent is None:
+            conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
+        else:
+            conn.execute("UPDATE project_folder_members SET folder_id=? WHERE folder_id=?", (parent, normalized_id))
+        # Keep folder tasks accessible after deleting their container.
+        task_owner = f"__folder__{parent}" if parent is not None else "__planner_root__"
+        conn.execute("UPDATE project_tasks SET project_name=? WHERE project_name=?", (task_owner, f"__folder__{normalized_id}"))
+        conn.execute("DELETE FROM project_folders WHERE id=?", (normalized_id,))
         conn.commit()
-    return {"ok": True, "deleted": cur.rowcount}
+    return {"ok": True, "deleted": 1}
 
 
 def reorder_project_folder(folder_id: object, status: str | None, ordered_folders: object) -> dict:
@@ -3023,13 +3175,14 @@ def _compute_data_etag(month_value: str = "") -> str:
             )
             """
         ).fetchone()
-        pf = conn.execute("SELECT COUNT(*), MAX(id), MAX(updated_at), GROUP_CONCAT(id || ':' || name || ':' || status || ':' || board_order, '|') FROM project_folders").fetchone()
+        pf = conn.execute("SELECT COUNT(*), MAX(id), MAX(updated_at), GROUP_CONCAT(id || ':' || COALESCE(parent_id, 0) || ':' || name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || note || ':' || board_order, '|') FROM project_folders").fetchone()
         pfm = conn.execute("SELECT COUNT(*), GROUP_CONCAT(project_name || ':' || folder_id || ':' || sort_order, '|') FROM project_folder_members").fetchone()
         dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
         ast = conn.execute(
             "SELECT GROUP_CONCAT(key || ':' || value, '|') FROM (SELECT key, value FROM app_settings ORDER BY key)"
         ).fetchone()
-        raw = f"{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{ast}|{month_value}"
+        pa = conn.execute("SELECT GROUP_CONCAT(alias_name || '->' || canonical_name, '|') FROM (SELECT * FROM project_aliases ORDER BY alias_name)").fetchone()
+        raw = f"{pa}|{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{ast}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -3578,6 +3731,8 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     }
                 )
 
+            planner_folders = get_project_folders(conn)
+            planner_root_tasks = get_project_tasks(conn, "__planner_root__")
             return {
                 "summary": {
                     "total_seconds":  total_s,
@@ -3612,7 +3767,12 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "phantom_closed_count": phantom_closed_count,
                 },
                 "projects": project_rows,
-                "project_folders": get_project_folders(conn),
+                "project_folders": planner_folders,
+                "planner_overviews": planner_folder_overviews(project_rows, planner_folders, planner_root_tasks),
+                "planner_root_tasks": planner_root_tasks,
+                "planner_aliases": [dict(row) for row in conn.execute(
+                    "SELECT pa.alias_name, pa.canonical_name, pm.status, pm.project_note FROM project_aliases pa LEFT JOIN project_metadata pm ON pm.project_name=pa.alias_name"
+                )],
                 "year_daily": [dict(r) for r in year_daily],
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
@@ -6995,6 +7155,13 @@ def merge_projects(canonical_name: str, aliases: list) -> dict:
             if mapped:
                 return {"error": f"Project is already merged: {mapped[0][0]}"}
 
+            source_group = conn.execute(
+                f"SELECT canonical_name FROM project_aliases WHERE canonical_name IN ({','.join('?' for _ in normalized_aliases)})",
+                normalized_aliases,
+            ).fetchone()
+            if source_group:
+                return {"error": "Separate an existing merged group before using it as a source."}
+
             target_is_alias = conn.execute(
                 "SELECT 1 FROM project_aliases WHERE alias_name = ?", (canonical_name,)
             ).fetchone()
@@ -7371,6 +7538,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "invalid json"}, status=400)
                 return
             result = save_project_folder(payload or {})
+            self._json(result, status=200 if result.get("ok") else 400)
+        elif self.path == "/api/planner/move":
+            try:
+                payload = self._request_json()
+            except json.JSONDecodeError:
+                self._json({"error": "invalid json"}, status=400)
+                return
+            result = move_planner_items(payload or {})
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/project-folders/members":
             try:

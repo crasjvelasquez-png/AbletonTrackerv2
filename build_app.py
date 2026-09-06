@@ -127,7 +127,11 @@ def build_bundle(app_name: str, config: dict[str, object], icns: Path) -> Path:
 
     python_path = sys.executable or shutil.which("python3") or "/usr/bin/python3"
     entry = str(config["entry"])
-    open_window = 'export ABLETON_TRACKER_OPEN_WINDOW="1"' if app_name == "Tracker" else ""
+    open_window = ""
+    if app_name == "Tracker":
+        open_window = '''if [ "${1:-}" != "--background" ]; then
+    export ABLETON_TRACKER_OPEN_WINDOW="1"
+fi'''
     launcher = macos / "launcher"
     launcher.write_text(f"""#!/bin/bash
 set -u

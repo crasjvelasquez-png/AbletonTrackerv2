@@ -2335,35 +2335,55 @@ class DashboardGamificationTemplateTests(unittest.TestCase):
         cls.source = (tracker.Path(__file__).parent / "templates" / "dashboard.html").read_text()
         cls.render_source = cls.source.split("function render(data) {", 1)[1].split("function updateSessionStatus", 1)[0]
 
-    def test_weekly_quest_is_the_only_primary_weekly_mount(self):
+    def test_weekly_pace_is_the_only_primary_weekly_mount(self):
         self.assertEqual(self.render_source.count('id="weeklyGoalCard"'), 1)
-        self.assertIn("Weekly <em>Quest</em>", self.render_source)
+        self.assertIn("Weekly <em>pace</em>", self.render_source)
         self.assertNotIn("Today's <em>Required</em>", self.render_source)
-        self.assertNotIn("Weekly <em>Pace</em>", self.render_source)
+        self.assertNotIn("Weekly <em>Quest</em>", self.render_source)
         self.assertIn("/api/weekly-target", self.source)
         self.assertIn('id="weeklyTargetPrev"', self.render_source)
         self.assertIn('id="weeklyTargetNext"', self.render_source)
-        self.assertIn("quest-checkpoint", self.source)
+        self.assertIn("model.progressText", self.source)
+        self.assertIn('aria-label="Weekly pace progress"', self.source)
+        self.assertNotIn("quest-checkpoint", self.source)
+        self.assertNotIn("Next checkpoint", self.source)
 
     def test_production_run_contract_and_reduced_motion_are_present(self):
         self.assertIn("summary.production_run", self.render_source)
         self.assertIn("Production Run", self.render_source)
         self.assertIn("data-detail=\"production-run\"", self.render_source)
         self.assertNotIn("Current Streak", self.render_source)
+        self.assertNotIn("Personal record", self.render_source)
+        self.assertIn("Personal record", self.source)
+        self.assertIn("to your record", self.source)
         self.assertIn("@media(prefers-reduced-motion:reduce)", self.source)
         self.assertIn("run-node.is-newly-qualified", self.source)
 
-    def test_monthly_campaign_replaces_fragmented_month_surfaces(self):
-        self.assertIn("Monthly <em>Campaign</em>", self.render_source)
+    def test_monthly_project_preview_leads_to_full_ranking(self):
+        self.assertIn("Projects <em>this month</em>", self.render_source)
         self.assertIn("project.month_rank", self.render_source)
         self.assertIn("project.month_share_percent", self.render_source)
         self.assertIn("project.is_live_project", self.render_source)
+        self.assertIn("campaignRows.slice(0, 3)", self.render_source)
+        self.assertIn("View full project ranking", self.render_source)
+        self.assertIn('id="projectsMonthNavSlot"', self.render_source)
+        self.assertNotIn("campaign-move", self.render_source)
+        self.assertNotIn("category_label || 'Uncategorized'", self.render_source)
         self.assertNotIn('data-detail="top-project"', self.render_source)
         self.assertNotIn('id="categoryChart"', self.render_source)
         self.assertNotIn('<h3 class="section-title">Projects</h3>', self.render_source)
-        recent = self.render_source.index("Recent <em>entries</em>")
+        recent = self.render_source.index("View session history")
         load_older = self.render_source.index("Load older entries")
         self.assertGreater(load_older, recent)
+
+    def test_overview_orders_weekly_pace_streak_and_project_preview(self):
+        weekly = self.render_source.index("Weekly <em>pace</em>")
+        streak = self.render_source.index("Production Run")
+        projects = self.render_source.index("Projects <em>this month</em>")
+        history = self.render_source.index("View session history")
+        self.assertLess(weekly, streak)
+        self.assertLess(streak, projects)
+        self.assertLess(projects, history)
 
 
 class DashboardLaneOrderTests(unittest.TestCase):
@@ -2525,32 +2545,20 @@ class DashboardLaneOrderTests(unittest.TestCase):
         after = dashboard._compute_data_etag()
         self.assertNotEqual(before, after)
 
-    def test_lane_drag_handle_is_actually_draggable(self):
+    def test_planner_browser_source_uses_folder_navigation(self):
         source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
-        self.assertIn('class="lane-drag-handle"', source)
-        self.assertIn('tabindex="0" draggable="true"', source)
-        self.assertIn('const cleanupProjectDrag = () =>', source)
-        self.assertIn("board.addEventListener('dragend'", source)
+        self.assertIn("function plannerNavigate(id)", source)
+        self.assertIn("data-bulk-move", source)
+        self.assertIn("/api/planner/move", source)
+        self.assertIn("finder-tree", source)
 
-    def test_pointer_and_keyboard_lane_reorders_complete_hidden_lane_order(self):
+    def test_planner_browser_source_has_list_cards_and_merge_actions(self):
         source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
-        self.assertIn("const completeLaneOrder = visibleOrder =>", source)
-        self.assertEqual(
-            source.count("const ordered = completeLaneOrder(orderedVisible);"),
-            2,
-        )
-        self.assertGreaterEqual(source.count("if (laneDragSrcEl) return;"), 4)
+        self.assertIn('data-view="list"', source)
+        self.assertIn('data-view="cards"', source)
+        self.assertIn("data-bulk-merge", source)
+        self.assertIn("plannerMergeDialog", source)
 
-    def test_project_completion_board_source_has_accessible_isolated_controls(self):
-        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
-        self.assertIn('data-project-completion="${encodedProject}"', source)
-        self.assertIn("if (project.is_folder)", source)
-        self.assertIn("completed-projects-grid", source)
-        self.assertIn("boardCompletedVisible", source)
-        self.assertIn("status !== 'finished'", source)
-        self.assertIn("[data-category-trigger], [data-project-completion]", source)
-        self.assertIn("/api/project-completion", source)
-        self.assertIn("prefers-reduced-motion", source)
 
 
 class DashboardAppSplitTests(unittest.TestCase):
@@ -2561,6 +2569,167 @@ class DashboardAppSplitTests(unittest.TestCase):
         self.assertNotIn('id="navSettings"', source)
         self.assertNotIn('id="appSettings"', source)
         self.assertNotIn('/static/js/settings.js', source)
+
+
+class PlannerFolderBrowserTests(unittest.TestCase):
+    setUp = MultiProjectMergeTests.setUp
+    _cleanup_db = MultiProjectMergeTests._cleanup_db
+    _insert_project = MultiProjectMergeTests._insert_project
+
+    def folder(self, name, parent=None, **fields):
+        result = dashboard.save_project_folder({"name": name, "parent_id": parent, **fields})
+        self.assertTrue(result.get("ok"), result)
+        return result["folder"]["id"]
+
+    def move(self, parent, projects=None, folders=None):
+        return dashboard.move_planner_items({"parent_id": parent, "projects": projects or [], "folders": folders or []})
+
+    def test_nested_names_and_cycle_rejection(self):
+        release = self.folder("Release")
+        tracks = self.folder("Tracks", release)
+        self.folder("Tracks")
+        self.assertIn("error", dashboard.save_project_folder({"name": "tracks", "parent_id": release}))
+        self.assertIn("error", self.move(tracks, folders=[release]))
+        self.assertIn("error", self.move(release, folders=[release]))
+        self.assertEqual(next(f for f in dashboard.get_project_folders() if f["id"] == release)["parent_id"], None)
+
+    def test_bulk_move_preserves_existing_members_and_status(self):
+        for index, name in enumerate(["A", "B", "C"]):
+            self._insert_project(name, (index + 1) * 100)
+        destination = self.folder("Tracks", status="finished")
+        self.assertTrue(self.move(destination, ["A"])["ok"])
+        self.assertTrue(self.move(destination, ["B", "C"])["ok"])
+        folder = dashboard.get_project_folders()[0]
+        self.assertEqual({m["project_name"] for m in folder["members"]}, {"A", "B", "C"})
+        self.assertEqual(folder["status"], "finished")
+        self.assertTrue(self.move(None, ["B"])["ok"])
+        self.assertEqual({m["project_name"] for m in dashboard.get_project_folders()[0]["members"]}, {"A", "C"})
+
+    def test_invalid_bulk_move_has_no_partial_writes(self):
+        self._insert_project("A", 100)
+        folder = self.folder("Tracks")
+        self.assertIn("error", self.move(folder, ["A", "Missing"]))
+        self.assertEqual(dashboard.get_project_folders()[0]["members"], [])
+        self.assertIn("error", self.move(999, ["A"]))
+        self.assertIn("error", self.move(folder, ["A", "A"]))
+
+    def test_folder_collision_and_selected_ancestor(self):
+        one = self.folder("One")
+        two = self.folder("Two")
+        child = self.folder("Child", one)
+        self.folder("Child", two)
+        self.assertIn("error", self.move(two, folders=[child]))
+        destination = self.folder("Destination")
+        self.assertTrue(self.move(destination, folders=[one, child])["ok"])
+        parents = {f["id"]: f["parent_id"] for f in dashboard.get_project_folders()}
+        self.assertEqual(parents[one], destination)
+        self.assertEqual(parents[child], one)
+
+    def test_delete_promotes_contents_and_preserves_tasks(self):
+        self._insert_project("A", 100)
+        parent = self.folder("Parent")
+        folder = self.folder("Folder", parent)
+        child = self.folder("Child", folder)
+        self.move(folder, ["A"])
+        with dashboard.db_connection() as conn:
+            conn.execute(
+                "INSERT INTO project_tasks(project_name,title,created_at,updated_at) VALUES(?,?,?,?)",
+                (f"__folder__{folder}", "Keep this task", 1, 1),
+            )
+            conn.commit()
+        self.assertTrue(dashboard.delete_project_folder(folder)["ok"])
+        folders = {f["id"]: f for f in dashboard.get_project_folders()}
+        self.assertEqual(folders[child]["parent_id"], parent)
+        self.assertEqual(folders[parent]["members"][0]["project_name"], "A")
+        self.assertEqual(folders[parent]["project_tasks"][0]["title"], "Keep this task")
+        self.assertTrue(dashboard.delete_project_folder(parent)["ok"])
+        self.assertEqual(dashboard.get_stats()["planner_root_tasks"][0]["title"], "Keep this task")
+
+    def test_delete_conflict_rolls_back(self):
+        parent = self.folder("Parent")
+        child = self.folder("Same", parent)
+        self.folder("Same")
+        self.assertIn("error", dashboard.delete_project_folder(parent))
+        self.assertEqual(next(f for f in dashboard.get_project_folders() if f["id"] == child)["parent_id"], parent)
+
+    def test_metadata_edit_preserves_hidden_dates_and_parent(self):
+        parent = self.folder("Parent")
+        child = self.folder("Child", parent, hard_deadline="2026-12-01", turn_in_date="2026-12-03", note="Original")
+        result = dashboard.save_project_folder({"id": child, "name": "Renamed", "note": "Changed"})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["folder"]["parent_id"], parent)
+        self.assertEqual(result["folder"]["hard_deadline"], "2026-12-01")
+        self.assertEqual(result["folder"]["turn_in_date"], "2026-12-03")
+
+    def test_merge_overviews_count_once_and_unmerge_restores_location(self):
+        for index, name in enumerate(["Song", "Version"]):
+            self._insert_project(name, (index + 1) * 100)
+        release = self.folder("Release")
+        tracks = self.folder("Tracks", release)
+        archive = self.folder("Archive")
+        self.move(tracks, ["Song"])
+        self.move(archive, ["Version"])
+        before = dashboard.get_stats()["summary"]["total_seconds"]
+        self.assertTrue(dashboard.merge_projects("Song", ["Version"])["ok"])
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["planner_overviews"][str(release)]["project_count"], 1)
+        self.assertEqual(stats["planner_overviews"][str(release)]["total_seconds"], 120)
+        self.assertEqual(stats["planner_overviews"][str(archive)]["project_count"], 0)
+        self.assertEqual(stats["planner_overviews"]["root"]["total_seconds"], before)
+        self.assertEqual(next(f for f in stats["project_folders"] if f["id"] == archive)["members"], [])
+        self.assertTrue(dashboard.unmerge_projects(["Version"])["ok"])
+        stats = dashboard.get_stats()
+        self.assertEqual(stats["planner_overviews"][str(archive)]["project_count"], 1)
+        self.assertEqual(stats["summary"]["total_seconds"], before)
+
+    def test_merge_rejects_alias_chains(self):
+        for index, name in enumerate(["A", "B", "C"]):
+            self._insert_project(name, (index + 1) * 100)
+        self.assertTrue(dashboard.merge_projects("A", ["B"])["ok"])
+        self.assertIn("error", dashboard.merge_projects("C", ["A"]))
+
+    def test_etag_changes_for_same_second_move_note_and_merge(self):
+        self._insert_project("A", 100)
+        self._insert_project("B", 200)
+        parent = self.folder("Parent")
+        child = self.folder("Child")
+        with patch("dashboard.time.time", return_value=123):
+            self.move(parent, folders=[child])
+            first = dashboard._compute_data_etag()
+            self.move(None, folders=[child])
+            second = dashboard._compute_data_etag()
+            self.assertNotEqual(first, second)
+            dashboard.save_project_folder({"id": child, "name": "Child", "note": "Updated"})
+            third = dashboard._compute_data_etag()
+            self.assertNotEqual(second, third)
+            dashboard.merge_projects("A", ["B"])
+            self.assertNotEqual(third, dashboard._compute_data_etag())
+
+    def test_subtree_task_counts_include_finished_projects_without_duplicates(self):
+        tasks = [{"id": 1, "status": "done"}, {"id": 2, "status": "open"}]
+        projects = [{"project_name": "A", "status": "finished", "total_seconds": 60, "project_tasks": tasks}]
+        folders = [{"id": 1, "parent_id": None, "members": [], "project_tasks": []},
+                   {"id": 2, "parent_id": 1, "members": [{"project_name": "A"}], "project_tasks": [{"id": 3, "status": "open"}]}]
+        result = dashboard.planner_folder_overviews(projects, folders, [])
+        self.assertEqual(result["1"], {"project_count": 1, "total_seconds": 60, "statuses": {"finished": 1}, "open_tasks": 2, "completed_tasks": 1})
+
+    def test_legacy_migration_preserves_members_and_ids_and_is_repeatable(self):
+        self._insert_project("A", 100)
+        with dashboard.db_connection() as conn:
+            conn.execute("DROP TABLE project_folders")
+            conn.execute("CREATE TABLE project_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE, status TEXT NOT NULL DEFAULT '', type TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT '', due_date TEXT NOT NULL DEFAULT '', hard_deadline TEXT NOT NULL DEFAULT '', turn_in_date TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', board_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+            conn.execute("INSERT INTO project_folders(id,name,note,created_at,updated_at) VALUES(42,'Old','Keep me',1,1)")
+            conn.execute("INSERT INTO project_folder_members(project_name,folder_id) VALUES('A',42)")
+            conn.commit()
+            dashboard.run_schema_migrations(conn)
+            dashboard.run_schema_migrations(conn)
+            conn.commit()
+        folder = dashboard.get_project_folders()[0]
+        self.assertEqual(folder["id"], 42)
+        self.assertEqual(folder["note"], "Keep me")
+        self.assertEqual(folder["members"][0]["project_name"], "A")
+        self.assertIsNone(folder["parent_id"])
+        self.assertGreater(self.folder("Nested", 42), 42)
 
 
 if __name__ == "__main__":

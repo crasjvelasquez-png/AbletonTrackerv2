@@ -27,7 +27,6 @@ if [ -f "$PLIST_PATH" ]; then
     launchctl unload "$PLIST_PATH" 2>/dev/null || true
     pkill -f "menubar.py" 2>/dev/null || true
     sleep 1
-    pkill -9 -f "menubar.py" 2>/dev/null || true
     launchctl load "$PLIST_PATH"
     echo "Relaunched menu bar tracker."
     echo ""
@@ -41,7 +40,6 @@ else
     fi
     pkill -f "menubar.py" 2>/dev/null || true
     sleep 1
-    pkill -9 -f "menubar.py" 2>/dev/null || true
     "$PYTHON" "$DIR/build_app.py"
     "$DIR/dist/Tracker.app/Contents/MacOS/launcher" &
     echo "Relaunched Tracker.app menu bar."
