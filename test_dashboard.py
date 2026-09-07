@@ -1548,6 +1548,12 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
         self.assertEqual(result["session"]["notes"], "Second")
         self.assertEqual(result["previous_session_id"], first)
         self.assertEqual(result["next_session_id"], third)
+        self.assertEqual([entry["id"] for entry in result["history"]], [third, second, first])
+
+        latest = dashboard.get_session_notes_entry("", "Alpha")
+        self.assertTrue(latest["ok"])
+        self.assertEqual(latest["session"]["id"], third)
+        self.assertEqual([entry["id"] for entry in latest["history"]], [third, second, first])
 
     def test_recent_payload_includes_session_todos(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
@@ -2386,6 +2392,26 @@ class DashboardGamificationTemplateTests(unittest.TestCase):
         self.assertLess(projects, history)
 
 
+class DashboardProjectCardTemplateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = (tracker.Path(__file__).parent / "templates" / "dashboard.html").read_text()
+
+    def test_project_card_uses_compact_metadata_row_and_header_pin(self):
+        self.assertIn('class="project-meta-row"', self.source)
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', self.source)
+        self.assertIn('id="projectPinButton"', self.source)
+        self.assertIn('aria-pressed="false"', self.source)
+        self.assertNotIn('id="projectMoreDetails"', self.source)
+        self.assertNotIn('class="project-more-details-toggle"', self.source)
+
+    def test_project_card_opens_session_history_inline(self):
+        self.assertIn('id="projectSessionHistoryToggle"', self.source)
+        self.assertIn('id="projectSessionHistory"', self.source)
+        self.assertIn('data-session-id="${entry.id}"', self.source)
+        self.assertIn("sessionHistory = data.history || []", self.source)
+
+
 class DashboardLaneOrderTests(unittest.TestCase):
     def setUp(self):
         fd, path = tempfile.mkstemp(suffix=".db")
@@ -2559,6 +2585,16 @@ class DashboardLaneOrderTests(unittest.TestCase):
         self.assertIn("data-bulk-merge", source)
         self.assertIn("plannerMergeDialog", source)
 
+    def test_planner_card_variant_has_compact_header_and_folder_treatment(self):
+        source = (dashboard.TEMPLATES_DIR / "dashboard.html").read_text()
+        self.assertIn("finder-item-primary", source)
+        self.assertIn("finder-item-details", source)
+        self.assertIn("plannerOverflowIcon", source)
+        self.assertIn("finder-item-menu-icon", source)
+        self.assertIn("card.classList.add('is-folder')", source)
+        self.assertIn(".is-cards .finder-item.is-folder", source)
+        self.assertIn('aria-label="Actions for ${escapeHtml(item.name)}"', source)
+
 
 
 class DashboardAppSplitTests(unittest.TestCase):
@@ -2730,6 +2766,66 @@ class PlannerFolderBrowserTests(unittest.TestCase):
         self.assertEqual(folder["members"][0]["project_name"], "A")
         self.assertIsNone(folder["parent_id"])
         self.assertGreater(self.folder("Nested", 42), 42)
+
+
+class FocusTimelineTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert_session(self, name, start, end, active=100.0):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, start, end, end, active),
+            )
+            conn.commit()
+
+    def test_migrations_create_pauses_table(self):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='pauses'"
+            ).fetchone()
+        self.assertIsNotNone(row)
+
+    def test_focus_timeline_interleaves_sessions_and_pauses(self):
+        self._insert_session("Song A", 1000.0, 1100.0)
+        self._insert_session("Song B", 1500.0, 1600.0)
+        rebuilt = dashboard.rebuild_pause_history()
+        self.assertEqual(rebuilt["created"], 1)
+
+        result = dashboard.get_focus_timeline(days=0)
+        self.assertEqual(result["session_count"], 2)
+        self.assertEqual(result["pause_count"], 1)
+        self.assertEqual(result["total_pause_seconds"], 400.0)
+        kinds = [event["kind"] for event in result["events"]]
+        self.assertEqual(kinds, ["session", "pause", "session"])
+        self.assertIn("BREAK", result["timeline_markdown"])
+        self.assertIn("Song A", result["timeline_markdown"])
+        self.assertIn("Song B", result["timeline_markdown"])
+
+    def test_focus_timeline_empty_db_returns_empty_markdown(self):
+        result = dashboard.get_focus_timeline(days=0)
+        self.assertEqual(result["events"], [])
+        self.assertIn("No sessions or pauses", result["timeline_markdown"])
 
 
 if __name__ == "__main__":

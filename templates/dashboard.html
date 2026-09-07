@@ -1646,22 +1646,9 @@ header{
 .project-planning-grid{
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;
 }
-.project-more-details{
-  grid-column:1 / -1;border:1px solid var(--border);border-radius:12px;
-  background:var(--control-bg);padding:0 12px;
+.project-meta-row{
+  grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;
 }
-.project-more-details-toggle{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
-  cursor:pointer;list-style:none;user-select:none;
-  font-size:12px;font-weight:700;color:var(--ink-3);padding:10px 0;
-}
-.project-more-details-toggle::-webkit-details-marker{display:none}
-.project-more-details-toggle::after{content:"▾";font-size:11px;color:var(--ink-4);transition:transform .16s ease}
-.project-more-details[open] .project-more-details-toggle::after{transform:rotate(-180deg)}
-.project-more-details-toggle:hover{color:var(--ink)}
-.project-more-details-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-.project-more-details-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 0 12px}
-@media (prefers-reduced-motion:reduce){.project-more-details-toggle::after{transition:none}}
 .project-planning-field{display:grid;gap:5px;min-width:0}
 .project-planning-field label{
   font-size:11px;font-weight:700;color:var(--ink-4);
@@ -1683,6 +1670,42 @@ select.project-planning-input{
 .project-planning-input:focus{
   border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
 }
+.project-header-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.project-pin-button{
+  min-height:34px;padding:0 11px;border:1px solid var(--border);border-radius:10px;
+  background:var(--control-bg);color:var(--ink-3);display:inline-flex;align-items:center;gap:7px;
+  font:inherit;font-size:12px;font-weight:700;cursor:pointer;
+  transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.project-pin-button svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.project-pin-button:hover{background:var(--control-bg-strong);color:var(--ink)}
+.project-pin-button[aria-pressed="true"]{border-color:color-mix(in srgb,var(--accent) 44%,var(--border));background:var(--accent-soft);color:var(--accent)}
+.project-pin-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.project-notes-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:7px}
+.project-notes-toolbar .inline-notes-toggle{margin:0!important}
+.project-session-history-toggle{
+  min-height:32px;padding:0 10px;border:1px solid var(--border);border-radius:9px;
+  background:transparent;color:var(--ink-3);font:inherit;font-size:11px;font-weight:700;cursor:pointer;
+}
+.project-session-history-toggle:hover,.project-session-history-toggle[aria-expanded="true"]{background:var(--control-bg-strong);color:var(--ink)}
+.project-session-history-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.project-session-context{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 7px}
+.project-session-context[hidden],.notes-nav[hidden]{display:none}
+.project-session-info{font-size:11px;color:var(--ink-4);line-height:1.4}
+.project-session-history{
+  max-height:156px;overflow:auto;margin-bottom:8px;padding:4px;border:1px solid var(--border);
+  border-radius:10px;background:var(--control-bg);
+}
+.project-session-history[hidden]{display:none}
+.project-session-history-button{
+  width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;
+  padding:8px;border:0;border-radius:7px;background:transparent;color:var(--ink-2);
+  font:inherit;font-size:11px;text-align:left;cursor:pointer;
+}
+.project-session-history-button:hover{background:var(--control-bg-strong);color:var(--ink)}
+.project-session-history-button.is-current{background:var(--surface);color:var(--ink);font-weight:700}
+.project-session-history-button span:last-child{color:var(--ink-4);font-variant-numeric:tabular-nums}
+.project-session-history-empty{padding:14px;text-align:center;color:var(--ink-4);font-size:11px}
 .date-control{position:relative}
 .date-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}
 .date-trigger svg{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.8;flex:0 0 auto}
@@ -3328,8 +3351,9 @@ select.planner-goal-input{
   .task-priority-segment button{flex:1}
   .task-more-panel{flex-direction:column;align-items:stretch}
   .project-planning-grid{grid-template-columns:1fr}
+  .project-meta-row{grid-template-columns:1fr}
   .project-planning-head{align-items:flex-start}
-  .project-more-details-body{grid-template-columns:1fr}
+  .project-pin-button span{display:none}
   .task-row{grid-template-columns:auto minmax(0,1fr) auto}
   #taskModalList .task-row{grid-template-columns:auto minmax(0,1fr);align-items:start;gap:12px;padding:13px 14px}
   #taskModalList .task-row-content{display:grid;grid-template-columns:1fr;gap:9px}
@@ -3598,7 +3622,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 .finder-item-name{display:flex;gap:10px;align-items:center;min-width:0;border:0;background:none;font:inherit;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;text-align:left}.finder-item-name>span{overflow-wrap:anywhere;min-width:0}.finder-item-name small{display:block;color:var(--ink-3);font-size:11px;margin-top:4px;font-weight:400}
 .finder-item-status,.finder-item-time,.finder-item-date{color:var(--ink-3);font-variant-numeric:tabular-nums}.finder-item-menu summary{cursor:pointer;color:var(--ink-2);list-style:none;padding:4px}.finder-item-menu summary::-webkit-details-marker{display:none}
 .finder-item-menu[open]{z-index:3}.finder-item-menu>div{position:absolute;right:8px;top:calc(100% - 8px);min-width:180px;padding:6px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:8px}.finder-item-menu button{display:block;width:100%;padding:9px;text-align:left;background:none;border:0;font:inherit;color:var(--ink-2);cursor:pointer}.finder-item-menu button:hover{background:var(--surface-hover)}
-.finder-items.is-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}.is-cards .finder-item{grid-template-columns:18px 1fr auto;border:1px solid var(--border);border-radius:12px;padding:16px}.is-cards .finder-item-name{grid-column:2/4;min-height:36px;align-items:flex-start}.is-cards .finder-item-status,.is-cards .finder-item-time,.is-cards .finder-item-date{grid-column:2/4}.is-cards .finder-item-menu{grid-column:2/4;justify-self:end}
+.finder-items.is-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}.is-cards .finder-item{display:block;min-width:0;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}.is-cards .finder-item:hover{border-color:color-mix(in srgb,var(--ink-4) 34%,var(--border));background:color-mix(in srgb,var(--surface) 96%,var(--ink) 4%);box-shadow:0 5px 14px rgba(0,0,0,.12)}.is-cards .finder-item-primary{display:grid;grid-template-columns:18px minmax(0,1fr) 28px;gap:8px;align-items:start}.is-cards .finder-item-name{gap:8px;min-height:28px;align-items:flex-start;font-size:14px;font-weight:700;line-height:1.32;letter-spacing:-.006em}.is-cards .finder-item-name .finder-icon{width:18px;height:18px;margin-top:1px}.is-cards .finder-item-menu{justify-self:end}.is-cards .finder-item-menu summary{display:grid;place-items:center;width:28px;height:28px;padding:0;border-radius:8px;color:var(--ink-3)}.is-cards .finder-item-menu summary:hover,.is-cards .finder-item-menu[open] summary{background:var(--surface-hover);color:var(--ink-2)}.finder-item-menu-icon{width:17px;height:17px;fill:currentColor}.is-cards .finder-item-menu>div{right:12px;top:40px;box-shadow:0 14px 30px rgba(0,0,0,.16)}.is-cards .finder-item-details{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 1px;padding-left:26px;min-height:21px}.is-cards .finder-item-status{display:inline-flex;align-items:center;min-height:21px;padding:2px 6px;border:1px solid var(--border);border-radius:7px;background:var(--surface-hover);color:var(--ink-3);font-size:10px;font-weight:650;line-height:1.2}.is-cards .finder-item-time,.is-cards .finder-item-date{font-size:11px;font-weight:650}.is-cards .finder-item.is-folder{border-style:dashed;background:color-mix(in srgb,var(--surface) 94%,var(--accent) 6%)}.is-cards .finder-item.is-folder:hover{background:color-mix(in srgb,var(--surface) 90%,var(--accent) 10%)}.is-cards .finder-item.is-folder .finder-icon{color:var(--accent)}.is-cards .finder-item.is-folder.is-selected{border-style:solid;background:var(--accent-soft)}
 .finder-empty{padding:40px 12px;text-align:center;grid-column:1/-1}.finder-empty h3{font-size:16px;font-weight:500}.finder-empty p{font-size:13px;color:var(--ink-3);margin:10px auto 18px;max-width:45ch;line-height:1.5}
 .finder-shell .is-drop-target{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
 .finder-dialog{margin:auto;width:min(560px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:24px;background:var(--surface-2);color:var(--ink);border:1px solid var(--border-strong);border-radius:16px;font-family:var(--font-body);box-shadow:0 20px 60px rgba(0,0,0,.18)}.finder-dialog::backdrop{background:rgba(0,0,0,.3)}
@@ -3722,7 +3746,13 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
         <h3 id="taskModalTitle">Project</h3>
         <div class="category-modal-kicker" id="taskModalProject"></div>
       </div>
-      <button class="category-close" id="taskModalClose" type="button" aria-label="Close project tasks">×</button>
+      <div class="project-header-actions">
+        <button class="project-pin-button" id="projectPinButton" type="button" aria-pressed="false">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 3.5h7l-1 4 2.5 2.5v1H5v-1l2.5-2.5-1-4ZM10 11v5.5"></path></svg>
+          <span>Pin project</span>
+        </button>
+        <button class="category-close" id="taskModalClose" type="button" aria-label="Close project tasks">×</button>
+      </div>
     </div>
     <div class="task-modal-body">
       <form class="project-planning-form" id="projectPlanningForm">
@@ -3731,65 +3761,51 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
             <label for="projectDisplayNameInput">Display Name</label>
             <input class="project-planning-input" id="projectDisplayNameInput" maxlength="180" required>
           </div>
-          <div class="project-planning-field">
-            <label for="projectCategoryInput">Category</label>
-            <select class="project-planning-input" id="projectCategoryInput">
-              <option value="">No category</option>
-            </select>
-          </div>
-          <div class="project-planning-field">
-            <label for="projectStatusInput">Status</label>
-            <select class="project-planning-input" id="projectStatusInput">
-              <option value="">Set status</option>
-            </select>
-          </div>
-          <div class="project-planning-field">
-            <label for="projectDueDateInput">Due Date</label>
-            <div class="date-control" id="projectDueDateControl">
-              <input id="projectDueDateInput" type="hidden">
-              <button class="project-planning-input date-trigger" id="projectDueDateTrigger" type="button" aria-haspopup="dialog" aria-expanded="false">
-                <span class="date-trigger-placeholder">Set date</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2"></rect><path d="M6.5 2.5v4M13.5 2.5v4M3 8.5h14"></path></svg>
-              </button>
-              <div class="tracker-calendar" id="projectDueDateCalendar" role="dialog" aria-label="Choose due date" hidden></div>
+          <div class="project-meta-row">
+            <div class="project-planning-field">
+              <label for="projectCategoryInput">Category</label>
+              <select class="project-planning-input" id="projectCategoryInput">
+                <option value="">No category</option>
+              </select>
             </div>
-          </div>
-          <div class="project-planning-field">
-            <label for="projectPinnedInput">Pinned</label>
-            <label class="project-planning-input" style="display:flex;align-items:center;gap:8px">
-              <input id="projectPinnedInput" type="checkbox"> Pin project
-            </label>
-          </div>
-          <details class="project-more-details" id="projectMoreDetails">
-            <summary class="project-more-details-toggle">More details</summary>
-            <div class="project-more-details-body">
-              <div class="project-planning-field">
-                <label for="projectTypeInput">Type</label>
-                <select class="project-planning-input" id="projectTypeInput">
-                  <option value="">Set type</option>
-                </select>
-              </div>
-              <div class="project-planning-field">
-                <label for="projectArtistInput">Artist</label>
-                <select class="project-planning-input" id="projectArtistInput">
-                  <option value="">No artist</option>
-                </select>
+            <div class="project-planning-field">
+              <label for="projectStatusInput">Status</label>
+              <select class="project-planning-input" id="projectStatusInput">
+                <option value="">Set status</option>
+              </select>
+            </div>
+            <div class="project-planning-field">
+              <label for="projectDueDateInput">Due Date</label>
+              <div class="date-control" id="projectDueDateControl">
+                <input id="projectDueDateInput" type="hidden">
+                <button class="project-planning-input date-trigger" id="projectDueDateTrigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="date-trigger-placeholder">Set date</span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2"></rect><path d="M6.5 2.5v4M13.5 2.5v4M3 8.5h14"></path></svg>
+                </button>
+                <div class="tracker-calendar" id="projectDueDateCalendar" role="dialog" aria-label="Choose due date" hidden></div>
               </div>
             </div>
-          </details>
+          </div>
+          <input id="projectPinnedInput" type="checkbox" hidden>
           <div class="project-planning-field" style="grid-column:1 / -1">
             <label>Notes</label>
-            <div class="inline-notes-toggle" id="projectNotesToggle" style="display:flex;gap:4px;margin-bottom:6px;padding:3px;background:var(--control-bg);border-radius:9px;border:1px solid var(--border)">
-              <button class="notes-mode-btn is-active" id="projectGlobalBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
-              <button class="notes-mode-btn" id="projectSessionBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
+            <div class="project-notes-toolbar">
+              <div class="inline-notes-toggle" id="projectNotesToggle" style="display:flex;gap:4px;padding:3px;background:var(--control-bg);border-radius:9px;border:1px solid var(--border)">
+                <button class="notes-mode-btn is-active" id="projectGlobalBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Global</button>
+                <button class="notes-mode-btn" id="projectSessionBtn" type="button" style="flex:1;padding:5px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease">Session</button>
+              </div>
+              <button class="project-session-history-toggle" id="projectSessionHistoryToggle" type="button" aria-expanded="false" hidden>History</button>
             </div>
-            <textarea class="notes-textarea" id="projectNotesTextarea" maxlength="3000" placeholder="" style="min-height:70px;max-height:140px"></textarea>
-            <div id="projectNotesSessionInfo" style="display:none;font-size:11px;color:var(--ink-4);margin-top:4px;line-height:1.4"></div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+            <div class="project-session-context" id="projectSessionContext" hidden>
+              <div class="project-session-info" id="projectNotesSessionInfo"></div>
               <div class="notes-nav" id="projectNotesNav" aria-label="Navigate session entries" hidden>
                 <button class="notes-nav-btn" id="projectNotesPrevBtn" type="button" aria-label="Previous session">‹</button>
                 <button class="notes-nav-btn" id="projectNotesNextBtn" type="button" aria-label="Next session">›</button>
               </div>
+            </div>
+            <div class="project-session-history" id="projectSessionHistory" hidden></div>
+            <textarea class="notes-textarea" id="projectNotesTextarea" maxlength="3000" placeholder="" style="min-height:70px;max-height:140px"></textarea>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px">
               <span class="notes-char-count" id="projectNotesCharCount" style="margin-left:auto">0 / 3000</span>
             </div>
           </div>
@@ -6120,6 +6136,12 @@ function refreshProjectPlanningForm(projectName) {
   }
   setProjectDueDate(project.due_date || '');
   pinnedInput.checked = !!project.pinned;
+  const pinButton = document.getElementById('projectPinButton');
+  if (pinButton) {
+    pinButton.setAttribute('aria-pressed', String(!!project.pinned));
+    const label = pinButton.querySelector('span');
+    if (label) label.textContent = project.pinned ? 'Pinned' : 'Pin project';
+  }
   if (summary) {
     const bits = [
       projectUrgencyLabel(project),
@@ -6253,6 +6275,8 @@ function openProjectTasks(projectName) {
   const addBtn = document.getElementById('taskAddButton');
   const toggle = document.getElementById('taskToggleCompleted');
   const notesTextarea = document.getElementById('projectNotesTextarea');
+  const pinButton = document.getElementById('projectPinButton');
+  const pinnedInput = document.getElementById('projectPinnedInput');
   if (!modal || !projectName) return;
   document.getElementById('plannerManageMergeButton')?.remove();
   if ((latestDashboardData?.planner_aliases || []).some(a => a.canonical_name === projectName)) {
@@ -6267,6 +6291,14 @@ function openProjectTasks(projectName) {
     isDirty = true;
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save project';
+  };
+  const togglePinned = () => {
+    if (!pinnedInput || !pinButton) return;
+    pinnedInput.checked = !pinnedInput.checked;
+    pinButton.setAttribute('aria-pressed', String(pinnedInput.checked));
+    const label = pinButton.querySelector('span');
+    if (label) label.textContent = pinnedInput.checked ? 'Pinned' : 'Pin project';
+    pinnedInput.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
   if (projectTaskModalState?.close) projectTaskModalState.close();
@@ -6306,6 +6338,7 @@ function openProjectTasks(projectName) {
     planningForm?.removeEventListener('change', markDirty);
     document.getElementById('projectDueDateInput')?.removeEventListener('change', onDueDateChange);
     notesTextarea?.removeEventListener('input', markDirty);
+    pinButton?.removeEventListener('click', togglePinned);
     toggle?.removeEventListener('click', toggleCompleted);
     if (_projectNotesCleanup) {
       _projectNotesCleanup();
@@ -6397,6 +6430,7 @@ function openProjectTasks(projectName) {
   planningForm?.addEventListener('change', markDirty);
   dueInput?.addEventListener('change', onDueDateChange);
   notesTextarea?.addEventListener('input', markDirty);
+  pinButton?.addEventListener('click', togglePinned);
   toggle?.addEventListener('click', toggleCompleted);
   refreshProjectTaskModal(projectName);
   titleInput.focus();
@@ -6408,7 +6442,10 @@ function setupProjectInlineNotes(projectName) {
   const globalBtn = document.getElementById('projectGlobalBtn');
   const sessionBtn = document.getElementById('projectSessionBtn');
   const textarea = document.getElementById('projectNotesTextarea');
+  const sessionContext = document.getElementById('projectSessionContext');
   const sessionInfo = document.getElementById('projectNotesSessionInfo');
+  const historyToggle = document.getElementById('projectSessionHistoryToggle');
+  const historyPanel = document.getElementById('projectSessionHistory');
   const nav = document.getElementById('projectNotesNav');
   const prevBtn = document.getElementById('projectNotesPrevBtn');
   const nextBtn = document.getElementById('projectNotesNextBtn');
@@ -6421,6 +6458,7 @@ function setupProjectInlineNotes(projectName) {
 
   let currentMode = 'global';
   let currentProjectNote = (project.project_note || '').trim();
+  let projectNoteDirty = false;
   let editingSessionId = null;
   let previousSessionId = null;
   let nextSessionId = null;
@@ -6430,6 +6468,8 @@ function setupProjectInlineNotes(projectName) {
   let endTimes = {};
   let lastSeenTimes = {};
   let activeSeconds = {};
+  let sessionHistory = [];
+  const dirtySessionIds = new Set();
 
   const sessions = latestDashboardData?.recent || [];
   const projSessions = sessions.filter(s => s.project_name === projectName);
@@ -6471,43 +6511,70 @@ function setupProjectInlineNotes(projectName) {
     if (nextBtn) nextBtn.disabled = !nextSessionId;
   }
 
-  async function loadNavState() {
-    if (sessionIds.length !== 1) {
-      hasSessionNav = false;
-      if (nav) nav.hidden = true;
-      updateNavButtons();
+  function rememberSession(entry) {
+    const key = String(entry.id);
+    if (!dirtySessionIds.has(entry.id)) notes[key] = entry.notes || '';
+    startTimes[key] = entry.start_time || 0;
+    endTimes[key] = entry.end_time ?? null;
+    lastSeenTimes[key] = entry.last_seen_time || 0;
+    activeSeconds[key] = entry.active_seconds || 0;
+  }
+
+  function renderSessionHistory() {
+    if (!historyPanel) return;
+    if (!sessionHistory.length) {
+      historyPanel.innerHTML = '<div class="project-session-history-empty">No session history yet</div>';
       return;
     }
+    historyPanel.innerHTML = sessionHistory.map(entry => {
+      const summary = sessionSummary(String(entry.id));
+      return `<button class="project-session-history-button ${entry.id === editingSessionId ? 'is-current' : ''}" type="button" data-session-id="${entry.id}"><span>${escapeHtml(summary.dateStr + ' · ' + summary.range)}</span><span>${escapeHtml(summary.duration)}</span></button>`;
+    }).join('');
+  }
+
+  async function loadNavState() {
     try {
-      const data = await getJson('/api/session-notes-entry?session_id=' + encodeURIComponent(sessionIds[0]) + '&project=' + encodeURIComponent(projectName || ''));
+      const query = editingSessionId
+        ? 'session_id=' + encodeURIComponent(editingSessionId) + '&project=' + encodeURIComponent(projectName || '')
+        : 'project=' + encodeURIComponent(projectName || '');
+      const data = await getJson('/api/session-notes-entry?' + query);
+      editingSessionId = data.session.id;
+      rememberSession(data.session);
+      currentSessionNote = notes[String(editingSessionId)] || '';
       previousSessionId = data.previous_session_id || null;
       nextSessionId = data.next_session_id || null;
       hasSessionNav = !!(previousSessionId || nextSessionId);
+      sessionHistory = data.history || [];
+      sessionHistory.forEach(rememberSession);
+      renderSessionHistory();
       updateNavButtons();
     } catch(e) {
       hasSessionNav = false;
+      sessionHistory = [];
+      renderSessionHistory();
       updateNavButtons();
     }
+    setModeButtons();
   }
 
   async function openEntry(sessionId) {
     if (!sessionId) return;
+    if (editingSessionId) notes[String(editingSessionId)] = textarea.value;
     if (prevBtn) prevBtn.disabled = true;
     if (nextBtn) nextBtn.disabled = true;
     try {
       const data = await getJson('/api/session-notes-entry?session_id=' + encodeURIComponent(sessionId) + '&project=' + encodeURIComponent(projectName || ''));
       const entry = data.session;
       editingSessionId = entry.id;
-      notes[String(entry.id)] = entry.notes || '';
-      startTimes[String(entry.id)] = entry.start_time || 0;
-      endTimes[String(entry.id)] = entry.end_time ?? null;
-      lastSeenTimes[String(entry.id)] = entry.last_seen_time || 0;
-      activeSeconds[String(entry.id)] = entry.active_seconds || 0;
-      currentSessionNote = entry.notes || '';
+      rememberSession(entry);
+      currentSessionNote = notes[String(entry.id)] || '';
       previousSessionId = data.previous_session_id || null;
       nextSessionId = data.next_session_id || null;
       hasSessionNav = !!(previousSessionId || nextSessionId);
-      updateTextarea('session');
+      sessionHistory = data.history || sessionHistory;
+      sessionHistory.forEach(rememberSession);
+      renderSessionHistory();
+      updateTextarea('session', false);
       updateNavButtons();
       if (currentMode === 'session' && nav) {
         nav.hidden = !hasSessionNav;
@@ -6526,16 +6593,19 @@ function setupProjectInlineNotes(projectName) {
       btn.style.background = active ? 'var(--surface)' : 'transparent';
       btn.style.color = active ? 'var(--ink)' : 'var(--ink-3)';
     });
+    if (historyToggle) historyToggle.hidden = currentMode !== 'session' || !editingSessionId;
   }
 
-  function updateTextarea(mode) {
+  function updateTextarea(mode, captureCurrent = true) {
     if (!textarea) return;
     const val = textarea.value;
-    if (currentMode === 'global') {
-      currentProjectNote = val;
-    } else if (currentMode === 'session' && editingSessionId) {
-      notes[String(editingSessionId)] = val;
-      currentSessionNote = val;
+    if (captureCurrent) {
+      if (currentMode === 'global') {
+        currentProjectNote = val;
+      } else if (currentMode === 'session' && editingSessionId) {
+        notes[String(editingSessionId)] = val;
+        currentSessionNote = val;
+      }
     }
 
     if (mode === 'global') {
@@ -6543,23 +6613,25 @@ function setupProjectInlineNotes(projectName) {
       textarea.placeholder = '';
       textarea.maxLength = MAX_PROJECT_NOTE_LEN;
       if (nav) nav.hidden = true;
-      if (sessionInfo) sessionInfo.style.display = 'none';
+      if (sessionContext) sessionContext.hidden = true;
+      if (historyPanel) historyPanel.hidden = true;
+      if (historyToggle) historyToggle.setAttribute('aria-expanded', 'false');
       if (charCount) charCount.textContent = currentProjectNote.length + ' / ' + MAX_PROJECT_NOTE_LEN;
     } else {
       textarea.value = currentSessionNote;
       textarea.placeholder = '';
       textarea.maxLength = MAX_NOTES_LEN;
 
-      if (editingSessionId && sessionIds.length === 1) {
+      if (editingSessionId) {
         const summary = sessionSummary(String(editingSessionId));
         if (sessionInfo) {
-          sessionInfo.style.display = 'block';
-          sessionInfo.textContent = summary.dateStr + ' \u00b7 ' + summary.range;
+          sessionInfo.textContent = [summary.dateStr, summary.range, summary.duration].filter(Boolean).join(' \u00b7 ');
         }
+        if (sessionContext) sessionContext.hidden = false;
         if (nav) nav.hidden = !hasSessionNav;
       } else {
         if (nav) nav.hidden = true;
-        if (sessionInfo) sessionInfo.style.display = 'none';
+        if (sessionContext) sessionContext.hidden = true;
       }
 
       if (charCount) charCount.textContent = currentSessionNote.length + ' / ' + MAX_NOTES_LEN;
@@ -6580,17 +6652,20 @@ function setupProjectInlineNotes(projectName) {
   textarea.placeholder = '';
   if (charCount) charCount.textContent = currentProjectNote.length + ' / ' + MAX_PROJECT_NOTE_LEN;
   if (nav) nav.hidden = true;
-  if (sessionInfo) sessionInfo.style.display = 'none';
+  if (sessionContext) sessionContext.hidden = true;
+  if (historyPanel) historyPanel.hidden = true;
   setModeButtons();
 
   function onTextareaInput() {
     const val = textarea.value;
     if (currentMode === 'global') {
       currentProjectNote = val;
+      projectNoteDirty = true;
       if (charCount) charCount.textContent = val.length + ' / ' + MAX_PROJECT_NOTE_LEN;
       if (charCount) charCount.classList.toggle('over', val.length > MAX_PROJECT_NOTE_LEN);
     } else {
       if (editingSessionId) notes[String(editingSessionId)] = val;
+      if (editingSessionId) dirtySessionIds.add(editingSessionId);
       currentSessionNote = val;
       if (charCount) charCount.textContent = val.length + ' / ' + MAX_NOTES_LEN;
       if (charCount) charCount.classList.toggle('over', val.length > MAX_NOTES_LEN);
@@ -6600,8 +6675,12 @@ function setupProjectInlineNotes(projectName) {
   async function onSave(savedMetadata = null) {
     if (!textarea) return;
     const val = textarea.value.trim();
-    if (currentMode === 'global') {
-      currentProjectNote = val;
+    if (currentMode === 'global') currentProjectNote = val;
+    if (currentMode === 'session' && editingSessionId) {
+      notes[String(editingSessionId)] = val;
+      dirtySessionIds.add(editingSessionId);
+    }
+    if (projectNoteDirty || currentMode === 'global') {
       const proj = findProjectByName(projectName) || { project_name: projectName };
       const metadata = savedMetadata || {};
       await postJson('/api/project-metadata', {
@@ -6613,13 +6692,14 @@ function setupProjectInlineNotes(projectName) {
         hard_deadline: metadata.hard_deadline ?? (proj.hard_deadline || ''),
         turn_in_date: metadata.turn_in_date ?? (proj.turn_in_date || ''),
         pinned: metadata.pinned ?? !!proj.pinned,
-        project_note: val,
+        project_note: currentProjectNote.trim(),
       });
-    } else {
-      if (editingSessionId) notes[String(editingSessionId)] = val;
-      currentSessionNote = val;
-      await postJson('/api/session-notes', { session_id: editingSessionId, notes: val });
     }
+    for (const sessionId of dirtySessionIds) {
+      await postJson('/api/session-notes', { session_id: sessionId, notes: (notes[String(sessionId)] || '').trim() });
+    }
+    projectNoteDirty = false;
+    dirtySessionIds.clear();
     toast('Notes saved');
     load();
   }
@@ -6628,19 +6708,29 @@ function setupProjectInlineNotes(projectName) {
   function onNext() { openEntry(nextSessionId); }
   function onGlobalClick() { switchMode('global'); }
   function onSessionClick() { switchMode('session'); }
+  function onHistoryToggle() {
+    if (!historyPanel || !historyToggle) return;
+    historyPanel.hidden = !historyPanel.hidden;
+    historyToggle.setAttribute('aria-expanded', String(!historyPanel.hidden));
+  }
+  function onHistoryClick(event) {
+    const button = event.target.closest('[data-session-id]');
+    if (button) openEntry(Number(button.dataset.sessionId));
+  }
 
   if (globalBtn) globalBtn.addEventListener('click', onGlobalClick);
   if (sessionBtn) sessionBtn.addEventListener('click', onSessionClick);
+  if (historyToggle) historyToggle.addEventListener('click', onHistoryToggle);
+  if (historyPanel) historyPanel.addEventListener('click', onHistoryClick);
   if (textarea) textarea.addEventListener('input', onTextareaInput);
   if (prevBtn) prevBtn.addEventListener('click', onPrev);
   if (nextBtn) nextBtn.addEventListener('click', onNext);
 
   loadNavState().then(function() {
     if (currentMode === 'session') {
-      if (editingSessionId && sessionIds.length === 1) {
+      if (editingSessionId) {
         if (nav) nav.hidden = !hasSessionNav;
-        if (sessionInfo && hasSessionNav) sessionInfo.style.display = 'block';
-        if (!hasSessionNav && sessionInfo) sessionInfo.style.display = 'none';
+        if (sessionContext) sessionContext.hidden = false;
       }
     }
     updateNavButtons();
@@ -6650,7 +6740,8 @@ function setupProjectInlineNotes(projectName) {
     cleanup: function() {
       if (globalBtn) globalBtn.removeEventListener('click', onGlobalClick);
       if (sessionBtn) sessionBtn.removeEventListener('click', onSessionClick);
-      if (mergeBtn) mergeBtn.removeEventListener('click', onMergeClick);
+      if (historyToggle) historyToggle.removeEventListener('click', onHistoryToggle);
+      if (historyPanel) historyPanel.removeEventListener('click', onHistoryClick);
       if (textarea) textarea.removeEventListener('input', onTextareaInput);
       if (prevBtn) prevBtn.removeEventListener('click', onPrev);
       if (nextBtn) nextBtn.removeEventListener('click', onNext);
@@ -7859,6 +7950,7 @@ const plannerBrowser = {
 };
 const plannerFolderIcon = '<svg class="finder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/></svg>';
 const plannerProjectIcon = '<svg class="finder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h8l4 4v14H6Z M14 3v5h4 M9 12v5m3-7v7m3-4v4"/></svg>';
+const plannerOverflowIcon = '<svg class="finder-item-menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
 function plannerFolderPath(id, folders = latestDashboardData?.project_folders || []) {
   const parts = []; const seen = new Set();
   while (id != null && !seen.has(id)) {
@@ -8027,6 +8119,22 @@ function renderPlanner(data) {
   const dates=[...projects.map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),date:p.hard_deadline||p.due_date})),...folders.map(f=>({key:`f:${f.id}`,name:f.name,date:f.hard_deadline||f.due_date})),...tasks.filter(t=>t.status!=='done').map(t=>({key:t.owner.key,name:`${t.owner.name} · ${t.title}`,date:t.due_date}))].filter(x=>x.date).sort((a,b)=>a.date.localeCompare(b.date));
   const notes=[...projects.filter(p=>p.project_note).map(p=>({key:`p:${p.project_name}`,name:projectDisplayName(p),note:p.project_note,path:memberLocation.get(p.project_name)})),...folders.filter(f=>f.note).map(f=>({key:`f:${f.id}`,name:f.name,note:f.note,path:f.parent_id})),...(data.planner_aliases||[]).filter(a=>a.project_note&&projects.some(p=>p.project_name===a.canonical_name)).map(a=>({key:`p:${a.canonical_name}`,name:`${a.alias_name} (merged into ${a.canonical_name})`,note:a.project_note,path:memberLocation.get(a.canonical_name)}))];
   plannerEl.innerHTML=`<div class="finder-shell"><aside class="finder-sidebar" aria-label="Project folders"><div class="finder-sidebar-title">Folders</div><button class="finder-tree-link finder-root ${id===null?'is-current':''}" data-nav="" data-drop="" ${id===null?'aria-current="location"':''}>${plannerFolderIcon}All projects</button>${tree(null)}<button class="btn small finder-sidebar-new" data-new>New folder</button></aside><div class="finder-main"><nav class="finder-breadcrumbs" aria-label="Folder path"><button data-nav="" data-drop="">All projects</button>${path.map(f=>`<span>/</span><button data-nav="${f.id}" data-drop="${f.id}">${escapeHtml(f.name)}</button>`).join('')}</nav><section class="finder-overview"><div class="finder-heading"><h2>${escapeHtml(current?.name||'All projects')}</h2>${current?'<button class="btn small" data-edit-current>Edit folder</button>':''}</div>${current?.note?`<p class="finder-description">${escapeHtml(current.note)}</p>`:''}${current?`<p class="finder-muted">${escapeHtml([projectStatusLabel(current.status||''),projectTypeLabel(current.type||''),current.priority,current.due_date?`Due ${current.due_date}`:''].filter(Boolean).join(' · '))}</p>`:''}<div class="finder-totals"><span><strong>${projects.length}</strong> projects</span><span><strong>${fmt.dur(projects.reduce((sum,p)=>sum+(p.total_seconds||0),0))}</strong> tracked</span><span><strong>${tasks.length-done}</strong> open tasks</span><span><strong>${done}</strong> completed tasks</span></div><div class="finder-statuses">${[...statuses].map(([status,count])=>`<span>${escapeHtml(projectStatusLabel(status))} <strong>${count}</strong></span>`).join('')}</div>${dates.length?`<details class="finder-overview-details"><summary>Deadlines · ${dates.length}</summary>${dates.map(d=>`<button data-owner="${escapeHtml(d.key)}" class="finder-detail-row"><span>${escapeHtml(d.name)}</span><span class="${d.date<localDateKey(new Date())?'finder-overdue':''}">${escapeHtml(d.date)}${d.date<localDateKey(new Date())?' · overdue':''}</span></button>`).join('')}</details>`:''}${notes.length?`<details class="finder-overview-details"><summary>Notes and descriptions · ${notes.length}</summary>${notes.map(n=>`<article class="finder-note"><button data-owner="${escapeHtml(n.key)}">${escapeHtml(n.name)}</button><small>${escapeHtml(['All projects',...plannerFolderPath(n.path).map(f=>f.name)].join(' / '))}</small><p>${escapeHtml(n.note)}</p></article>`).join('')}</details>`:''}</section>${todayMission.open.length||todayMission.completed.length?renderTodayMission():''}<section class="finder-contents" aria-label="Folder contents"><div class="finder-toolbar"><input id="finderSearch" class="project-planning-input" type="search" aria-label="Search this folder and subfolders" placeholder="Search this folder…" value="${escapeHtml(plannerBrowser.query)}"><button class="btn small" data-new>New folder</button><select id="finderSort" class="project-planning-input" aria-label="Sort contents">${[['name','Name'],['time','Tracked time'],['status','Status']].map(([v,l])=>`<option value="${v}" ${plannerBrowser.sort===v?'selected':''}>${l}</option>`).join('')}</select><div class="finder-view-toggle" role="group" aria-label="View"><button class="btn small" data-view="list" aria-pressed="${plannerBrowser.view==='list'}">List</button><button class="btn small" data-view="cards" aria-pressed="${plannerBrowser.view==='cards'}">Cards</button></div></div><div class="finder-selection" aria-live="polite"><span>${plannerBrowser.selected.size?`${plannerBrowser.selected.size} selected`:`${items.length} items`}</span><button class="btn small" data-bulk-move ${plannerBrowser.selected.size?'':'disabled'}>Move To…</button><button class="btn small" data-bulk-merge ${plannerBrowser.selected.size>=2&&[...plannerBrowser.selected].every(k=>k.startsWith('p:'))?'':'disabled'}>Merge projects</button><button class="btn small" data-clear ${plannerBrowser.selected.size?'':'disabled'}>Clear</button></div><div class="finder-items ${plannerBrowser.view==='cards'?'is-cards':''}">${items.length?items.map(item=>`<article class="finder-item ${plannerBrowser.selected.has(item.key)?'is-selected':''}" data-key="${escapeHtml(item.key)}" draggable="true" ${item.folder?`data-drop="${item.folder.id}"`:''}><input class="finder-select" type="checkbox" aria-label="Select ${escapeHtml(item.name)}" ${plannerBrowser.selected.has(item.key)?'checked':''}><button class="finder-item-name" data-open="${escapeHtml(item.key)}">${item.folder?plannerFolderIcon:plannerProjectIcon}<span>${escapeHtml(item.name)}${query?`<small>${escapeHtml(['All projects',...plannerFolderPath(item.parent).map(f=>f.name)].join(' / '))}</small>`:''}</span></button><span class="finder-item-status">${escapeHtml(projectStatusLabel(item.status||''))}</span><span class="finder-item-time">${item.folder?`${allFolders.filter(f=>f.parent_id===item.folder.id).length} folders · ${allProjects.filter(p=>memberLocation.get(p.project_name)===item.folder.id).length} projects`:fmt.dur(item.seconds)}</span><span class="finder-item-date">${escapeHtml(item.due||'')}</span><details class="finder-item-menu"><summary aria-label="Actions for ${escapeHtml(item.name)}">Actions</summary><div><button data-move="${escapeHtml(item.key)}">Move To…</button>${item.folder?`<button data-edit="${item.folder.id}">Edit folder</button><button data-new-in="${item.folder.id}">New subfolder</button><button data-delete="${item.folder.id}">Delete folder</button>`:`<button data-merge="${escapeHtml(item.project.project_name)}">Merge with…</button>${(data.planner_aliases||[]).some(a=>a.canonical_name===item.project.project_name)?`<button data-manage="${escapeHtml(item.project.project_name)}">Manage merged projects</button>`:''}`}</div></details></article>`).join(''):`<div class="finder-empty"><h3>${query?'No matches in this folder':'This folder is ready for your projects'}</h3><p>${query?'Try another project or folder name.':'Create a folder here, or use Move To on any project to bring it here.'}</p>${query?'<button class="btn small" data-reset-search>Clear search</button>':'<button class="btn small" data-new>Create a folder</button>'}</div>`}</div></section></div></div>`;
+  if (plannerBrowser.view === 'cards') {
+    plannerEl.querySelectorAll('.finder-item').forEach(card => {
+      const checkbox = card.querySelector('.finder-select');
+      const name = card.querySelector('.finder-item-name');
+      const menu = card.querySelector('.finder-item-menu');
+      const details = document.createElement('div');
+      const primary = document.createElement('div');
+      details.className = 'finder-item-details';
+      primary.className = 'finder-item-primary';
+      primary.append(checkbox, name, menu);
+      details.append(...card.querySelectorAll('.finder-item-status,.finder-item-time,.finder-item-date'));
+      menu.querySelector('summary').innerHTML = plannerOverflowIcon;
+      if (card.dataset.key.startsWith('f:')) card.classList.add('is-folder');
+      card.replaceChildren(primary, details);
+    });
+  }
   const openOwner=key=>{if(key.startsWith('f:'))openFolderModal(allFolders.find(f=>f.id===Number(key.slice(2))));else if(key==='root')openProjectTasks('__planner_root__');else openProjectTasks(key.slice(2));};
   plannerEl.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>plannerNavigate(b.dataset.nav?Number(b.dataset.nav):null));
   plannerEl.querySelectorAll('[data-expand]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.expand);if(plannerBrowser.expanded.has(id))plannerBrowser.expanded.delete(id);else plannerBrowser.expanded.add(id);localStorage.setItem('plannerExpanded',JSON.stringify([...plannerBrowser.expanded]));renderPlanner(data);});

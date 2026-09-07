@@ -986,5 +986,131 @@ class UntitledSessionTests(unittest.TestCase):
         self.assertIsNone(row)
 
 
+class PauseTrackingTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        tracker.setup_db()
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def test_setup_db_creates_pauses_table(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='pauses'"
+            ).fetchone()
+        self.assertIsNotNone(row)
+
+    def test_record_pause_skips_short_gaps(self):
+        self.assertIsNone(tracker.record_pause(1000.0, 1030.0, reason="idle"))
+        self.assertEqual(tracker.get_pauses(), [])
+
+    def test_record_pause_is_idempotent_on_overlap(self):
+        first = tracker.record_pause(1000.0, 1400.0, reason="idle",
+                                     prev_project="A", next_project="B")
+        self.assertIsNotNone(first)
+        self.assertIsNone(tracker.record_pause(1100.0, 1500.0, reason="idle"))
+        self.assertEqual(len(tracker.get_pauses()), 1)
+
+    def test_idle_close_then_start_records_pause_with_reason(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Song A")
+        with patch.object(tracker.time, "time", return_value=1100.0), \
+             patch.object(tracker.time, "monotonic", return_value=110.0):
+            t._close(preserve_resume_hint=True, reason=tracker.PAUSE_REASON_IDLE)
+        with patch.object(tracker.time, "time", return_value=1500.0), \
+             patch.object(tracker.time, "monotonic", return_value=510.0):
+            t._start("Song A")
+
+        pauses = tracker.get_pauses()
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual(pauses[0]["reason"], "idle")
+        self.assertEqual(pauses[0]["pause_start"], 1100.0)
+        self.assertEqual(pauses[0]["pause_end"], 1500.0)
+        self.assertEqual(pauses[0]["prev_project"], "Song A")
+        self.assertEqual(pauses[0]["next_project"], "Song A")
+
+    def test_project_switch_jitter_is_not_a_pause(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=2000.0), \
+             patch.object(tracker.time, "monotonic", return_value=100.0):
+            t._start("Song B")
+        with patch.object(tracker.time, "time", return_value=2010.0), \
+             patch.object(tracker.time, "monotonic", return_value=110.0):
+            t._close(reason=tracker.PAUSE_REASON_PROJECT_SWITCH)
+        with patch.object(tracker.time, "time", return_value=2020.0), \
+             patch.object(tracker.time, "monotonic", return_value=120.0):
+            # Clear restart-fallback interference: no prior history besides
+            # the just-closed 10s session.
+            t._pending_pause_start = 2010.0
+            t._pending_pause_project = "Song B"
+            t._pending_pause_reason = tracker.PAUSE_REASON_PROJECT_SWITCH
+            t._start("Song C")
+        self.assertEqual(tracker.get_pauses(), [])
+
+    def test_rebuild_pauses_from_sessions_backfills_and_is_idempotent(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Song A", 1000.0, 1100.0, 1100.0, 100.0),
+            )
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Song B", 1500.0, 1600.0, 1600.0, 100.0),
+            )
+            conn.commit()
+
+        first = tracker.rebuild_pauses_from_sessions()
+        self.assertEqual(first["created"], 1)
+        second = tracker.rebuild_pauses_from_sessions()
+        self.assertEqual(second["created"], 0)
+        pauses = tracker.get_pauses()
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual(pauses[0]["prev_project"], "Song A")
+        self.assertEqual(pauses[0]["next_project"], "Song B")
+
+    def test_focus_timeline_markdown_lists_work_then_break(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Song A", 1000.0, 1100.0, 1100.0, 100.0),
+            )
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("Song B", 1500.0, 1600.0, 1600.0, 100.0),
+            )
+            conn.commit()
+        tracker.rebuild_pauses_from_sessions()
+        markdown = tracker.format_focus_timeline_markdown()
+        self.assertIn("WORK", markdown)
+        self.assertIn("BREAK", markdown)
+        self.assertIn("Song A", markdown)
+        self.assertIn("Song B", markdown)
+        self.assertLess(markdown.index("Song A"), markdown.index("BREAK"))
+
+
 if __name__ == "__main__":
     unittest.main()

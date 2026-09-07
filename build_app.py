@@ -4,6 +4,8 @@
 import shutil
 import subprocess
 import sys
+import struct
+from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -39,12 +41,8 @@ APPS = {
 
 
 def build_icon(app_name: str, accent: str) -> Path:
-    """Create a restrained generic icon and compile it to ICNS."""
-    iconset = DIST_DIR / f"{app_name}.iconset"
+    """Create a restrained generic icon as a PNG-backed ICNS file."""
     icns = DIST_DIR / f"{app_name}.icns"
-    if iconset.exists():
-        shutil.rmtree(iconset)
-    iconset.mkdir(parents=True)
 
     image = Image.new("RGBA", (MASTER_SIZE, MASTER_SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -71,17 +69,24 @@ def build_icon(app_name: str, accent: str) -> Path:
             draw.ellipse((292, y - 24, 340, y + 24), fill=white)
             draw.rounded_rectangle((390, y - 18, 390 + width, y + 18), radius=18, fill=white)
 
-    specs = (
-        (16, "icon_16x16.png"), (32, "icon_16x16@2x.png"),
-        (32, "icon_32x32.png"), (64, "icon_32x32@2x.png"),
-        (128, "icon_128x128.png"), (256, "icon_128x128@2x.png"),
-        (256, "icon_256x256.png"), (512, "icon_256x256@2x.png"),
-        (512, "icon_512x512.png"), (1024, "icon_512x512@2x.png"),
-    )
-    for size, filename in specs:
-        image.resize((size, size), Image.Resampling.LANCZOS).save(iconset / filename)
-    subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)], check=True)
-    shutil.rmtree(iconset)
+    # ICNS supports PNG payloads directly. Building the chunks here avoids
+    # iconutil, which rejects valid icon sets on some current macOS releases.
+    chunks = []
+    for size, chunk_type in (
+        (16, b"icp4"),
+        (32, b"icp5"),
+        (64, b"icp6"),
+        (128, b"ic07"),
+        (256, b"ic08"),
+        (512, b"ic09"),
+        (1024, b"ic10"),
+    ):
+        png = BytesIO()
+        image.resize((size, size), Image.Resampling.LANCZOS).save(png, format="PNG")
+        payload = png.getvalue()
+        chunks.append(chunk_type + struct.pack(">I", len(payload) + 8) + payload)
+    body = b"".join(chunks)
+    icns.write_bytes(b"icns" + struct.pack(">I", len(body) + 8) + body)
     image.save(DIST_DIR / f"{app_name}-icon.png")
     return icns
 

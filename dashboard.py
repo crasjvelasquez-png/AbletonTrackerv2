@@ -19,13 +19,18 @@ from urllib.parse import parse_qs, urlparse
 from tracker import (
     allocate_session_activity,
     build_activity_rollups,
+    build_focus_timeline,
     cleanup_phantom_sessions,
     cleanup_untitled_sessions,
     condense_recent_sessions,
     count_phantom_sessions,
-    is_ableton_running,
-    session_end_time,
+    ensure_pauses_table as _ensure_pauses_table,
+    format_focus_timeline_markdown,
     get_condense_gap_seconds,
+    get_pauses as _tracker_get_pauses,
+    is_ableton_running,
+    rebuild_pauses_from_sessions as _rebuild_pauses,
+    session_end_time,
 )
 
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
@@ -557,30 +562,36 @@ def get_last_session_todos(project_name: str) -> dict:
 
 
 def get_session_notes_entry(session_id, project_name: str = "") -> dict:
-    try:
-        sid = int(session_id)
-    except (TypeError, ValueError):
-        return {"error": "invalid session_id"}
+    raw_session_id = str(session_id or "").strip()
+    sid = None
+    if raw_session_id:
+        try:
+            sid = int(raw_session_id)
+        except (TypeError, ValueError):
+            return {"error": "invalid session_id"}
 
     if not DB_PATH.exists():
         return {"error": "no data yet"}
 
     project = (project_name or "").strip()
+    if sid is None and not project:
+        return {"error": "session_id or project required"}
     with db_connection() as conn:
         ensure_sessions_notes_column(conn)
         conn.row_factory = sqlite3.Row
-        current = conn.execute(
-            """
-            SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
-            FROM sessions
-            WHERE id = ?
-            """,
-            (sid,),
-        ).fetchone()
-        if not current:
-            return {"error": "session not found"}
-        if not project:
-            project = current["project_name"]
+        if sid is not None:
+            current = conn.execute(
+                """
+                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
+                FROM sessions
+                WHERE id = ?
+                """,
+                (sid,),
+            ).fetchone()
+            if not current:
+                return {"error": "session not found"}
+            if not project:
+                project = current["project_name"]
 
         canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project,)).fetchone()
         canonical_project = canonical_row[0] if canonical_row else project
@@ -598,6 +609,11 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
             """,
             names,
         ).fetchall()
+
+    if sid is None:
+        if not rows:
+            return {"error": "session not found for project"}
+        sid = int(rows[0]["id"])
 
     index = next((i for i, row in enumerate(rows) if int(row["id"]) == sid), None)
     if index is None:
@@ -620,6 +636,7 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
         "session": serialize(rows[index]),
         "previous_session_id": int(rows[index + 1]["id"]) if index + 1 < len(rows) else None,
         "next_session_id": int(rows[index - 1]["id"]) if index > 0 else None,
+        "history": [serialize(row) for row in rows],
     }
 
 
@@ -943,6 +960,11 @@ def get_all_app_settings() -> dict[str, str]:
         return settings
 
 
+def ensure_pauses_table(conn: sqlite3.Connection) -> None:
+    """Dashboard-side migration for the tracker-owned pauses table."""
+    _ensure_pauses_table(conn)
+
+
 def ensure_indexes(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_project_name ON sessions(project_name)"
@@ -952,6 +974,12 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_end_time ON sessions(end_time)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pauses_start ON pauses(pause_start)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pauses_end ON pauses(pause_end)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_project_categories_key ON project_categories(category_key)"
@@ -998,6 +1026,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
     ensure_project_aliases_table(conn)
+    ensure_pauses_table(conn)
     ensure_sessions_notes_column(conn)
     ensure_indexes(conn)
     purge_legacy_categories(conn)
@@ -3393,6 +3422,68 @@ def get_project_report(project_name: str) -> dict:
             "end_times": session_end_times_map,
             "last_seen_times": session_last_seen_times_map,
         }
+
+
+def get_pauses(since: float | None = None, until: float | None = None, limit: int = 500) -> list[dict]:
+    """Dashboard-side read of recorded pauses (tracker-owned table)."""
+    if not DB_PATH.exists():
+        return []
+    with db_connection() as conn:
+        ensure_pauses_table(conn)
+        conn.commit()
+    return _tracker_get_pauses(since=since, until=until, limit=limit)
+
+
+def rebuild_pause_history(reason: str = "unknown") -> dict:
+    """Backfill pauses from session gaps. Idempotent; safe on real data."""
+    if not DB_PATH.exists():
+        return {"ok": True, "created": 0, "skipped": 0}
+    with db_connection() as conn:
+        ensure_pauses_table(conn)
+        conn.commit()
+    return _rebuild_pauses(reason=reason)
+
+
+def get_focus_timeline(
+    days: int = 7,
+    limit: int = 500,
+    since: float | None = None,
+    until: float | None = None,
+) -> dict:
+    """LLM-ready work + break timeline for focus analysis (not a UI feature).
+
+    Returns {"events", "timeline_markdown", "session_count", "pause_count",
+    "total_pause_seconds"}. Times are local. Paste timeline_markdown into
+    any LLM with: "Here is my Ableton activity with breaks. Where do I
+    lose focus?"
+    """
+    if not DB_PATH.exists():
+        return {
+            "events": [],
+            "timeline_markdown": (
+                "# Ableton focus timeline\n\n_No sessions or pauses recorded yet._\n"
+            ),
+            "session_count": 0,
+            "pause_count": 0,
+            "total_pause_seconds": 0.0,
+        }
+    if since is None and days and days > 0:
+        since = time.time() - float(days) * 86400
+    with db_connection() as conn:
+        ensure_pauses_table(conn)
+        conn.commit()
+    events = build_focus_timeline(since=since, until=until, limit=limit)
+    pause_seconds = sum(
+        float(event.get("duration_seconds") or 0)
+        for event in events if event.get("kind") == "pause"
+    )
+    return {
+        "events": events,
+        "timeline_markdown": format_focus_timeline_markdown(events),
+        "session_count": sum(1 for event in events if event.get("kind") == "session"),
+        "pause_count": sum(1 for event in events if event.get("kind") == "pause"),
+        "total_pause_seconds": pause_seconds,
+    }
 
 
 def get_stats(month_value: str = "", recent_before: float | None = None) -> dict:
@@ -7434,6 +7525,46 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.end_headers()
             self.wfile.write(body)
+        elif parsed.path == "/api/focus-timeline":
+            query = parse_qs(parsed.query)
+            try:
+                days = int(query.get("days", ["7"])[0] or 7)
+            except ValueError:
+                self._json({"error": "days must be an integer"}, status=400)
+                return
+            try:
+                limit = int(query.get("limit", ["500"])[0] or 500)
+            except ValueError:
+                self._json({"error": "limit must be an integer"}, status=400)
+                return
+            self._json(get_focus_timeline(days=days, limit=limit))
+        elif parsed.path == "/api/focus-timeline/download":
+            query = parse_qs(parsed.query)
+            try:
+                days = int(query.get("days", ["7"])[0] or 7)
+            except ValueError:
+                self._json({"error": "days must be an integer"}, status=400)
+                return
+            fmt = query.get("format", ["markdown"])[0].lower()
+            result = get_focus_timeline(days=days)
+            if fmt == "json":
+                content_str = json.dumps(result["events"], indent=2)
+                content_type = "application/json"
+                ext = "json"
+            else:
+                content_str = result["timeline_markdown"]
+                content_type = "text/markdown"
+                ext = "md"
+            body = content_str.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header(
+                "Content-Disposition",
+                f'attachment; filename="focus_timeline.{ext}"',
+            )
+            self.end_headers()
+            self.wfile.write(body)
         else:
             body = _load_html().encode()
             self.send_response(200)
@@ -7452,6 +7583,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(clear_unsaved_projects())
         elif self.path == "/api/clear-phantoms":
             self._json(clear_phantom_sessions())
+        elif self.path == "/api/rebuild-pauses":
+            self._json(rebuild_pause_history())
         elif self.path == "/api/consolidate-sessions":
             self._json(consolidate_sessions())
         elif self.path == "/api/merge-projects":
