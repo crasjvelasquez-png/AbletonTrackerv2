@@ -2411,6 +2411,12 @@ class DashboardProjectCardTemplateTests(unittest.TestCase):
         self.assertIn('data-session-id="${entry.id}"', self.source)
         self.assertIn("sessionHistory = data.history || []", self.source)
 
+    def test_project_card_add_task_is_icon_only_but_accessible(self):
+        self.assertIn('class="btn primary small task-add-button"', self.source)
+        self.assertIn('aria-label="Add task"', self.source)
+        self.assertIn('<path d="M10 4v12M4 10h12"></path>', self.source)
+        self.assertNotIn('id="taskAddButton" type="submit">Add task</button>', self.source)
+
 
 class DashboardLaneOrderTests(unittest.TestCase):
     def setUp(self):
@@ -2826,6 +2832,38 @@ class FocusTimelineTests(unittest.TestCase):
         result = dashboard.get_focus_timeline(days=0)
         self.assertEqual(result["events"], [])
         self.assertIn("No sessions or pauses", result["timeline_markdown"])
+
+    def test_focus_timeline_counts_within_pauses_separately(self):
+        self._insert_session("Song A", 1000.0, 1600.0, active=500.0)
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.ensure_pauses_table(conn)
+            conn.commit()
+        tracker.record_pause(
+            1100.0, 1200.0, reason="no_input_listening",
+            prev_project="Song A", next_project="Song A",
+            kind="within", session_id=1,
+        )
+        result = dashboard.get_focus_timeline(days=0)
+        self.assertEqual(result["session_count"], 1)
+        self.assertEqual(result["pause_count"], 0)
+        self.assertEqual(result["within_pause_count"], 1)
+        self.assertEqual(result["total_within_pause_seconds"], 100.0)
+        self.assertEqual(result["total_pause_seconds"], 0.0)
+        self.assertIn("- PAUSE", result["timeline_markdown"])
+        self.assertIn("during: Song A", result["timeline_markdown"])
+
+    def test_get_pauses_filter_by_kind(self):
+        self._insert_session("Song A", 1000.0, 1100.0)
+        self._insert_session("Song B", 1500.0, 1600.0)
+        dashboard.rebuild_pause_history()
+        tracker.record_pause(
+            1025.0, 1090.0, reason="no_input",
+            prev_project="Song A", next_project="Song A",
+            kind="within", session_id=1,
+        )
+        self.assertEqual(len(dashboard.get_pauses()), 2)
+        self.assertEqual(len(dashboard.get_pauses(kind="within")), 1)
+        self.assertEqual(len(dashboard.get_pauses(kind="between")), 1)
 
 
 if __name__ == "__main__":

@@ -1106,10 +1106,156 @@ class PauseTrackingTests(unittest.TestCase):
         tracker.rebuild_pauses_from_sessions()
         markdown = tracker.format_focus_timeline_markdown()
         self.assertIn("WORK", markdown)
-        self.assertIn("BREAK", markdown)
+        self.assertIn("- BREAK", markdown)
         self.assertIn("Song A", markdown)
         self.assertIn("Song B", markdown)
-        self.assertLess(markdown.index("Song A"), markdown.index("BREAK"))
+        self.assertLess(markdown.index("Song A"), markdown.index("- BREAK"))
+
+    def test_migration_adds_kind_and_session_id_columns(self):
+        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(pauses)").fetchall()
+            }
+        self.assertIn("kind", columns)
+        self.assertIn("session_id", columns)
+
+
+class WithinSessionPauseTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        tracker.setup_db()
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _open_session(self, name="Song A", at=1000.0):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=at), \
+             patch.object(tracker.time, "monotonic", return_value=at):
+            t._start(name)
+        return t
+
+    def _poll(self, t, hid, audio, now):
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=audio), \
+             patch.object(tracker, "get_idle_seconds", return_value=hid), \
+             patch.object(tracker, "get_project_name", return_value="Song A"), \
+             patch.object(tracker.time, "time", return_value=now), \
+             patch.object(tracker.time, "monotonic", return_value=now):
+            t.poll_once(paused=False)
+
+    def test_idle_below_threshold_never_opens_span(self):
+        t = self._open_session()
+        t._within_pause_update(1035.0, 35.0)
+        self.assertIsNone(t._within_pause_start)
+        self.assertEqual(tracker.get_pauses(), [])
+
+    def test_idle_above_threshold_opens_and_resume_finalizes_listening(self):
+        t = self._open_session(at=1000.0)
+        t.last_audio_active = 1040.0
+        t._within_pause_update(1090.0, 65.0)
+        self.assertEqual(t._within_pause_start, 1025.0)
+        self.assertEqual(t._within_pause_session_id, t.session_id)
+        t._within_pause_update(1150.0, 4.0)
+        self.assertIsNone(t._within_pause_start)
+
+        pauses = tracker.get_pauses()
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual(pauses[0]["kind"], "within")
+        self.assertEqual(pauses[0]["reason"], "no_input_listening")
+        self.assertEqual(pauses[0]["pause_start"], 1025.0)
+        self.assertEqual(pauses[0]["pause_end"], 1146.0)
+        self.assertEqual(pauses[0]["prev_project"], "Song A")
+        self.assertEqual(pauses[0]["next_project"], "Song A")
+        self.assertEqual(pauses[0]["session_id"], t.session_id)
+
+    def test_quiet_span_records_no_input_reason(self):
+        t = self._open_session(at=1000.0)
+        t.last_audio_active = 0.0
+        t._within_pause_update(1090.0, 65.0)
+        t._within_pause_update(1150.0, 4.0)
+
+        pauses = tracker.get_pauses()
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual(pauses[0]["reason"], "no_input")
+
+    def test_full_poll_cycle_records_within_while_session_stays_open(self):
+        t = tracker.Tracker()
+        self._poll(t, 0, False, 1000.0)
+        self._poll(t, 35, True, 1060.0)
+        self.assertIsNone(t._within_pause_start)
+        self._poll(t, 65, True, 1090.0)
+        self.assertIsNotNone(t._within_pause_start)
+        self.assertIsNotNone(t.session_id)
+        self._poll(t, 4, False, 1150.0)
+
+        within = tracker.get_pauses(kind="within")
+        self.assertEqual(len(within), 1)
+        self.assertEqual(within[0]["reason"], "no_input_listening")
+
+    def test_close_finalizes_within_and_next_start_is_adjacent(self):
+        t = self._open_session(at=1000.0)
+        t._within_pause_update(1090.0, 65.0)
+        with patch.object(tracker.time, "time", return_value=1120.0), \
+             patch.object(tracker.time, "monotonic", return_value=1120.0):
+            t._close(reason=tracker.PAUSE_REASON_IDLE)
+        with patch.object(tracker.time, "time", return_value=1600.0), \
+             patch.object(tracker.time, "monotonic", return_value=1600.0):
+            t._start("Song A")
+
+        pauses = tracker.get_pauses()
+        kinds = sorted(p["kind"] for p in pauses)
+        self.assertEqual(kinds, ["between", "within"])
+        within = next(p for p in pauses if p["kind"] == "within")
+        between = next(p for p in pauses if p["kind"] == "between")
+        self.assertEqual(within["pause_end"], between["pause_start"])
+        self.assertEqual(between["reason"], "idle")
+
+    def test_unknown_idle_probe_discards_open_span(self):
+        t = self._open_session(at=1000.0)
+        t._within_pause_update(1090.0, 65.0)
+        self.assertIsNotNone(t._within_pause_start)
+        t._within_pause_update(1120.0, float("inf"))
+        self.assertIsNone(t._within_pause_start)
+        self.assertEqual(tracker.get_pauses(), [])
+
+    def test_discarded_session_drops_its_within_span(self):
+        t = tracker.Tracker()
+        with patch.object(tracker.time, "time", return_value=1000.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.0):
+            t._start("Song A")
+        t._within_pause_update(1090.0, 65.0)
+        # Close immediately: active_seconds stays < 5 so the row is deleted.
+        with patch.object(tracker.time, "time", return_value=1001.0), \
+             patch.object(tracker.time, "monotonic", return_value=10.5):
+            t._close(reason=tracker.PAUSE_REASON_IDLE)
+        self.assertEqual(tracker.get_pauses(), [])
+
+    def test_start_watermark_prevents_reaching_back(self):
+        t = self._open_session(at=1000.0)
+        # _start() watermarks "now": a stale hid reading cannot open a
+        # span that reaches back across the session start.
+        t._within_pause_update(1090.0, 200.0)
+        self.assertEqual(t._within_pause_start, 1000.0)
+
+    def test_timeline_marks_within_as_pause_during_project(self):
+        tracker.record_pause(
+            1025.0, 1146.0, reason=tracker.PAUSE_REASON_NO_INPUT_LISTENING,
+            prev_project="Song A", next_project="Song A",
+            kind="within", session_id=7,
+        )
+        markdown = tracker.format_focus_timeline_markdown()
+        self.assertIn("- PAUSE", markdown)
+        self.assertIn("during: Song A", markdown)
 
 
 if __name__ == "__main__":

@@ -46,6 +46,14 @@ PAUSE_REASON_ABLETON_CLOSED = "ableton_closed"
 PAUSE_REASON_PROJECT_SWITCH = "project_switch"
 PAUSE_REASON_APP_RESTART = "app_restart"
 PAUSE_REASON_UNKNOWN = "unknown"
+# In-session reasons: no mouse/keyboard input for 60s+ while the session
+# stayed open (audio kept it alive). The _listening variant means audio
+# played at some point during the idle span (passive listening); plain
+# no_input means silence throughout.
+PAUSE_REASON_NO_INPUT = "no_input"
+PAUSE_REASON_NO_INPUT_LISTENING = "no_input_listening"
+PAUSE_KIND_BETWEEN = "between"
+PAUSE_KIND_WITHIN = "within"
 DB_PATH = Path.home() / ".ableton_tracker" / "sessions.db"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 UNTITLED_NAMES = {"untitled", "untitled project"}
@@ -85,8 +93,13 @@ def is_untitled_project_name(name: str | None) -> bool:
 def ensure_pauses_table(conn: sqlite3.Connection) -> None:
     """Create the pauses table used for LLM-readable focus-break analysis.
 
-    Each row is a completed gap between two tracked activities:
-    pause_start = previous activity end, pause_end = next activity start.
+    Two kinds of rows share this table so one chronological query serves
+    the whole focus timeline:
+    - kind='between': gap between two activities (pause_start = previous
+      activity end, pause_end = next activity start).
+    - kind='within': idle span inside one open session (no mouse/keyboard
+      input for 60s+ while audio kept the session alive). session_id
+      points at the owning session row.
     Short polling jitter (< MIN_PAUSE_SECONDS) is never stored; callers
     should use record_pause() so the threshold and overlap guard stay
     in one place.
@@ -100,15 +113,37 @@ def ensure_pauses_table(conn: sqlite3.Connection) -> None:
             reason           TEXT    NOT NULL DEFAULT '',
             prev_project     TEXT,
             next_project     TEXT,
-            created_at       REAL    NOT NULL
+            created_at       REAL    NOT NULL,
+            kind             TEXT    NOT NULL DEFAULT 'between',
+            session_id       INTEGER
         )
     """)
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(pauses)").fetchall()
+    }
+    if "kind" not in columns:
+        conn.execute("ALTER TABLE pauses ADD COLUMN kind TEXT NOT NULL DEFAULT 'between'")
+    if "session_id" not in columns:
+        conn.execute("ALTER TABLE pauses ADD COLUMN session_id INTEGER")
+    # Backfill only when needed: an unconditional UPDATE would open a
+    # write transaction on every read path and block nested connections.
+    needs_backfill = conn.execute(
+        "SELECT 1 FROM pauses WHERE kind IS NULL OR kind = '' LIMIT 1"
+    ).fetchone()
+    if needs_backfill:
+        conn.execute(
+            "UPDATE pauses SET kind = 'between' WHERE kind IS NULL OR kind = ''"
+        )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_pauses_start ON pauses(pause_start)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_pauses_end ON pauses(pause_end)"
     )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pauses_session ON pauses(session_id)"
+    )
+    conn.commit()
 
 
 def setup_db():
@@ -279,13 +314,18 @@ def record_pause(
     reason: str = PAUSE_REASON_UNKNOWN,
     prev_project: str | None = None,
     next_project: str | None = None,
+    kind: str = PAUSE_KIND_BETWEEN,
+    session_id: int | None = None,
 ) -> int | None:
-    """Persist one completed pause between two activities.
+    """Persist one completed pause (between or within activities).
 
     Returns the new pause id, or None when the gap is too short to be a
     real break, inverted, or already covered by an existing pause row.
     Idempotent: overlapping intervals are skipped so resume/retry paths
-    and history backfills can call this safely.
+    and history backfills can call this safely. Adjacent intervals
+    (end == start) are allowed so a within-session pause ending at a
+    session close sits cleanly next to the between-session pause that
+    starts there.
     """
     try:
         start = float(pause_start or 0)
@@ -295,6 +335,7 @@ def record_pause(
     duration = end - start
     if start <= 0 or end <= 0 or duration < MIN_PAUSE_SECONDS:
         return None
+    kind = kind or PAUSE_KIND_BETWEEN
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
@@ -313,11 +354,11 @@ def record_pause(
             """
             INSERT INTO pauses
                 (pause_start, pause_end, duration_seconds, reason,
-                 prev_project, next_project, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 prev_project, next_project, created_at, kind, session_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (start, end, duration, (reason or PAUSE_REASON_UNKNOWN),
-             prev_project, next_project, time.time()),
+             prev_project, next_project, time.time(), kind, session_id),
         )
         conn.commit()
         return cur.lastrowid
@@ -327,6 +368,7 @@ def get_pauses(
     since: float | None = None,
     until: float | None = None,
     limit: int = 500,
+    kind: str | None = None,
 ) -> list[dict]:
     """Return recorded pauses ordered by start time (oldest first)."""
     if not DB_PATH.exists():
@@ -335,18 +377,22 @@ def get_pauses(
         ensure_pauses_table(conn)
         conn.row_factory = sqlite3.Row
         clauses: list[str] = []
-        params: list[float] = []
+        params: list = []
         if since is not None:
             clauses.append("pause_end >= ?")
             params.append(float(since))
         if until is not None:
             clauses.append("pause_start <= ?")
             params.append(float(until))
+        if kind is not None:
+            clauses.append("kind = ?")
+            params.append(kind)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = conn.execute(
             f"""
             SELECT id, pause_start, pause_end, duration_seconds,
-                   reason, prev_project, next_project, created_at
+                   reason, prev_project, next_project, created_at,
+                   kind, session_id
             FROM pauses
             {where}
             ORDER BY pause_start ASC
@@ -483,11 +529,16 @@ def build_focus_timeline(
     for row in pauses or []:
         start = float(row.get("pause_start") or 0)
         end = float(row.get("pause_end") or 0)
+        pause_kind = row.get("kind") or PAUSE_KIND_BETWEEN
         events.append({
+            # "pause" + pause_kind="between" is a BREAK between work;
+            # "pause" + pause_kind="within" is an in-session PAUSE.
             "kind": "pause",
+            "pause_kind": pause_kind,
             "reason": (row.get("reason") or PAUSE_REASON_UNKNOWN),
             "prev_project": row.get("prev_project"),
             "next_project": row.get("next_project"),
+            "session_id": row.get("session_id"),
             "start": start,
             "start_local": _format_clock(start) if start else "",
             "end": end,
@@ -513,8 +564,10 @@ def format_focus_timeline_markdown(events: list[dict] | None = None, **query) ->
     lines = [
         "# Ableton focus timeline",
         "",
-        "Sessions are tracked work; pauses are completed breaks between work.",
-        "Times are local. Durations: sessions show active time, pauses show break length.",
+        "Sessions are tracked work. BREAKs are gaps between work; PAUSEs are "
+        "idle spans inside one session (no mouse/keyboard input while the "
+        "session stayed open).",
+        "Times are local. Durations: sessions show active time, breaks/pauses show idle length.",
         "",
     ]
     if not events:
@@ -522,12 +575,24 @@ def format_focus_timeline_markdown(events: list[dict] | None = None, **query) ->
         return "\n".join(lines) + "\n"
     for event in events:
         if event.get("kind") == "pause":
-            lines.append(
-                f"- BREAK {event.get('start_local')} → {event.get('end_local')} "
-                f"({event.get('duration_label')}, reason={event.get('reason')}) "
-                f"| before: {event.get('prev_project') or '—'} "
-                f"| after: {event.get('next_project') or '—'}"
-            )
+            if event.get("pause_kind") == PAUSE_KIND_WITHIN:
+                project = (
+                    event.get("prev_project")
+                    or event.get("next_project")
+                    or "—"
+                )
+                lines.append(
+                    f"- PAUSE {event.get('start_local')} → {event.get('end_local')} "
+                    f"({event.get('duration_label')}, reason={event.get('reason')}) "
+                    f"| during: {project}"
+                )
+            else:
+                lines.append(
+                    f"- BREAK {event.get('start_local')} → {event.get('end_local')} "
+                    f"({event.get('duration_label')}, reason={event.get('reason')}) "
+                    f"| before: {event.get('prev_project') or '—'} "
+                    f"| after: {event.get('next_project') or '—'}"
+                )
         else:
             open_mark = " (ongoing)" if event.get("open") else ""
             lines.append(
@@ -537,14 +602,16 @@ def format_focus_timeline_markdown(events: list[dict] | None = None, **query) ->
             )
     lines.append("")
     work_count = sum(1 for event in events if event.get("kind") == "session")
-    pause_count = sum(1 for event in events if event.get("kind") == "pause")
-    total_pause = sum(
-        float(event.get("duration_seconds") or 0)
-        for event in events if event.get("kind") == "pause"
-    )
+    breaks = [e for e in events if e.get("kind") == "pause"
+              and e.get("pause_kind") != PAUSE_KIND_WITHIN]
+    within = [e for e in events if e.get("kind") == "pause"
+              and e.get("pause_kind") == PAUSE_KIND_WITHIN]
+    total_breaks = sum(float(e.get("duration_seconds") or 0) for e in breaks)
+    total_within = sum(float(e.get("duration_seconds") or 0) for e in within)
     lines.append(
-        f"Summary: {work_count} work sessions, {pause_count} breaks, "
-        f"{_format_span(total_pause)} total break time."
+        f"Summary: {work_count} work sessions, {len(breaks)} breaks "
+        f"({_format_span(total_breaks)}), {len(within)} in-session pauses "
+        f"({_format_span(total_within)})."
     )
     return "\n".join(lines) + "\n"
 
@@ -1309,6 +1376,14 @@ class Tracker:
         self._pending_pause_start: float | None = None
         self._pending_pause_project: str | None = None
         self._pending_pause_reason: str = PAUSE_REASON_UNKNOWN
+        # Open in-session idle span: no input for 60s+ while the session
+        # stays open (audio kept it alive). Finalized when input resumes
+        # or the session closes. _within_last_end is a watermark so a new
+        # span never reaches back across an already-recorded interval.
+        self._within_pause_start: float | None = None
+        self._within_pause_project: str | None = None
+        self._within_pause_session_id: int | None = None
+        self._within_last_end: float | None = None
 
         # --- One-time initialization (unified entry point) ---
         setup_db()
@@ -1334,8 +1409,79 @@ class Tracker:
         self.project_name = new_project
         print(f"[{_ts()}] ↻  {old} → {new_project}")
 
+    def _finalize_within_pause(self, now: float, end: float | None = None) -> None:
+        """Record the open in-session idle span, if it is a real pause."""
+        start = self._within_pause_start
+        if start is None:
+            return
+        project = self._within_pause_project
+        session_id = self._within_pause_session_id
+        self._within_pause_start = None
+        self._within_pause_project = None
+        self._within_pause_session_id = None
+        end_ts = now if end is None else min(max(float(end), start), now)
+        self._within_last_end = end_ts
+        if end_ts - start < MIN_PAUSE_SECONDS:
+            return
+        listening = (
+            self.last_audio_active and self.last_audio_active >= start
+        )
+        record_pause(
+            start, end_ts,
+            reason=(PAUSE_REASON_NO_INPUT_LISTENING if listening
+                    else PAUSE_REASON_NO_INPUT),
+            prev_project=project, next_project=project,
+            kind=PAUSE_KIND_WITHIN, session_id=session_id,
+        )
+
+    def _discard_within_pause(self) -> None:
+        """Drop the open in-session span without recording (idle probe blind)."""
+        self._within_pause_start = None
+        self._within_pause_project = None
+        self._within_pause_session_id = None
+
+    def _within_pause_update(self, now: float, hid_idle_seconds: float) -> None:
+        """Open/extend/finalize the in-session idle span for this poll.
+
+        Opens when input has been idle 60s+ while a session is open;
+        finalizes when input resumes (end ≈ last-input time). Spans are
+        approximate to poll granularity (±30s) — precise enough for focus
+        review, and active_seconds accounting is left untouched.
+        """
+        if self.session_id is None:
+            # Orphaned by an external close (_tick rowcount 0): finalize
+            # what we observed rather than leaking the open span.
+            if self._within_pause_start is not None:
+                self._finalize_within_pause(now, end=now)
+            return
+        try:
+            hid = float(hid_idle_seconds)
+        except (TypeError, ValueError):
+            self._discard_within_pause()
+            return
+        if hid != hid or hid == float("inf"):
+            # Idle probe blind — don't fabricate precision.
+            self._discard_within_pause()
+            return
+        if hid >= MIN_PAUSE_SECONDS:
+            if self._within_pause_start is None:
+                start = now - hid
+                if self._within_last_end is not None:
+                    start = max(start, self._within_last_end)
+                self._within_pause_start = start
+                self._within_pause_project = self.project_name
+                self._within_pause_session_id = self.session_id
+            return
+        if self._within_pause_start is not None:
+            self._finalize_within_pause(now, end=now - hid)
+
     def _finalize_pending_pause(self, next_project: str, now: float) -> None:
         """Record the gap between the last close and this start, if real."""
+        # Any pre-start idle is either recorded as a between-pause here or
+        # negligible: move the within watermark so a later in-session span
+        # never reaches back across this boundary.
+        if self._within_last_end is None or now > self._within_last_end:
+            self._within_last_end = now
         pause_start = self._pending_pause_start
         prev_project = self._pending_pause_project
         reason = self._pending_pause_reason or PAUSE_REASON_UNKNOWN
@@ -1467,6 +1613,10 @@ class Tracker:
             if self.last_tick_mono is not None
             else 0.0
         )
+        # Decided inside the transaction below, acted on after it commits:
+        # record_pause() opens its own connection, so finalizing while this
+        # write transaction is still open would hit "database is locked".
+        discarded = False
         with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
             cur = conn.execute(
                 """
@@ -1490,9 +1640,21 @@ class Tracker:
                     conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
                     reason = "too short — discarded" if active < 5 else "unsaved — discarded"
                     print(f"[{_ts()}] ✗  {project_name} ({reason})")
+                    discarded = True
                 else:
                     print(f"[{_ts()}] ■  {project_name}")
                 conn.commit()
+        if discarded:
+            # Discarded rows were never real work; drop any idle span
+            # observed inside them rather than attributing a pause to a
+            # ghost session.
+            self._discard_within_pause()
+        else:
+            # The in-session idle span (if any) ends at this close; the
+            # between-session break starting here is captured via
+            # _pending_pause_start above, so the two sit adjacent without
+            # overlapping.
+            self._finalize_within_pause(now, end=now)
         if preserve_resume_hint and project_name:
             self.resume_hint_project = project_name
         else:
@@ -1549,6 +1711,7 @@ class Tracker:
             if self.session_id is None and self.resume_hint_project:
                 self._start(self.resume_hint_project)
             self._tick()
+            self._within_pause_update(now, self.last_hid_idle)
             self.last_state = STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
             return
         should_check_audio = (
@@ -1611,6 +1774,7 @@ class Tracker:
         ):
             self._start(self.resume_hint_project)
             self._tick()
+            self._within_pause_update(now, self.last_hid_idle)
             self.last_state = STATE_TRACKING
             return
 
@@ -1621,6 +1785,7 @@ class Tracker:
             if self.session_id is None and self.resume_hint_project:
                 self._start(self.resume_hint_project)
             self._tick()
+            self._within_pause_update(now, self.last_hid_idle)
             self.last_state = (
                 STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
             )
@@ -1636,6 +1801,7 @@ class Tracker:
                 self._close(reason=PAUSE_REASON_PROJECT_SWITCH)
                 self._start(project)
         self._tick()
+        self._within_pause_update(now, self.last_hid_idle)
         self.last_state = STATE_TRACKING
 
     def maybe_run_cleanup(self, force: bool = False):

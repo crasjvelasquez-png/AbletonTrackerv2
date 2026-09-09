@@ -1749,6 +1749,8 @@ select.project-planning-input{
 .task-input{padding:8px 11px;min-width:0}
 .task-form-main .task-input{min-height:42px;font-size:14px;padding-inline:13px}
 .task-form-main .btn{min-height:42px;padding-inline:16px}
+.task-form-main .task-add-button{width:42px;padding:0;display:grid;place-items:center}
+.task-add-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .task-priority-select{
   padding:8px 26px 8px 10px;font-weight:600;
   appearance:none;-webkit-appearance:none;
@@ -3347,6 +3349,7 @@ select.planner-goal-input{
   .task-section-kicker{display:none}
   .task-form-main{grid-template-columns:1fr}
   .task-form-main .btn{width:100%}
+  .task-form-main .task-add-button{width:42px;justify-self:end}
   .task-priority-segment{flex:1}
   .task-priority-segment button{flex:1}
   .task-more-panel{flex-direction:column;align-items:stretch}
@@ -3820,7 +3823,9 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
       <form class="task-form" id="taskForm">
         <div class="task-form-main">
           <input class="task-input" id="taskTitleInput" type="text" maxlength="180" aria-label="Task title" placeholder="Task title" autocomplete="off">
-          <button class="btn primary small" id="taskAddButton" type="submit">Add task</button>
+          <button class="btn primary small task-add-button" id="taskAddButton" type="submit" aria-label="Add task" title="Add task">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>
+          </button>
           <button class="task-tool-trigger" data-task-more-trigger type="button" aria-expanded="false">More</button>
         </div>
         <div class="task-inline-panel task-date-panel" data-task-date-panel hidden></div>

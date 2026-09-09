@@ -3424,14 +3424,14 @@ def get_project_report(project_name: str) -> dict:
         }
 
 
-def get_pauses(since: float | None = None, until: float | None = None, limit: int = 500) -> list[dict]:
+def get_pauses(since: float | None = None, until: float | None = None, limit: int = 500, kind: str | None = None) -> list[dict]:
     """Dashboard-side read of recorded pauses (tracker-owned table)."""
     if not DB_PATH.exists():
         return []
     with db_connection() as conn:
         ensure_pauses_table(conn)
         conn.commit()
-    return _tracker_get_pauses(since=since, until=until, limit=limit)
+    return _tracker_get_pauses(since=since, until=until, limit=limit, kind=kind)
 
 
 def rebuild_pause_history(reason: str = "unknown") -> dict:
@@ -3453,9 +3453,11 @@ def get_focus_timeline(
     """LLM-ready work + break timeline for focus analysis (not a UI feature).
 
     Returns {"events", "timeline_markdown", "session_count", "pause_count",
-    "total_pause_seconds"}. Times are local. Paste timeline_markdown into
-    any LLM with: "Here is my Ableton activity with breaks. Where do I
-    lose focus?"
+    "total_pause_seconds", "within_pause_count", "total_within_pause_seconds"}.
+    pause_count/total_pause_seconds cover BREAKs between work;
+    within_pause_count/total_within_pause_seconds cover PAUSEs inside one
+    session. Times are local. Paste timeline_markdown into any LLM with:
+    "Here is my Ableton activity with breaks. Where do I lose focus?"
     """
     if not DB_PATH.exists():
         return {
@@ -3466,6 +3468,8 @@ def get_focus_timeline(
             "session_count": 0,
             "pause_count": 0,
             "total_pause_seconds": 0.0,
+            "within_pause_count": 0,
+            "total_within_pause_seconds": 0.0,
         }
     if since is None and days and days > 0:
         since = time.time() - float(days) * 86400
@@ -3473,16 +3477,34 @@ def get_focus_timeline(
         ensure_pauses_table(conn)
         conn.commit()
     events = build_focus_timeline(since=since, until=until, limit=limit)
-    pause_seconds = sum(
+    between_seconds = sum(
         float(event.get("duration_seconds") or 0)
-        for event in events if event.get("kind") == "pause"
+        for event in events
+        if event.get("kind") == "pause"
+        and event.get("pause_kind") != "within"
+    )
+    within_seconds = sum(
+        float(event.get("duration_seconds") or 0)
+        for event in events
+        if event.get("kind") == "pause"
+        and event.get("pause_kind") == "within"
     )
     return {
         "events": events,
         "timeline_markdown": format_focus_timeline_markdown(events),
         "session_count": sum(1 for event in events if event.get("kind") == "session"),
-        "pause_count": sum(1 for event in events if event.get("kind") == "pause"),
-        "total_pause_seconds": pause_seconds,
+        "pause_count": sum(
+            1 for event in events
+            if event.get("kind") == "pause"
+            and event.get("pause_kind") != "within"
+        ),
+        "total_pause_seconds": between_seconds,
+        "within_pause_count": sum(
+            1 for event in events
+            if event.get("kind") == "pause"
+            and event.get("pause_kind") == "within"
+        ),
+        "total_within_pause_seconds": within_seconds,
     }
 
 
