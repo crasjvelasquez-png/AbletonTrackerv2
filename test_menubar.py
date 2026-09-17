@@ -452,6 +452,23 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         self._pause_dir.mkdir(parents=True, exist_ok=True)
         self._pause_file.touch()
 
+    def test_notifications_receive_daily_goal_and_manual_pause_status(self):
+        self._touch_pause()
+        self.app.notification_coordinator = MagicMock()
+        self.app._next_notification_check = 0
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_PAUSED, running=True
+        )
+        self.app._check_notifications(today=7200, week=9000, weekly_goal=10,
+                                      daily_goal=2, streak=3)
+        values = self.app.notification_coordinator.check.call_args.kwargs
+        self.assertEqual(values["daily_goal_hours"], 2)
+        self.assertEqual(values["pause_token"], str(self._pause_file.stat().st_mtime_ns))
+        self.assertTrue(values["ableton_running"])
+        self.app._check_notifications(today=7200, week=9000, weekly_goal=10,
+                                      daily_goal=2, streak=3)
+        self.assertEqual(self.app.notification_coordinator.check.call_count, 1)
+
     def test_refresh_shows_paused(self):
         self._touch_pause()
         self.app.tracker_thread.status.return_value = self._make_status(

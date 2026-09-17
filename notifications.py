@@ -8,7 +8,7 @@ import sqlite3
 from collections import defaultdict
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import date, datetime, time as datetime_time, timedelta
+from datetime import datetime, time as datetime_time, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -236,7 +236,7 @@ class NotificationCoordinator:
         if not self.db_path.exists():
             return DEFAULT_WEEK_START_WEEKDAY
         try:
-            with sqlite3.connect(self.db_path, timeout=3) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=3)) as conn:
                 if "app_settings" not in self._table_names(conn):
                     return DEFAULT_WEEK_START_WEEKDAY
                 row = conn.execute(
