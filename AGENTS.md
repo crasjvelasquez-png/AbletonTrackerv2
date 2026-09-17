@@ -24,7 +24,6 @@ Start here. This is the repository-specific source of truth for coding agents. U
 - User data lives in `~/.ableton_tracker/sessions.db`.
 - The project has no package manager, frontend framework, bundler, or pytest setup. Tests use `unittest`.
 - `dashboard.py` and `templates/dashboard.html` are large monolithic files. The dashboard template currently contains the active dashboard CSS and most dashboard JavaScript inline. `templates/settings.html` and `static/js/settings.js` own the settings fragment and behavior.
-- `static/js/dashboard.js`, `static/js/projects.js`, and `static/css/dashboard.css` are not currently loaded by `templates/dashboard.html`. Treat them as extracted or reference copies unless current source inspection proves otherwise; do not patch them instead of the inline runtime. Mirror a change only when there is a deliberate maintenance reason.
 
 ## Commands
 

@@ -5,14 +5,19 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections import defaultdict
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, time as datetime_time, timedelta
 from pathlib import Path
 from typing import Callable
 
+from tracker import allocate_session_activity
+
 
 MORNING_NOTIFICATION_HOUR = 9
 LATE_NOTIFICATION_HOUR = 17
+STREAK_NOTIFICATION_HOURS = (12, 18, 23)
 MINIMUM_PACE_GAP_SECONDS = 15 * 60
 DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
 
@@ -58,6 +63,8 @@ class NotificationCoordinator:
         self.state_path = Path(state_path)
         self.enabled = enabled
         self._sent = self._load_state()
+        self._paused_since: datetime | None = None
+        self._pause_token: str | None = None
 
     def check(
         self,
@@ -68,28 +75,26 @@ class NotificationCoordinator:
         weekly_goal_hours: float | None,
         streak_days: int,
         deliver: Callable[[NotificationMessage], None],
+        daily_goal_hours: float | None = None,
+        pause_token: str | None = None,
+        ableton_running: bool = False,
     ) -> list[NotificationMessage]:
         """Deliver eligible, unsent notifications and return what was delivered."""
-        if not self.enabled or now.hour < MORNING_NOTIFICATION_HOUR:
+        if not self.enabled:
             return []
 
         candidates: list[NotificationMessage] = []
-        deadline = self._deadline_candidate(now.date())
-        if deadline:
-            candidates.append(deadline)
-
-        quiet = self._quiet_candidate(now)
-        if quiet:
-            candidates.append(quiet)
+        for candidate in (
+            self._daily_goal_candidate(now, today_seconds, daily_goal_hours),
+            self._paused_candidate(now, pause_token, ableton_running),
+            self._streak_candidate(now, today_seconds, streak_days),
+            self._recap_candidate(now),
+        ):
+            if candidate:
+                candidates.append(candidate)
 
         if now.hour >= LATE_NOTIFICATION_HOUR:
-            streak = self._streak_candidate(now.date(), today_seconds, streak_days)
-            if streak:
-                candidates.append(streak)
-
-            pace = self._weekly_pace_candidate(
-                now, week_seconds, weekly_goal_hours
-            )
+            pace = self._weekly_pace_candidate(now, week_seconds, weekly_goal_hours)
             if pace:
                 candidates.append(pace)
 
@@ -106,51 +111,14 @@ class NotificationCoordinator:
             delivered.append(candidate)
         return delivered
 
-    def _deadline_candidate(self, today: date) -> NotificationMessage | None:
-        tomorrow = (today + timedelta(days=1)).isoformat()
-        event_key = f"deadline:{tomorrow}"
-        if event_key in self._sent:
-            return None
-
-        labels = self._due_tomorrow_labels(tomorrow)
-        if not labels:
-            return None
-        count = len(labels)
-        return NotificationMessage(
-            (event_key,),
-            "Tomorrow’s deadlines",
-            f"{count} item{'s' if count != 1 else ''} due",
-            _join_labels(labels),
-        )
-
-    def _quiet_candidate(self, now: datetime) -> NotificationMessage | None:
-        quiet_projects = self._quiet_projects(now)
-        unsent = [
-            project
-            for project in quiet_projects
-            if project["event_key"] not in self._sent
-        ]
-        if not unsent:
-            return None
-
-        labels = [
-            f"{project['name']} ({project['days']}d)"
-            for project in unsent
-        ]
-        count = len(labels)
-        return NotificationMessage(
-            tuple(project["event_key"] for project in unsent),
-            "Project gone quiet" if count == 1 else "Projects gone quiet",
-            f"No Ableton activity for {min(project['days'] for project in unsent)}+ days",
-            _join_labels(labels),
-        )
 
     def _streak_candidate(
-        self, today: date, today_seconds: float, streak_days: int
+        self, now: datetime, today_seconds: float, streak_days: int
     ) -> NotificationMessage | None:
-        event_key = f"streak-risk:{today.isoformat()}"
+        event_key = f"streak-risk:{now.date().isoformat()}:{now.hour}"
         if (
-            event_key in self._sent
+            now.hour not in STREAK_NOTIFICATION_HOURS
+            or event_key in self._sent
             or today_seconds > 0
             or streak_days <= 0
         ):
@@ -160,6 +128,76 @@ class NotificationCoordinator:
             f"Your {streak_days}-day streak is at risk 🔥",
             "A little Ableton time keeps it alive.",
             "Open a project before midnight and keep the streak going.",
+        )
+
+    def _daily_goal_candidate(self, now, seconds, goal_hours):
+        key = f"daily-goal:{now.date().isoformat()}"
+        if key in self._sent or not goal_hours or goal_hours <= 0 or seconds < goal_hours * 3600:
+            return None
+        return NotificationMessage(
+            (key,), "Daily goal complete 🎉", f"{_format_gap(seconds)} making music today.",
+            "You reached your daily Ableton goal.",
+        )
+
+    def _paused_candidate(self, now, pause_token, ableton_running):
+        if pause_token != self._pause_token or not ableton_running or pause_token is None:
+            self._paused_since = None
+        self._pause_token = pause_token
+        if pause_token is None or not ableton_running:
+            return None
+        if self._paused_since is None:
+            self._paused_since = now
+        if (now - self._paused_since).total_seconds() < 300:
+            return None
+        key = f"paused:{pause_token}"
+        if key in self._sent:
+            return None
+        return NotificationMessage(
+            (key,), "Tracking is still paused", "Ableton is open, but tracking is paused.",
+            "Choose Resume tracking in the menu bar to record your time.",
+        )
+
+    def _recap_candidate(self, now):
+        # Use the completed week, including a catch-up when the app next opens.
+        if now.hour < MORNING_NOTIFICATION_HOUR or not self.db_path.exists():
+            return None
+        end = now.date() - timedelta(days=(now.weekday() - self._week_start_weekday()) % 7)
+        start = end - timedelta(days=7)
+        key = f"weekly-recap:{start.isoformat()}"
+        if key in self._sent:
+            return None
+        totals = defaultdict(float)
+        try:
+            with closing(sqlite3.connect(self.db_path, timeout=3)) as conn:
+                conn.row_factory = sqlite3.Row
+                tables = self._table_names(conn)
+                aliases = dict(conn.execute("SELECT alias_name, canonical_name FROM project_aliases")) if "project_aliases" in tables else {}
+                labels = dict(conn.execute("SELECT project_name, display_name FROM project_metadata")) if "project_metadata" in tables else {}
+                rows = conn.execute(
+                    """SELECT project_name, start_time, end_time, last_seen_time, active_seconds
+                       FROM sessions WHERE active_seconds > 0 AND start_time < ?
+                       AND COALESCE(end_time, last_seen_time, start_time) >= ?""",
+                    (datetime.combine(end, datetime_time.min).timestamp(),
+                     datetime.combine(start, datetime_time.min).timestamp()),
+                ).fetchall()
+            for row in rows:
+                project = aliases.get(row["project_name"], row["project_name"])
+                for day, _, seconds in allocate_session_activity(
+                    row["start_time"], row["end_time"] or row["last_seen_time"] or row["start_time"], row["active_seconds"]
+                ):
+                    if start.isoformat() <= day < end.isoformat():
+                        totals[project] += seconds
+        except sqlite3.Error as exc:
+            print(f"[notifications] recap query error: {exc}")
+            return None
+        if not totals:
+            return None
+        top = max(totals, key=totals.get)
+        count = len(totals)
+        return NotificationMessage(
+            (key,), "Your weekly recap", f"{start:%b %d} – {end - timedelta(days=1):%b %d}",
+            f"{_format_gap(sum(totals.values()))} across {count} project{'s' if count != 1 else ''}. "
+            f"Most time: {labels.get(top) or top}.",
         )
 
     def _weekly_pace_candidate(
@@ -193,118 +231,6 @@ class NotificationCoordinator:
             "A focused session today can close the gap.",
         )
 
-    def _due_tomorrow_labels(self, tomorrow: str) -> list[str]:
-        if not self.db_path.exists():
-            return []
-        labels: list[str] = []
-        try:
-            with sqlite3.connect(self.db_path, timeout=3) as conn:
-                conn.row_factory = sqlite3.Row
-                tables = self._table_names(conn)
-                if "project_metadata" in tables:
-                    rows = conn.execute(
-                        """
-                        SELECT project_name, display_name
-                        FROM project_metadata
-                        WHERE status NOT IN ('finished', 'abandoned')
-                          AND ? IN (due_date, hard_deadline, turn_in_date)
-                        ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), project_name))
-                        """,
-                        (tomorrow,),
-                    ).fetchall()
-                    labels.extend(
-                        f"Project: {row['display_name'] or row['project_name']}"
-                        for row in rows
-                    )
-                if "project_tasks" in tables:
-                    metadata_join = (
-                        "LEFT JOIN project_metadata pm ON pm.project_name = pt.project_name"
-                        if "project_metadata" in tables
-                        else ""
-                    )
-                    display_expression = (
-                        "COALESCE(NULLIF(pm.display_name, ''), pt.project_name)"
-                        if metadata_join
-                        else "pt.project_name"
-                    )
-                    rows = conn.execute(
-                        f"""
-                        SELECT pt.title, {display_expression} AS project_label
-                        FROM project_tasks pt
-                        {metadata_join}
-                        WHERE pt.status = 'open' AND pt.due_date = ?
-                        ORDER BY LOWER(project_label), LOWER(pt.title)
-                        """,
-                        (tomorrow,),
-                    ).fetchall()
-                    labels.extend(
-                        f"{row['project_label']}: {row['title']}" for row in rows
-                    )
-        except sqlite3.Error as exc:
-            print(f"[notifications] deadline query error: {exc}")
-            return []
-        return list(dict.fromkeys(labels))
-
-    def _quiet_projects(self, now: datetime) -> list[dict]:
-        if not self.db_path.exists():
-            return []
-        try:
-            with sqlite3.connect(self.db_path, timeout=3) as conn:
-                conn.row_factory = sqlite3.Row
-                tables = self._table_names(conn)
-                required = {"sessions", "project_metadata"}
-                if not required.issubset(tables):
-                    return []
-                alias_join = (
-                    "LEFT JOIN project_aliases pa ON pa.alias_name = s.project_name"
-                    if "project_aliases" in tables
-                    else ""
-                )
-                project_expression = (
-                    "COALESCE(pa.canonical_name, s.project_name)"
-                    if alias_join
-                    else "s.project_name"
-                )
-                rows = conn.execute(
-                    f"""
-                    SELECT pm.project_name,
-                           COALESCE(NULLIF(pm.display_name, ''), pm.project_name) AS display_name,
-                           activity.last_seen
-                    FROM project_metadata pm
-                    JOIN (
-                        SELECT {project_expression} AS project_name,
-                               MAX(COALESCE(s.end_time, s.last_seen_time, s.start_time)) AS last_seen
-                        FROM sessions s
-                        {alias_join}
-                        WHERE s.active_seconds > 0
-                        GROUP BY {project_expression}
-                    ) activity ON activity.project_name = pm.project_name
-                    WHERE pm.status != ''
-                      AND pm.status NOT IN ('finished', 'abandoned', 'paused')
-                    ORDER BY activity.last_seen ASC
-                    """
-                ).fetchall()
-        except sqlite3.Error as exc:
-            print(f"[notifications] quiet-project query error: {exc}")
-            return []
-
-        projects = []
-        for row in rows:
-            last_seen = datetime.fromtimestamp(float(row["last_seen"]))
-            days = (now.date() - last_seen.date()).days
-            if days < 7:
-                continue
-            threshold = 14 if days >= 14 else 7
-            projects.append(
-                {
-                    "name": row["display_name"],
-                    "days": days,
-                    "event_key": (
-                        f"quiet:{row['project_name']}:{int(row['last_seen'])}:{threshold}"
-                    ),
-                }
-            )
-        return projects
 
     def _week_start_weekday(self) -> int:
         if not self.db_path.exists():

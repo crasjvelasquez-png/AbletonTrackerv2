@@ -52,7 +52,6 @@ The implementation is split into three product plans and one final integration p
 
 ## Stop conditions
 
-- Stop and re-route these plans if the implementation branch already contains the standalone `Tracker.app` / `Planner.app` split described outside this checkout. Reconfirm the active inline Tracker template before applying selectors or markup changes.
+- Stop and re-route these plans if the implementation branch no longer uses the standalone `Tracker.app`. Reconfirm the active inline Tracker template before applying selectors or markup changes.
 - Stop if a proposed change requires destructive migration of `sessions`, changes recorded durations, or reinterprets existing session rows.
 - Stop if concurrent agents are editing `templates/dashboard.html`; sequence or rebase the work instead of resolving a shared-worktree conflict blindly.
-

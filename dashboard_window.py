@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Native desktop window for the Tracker or Planner surface."""
+"""Native desktop Tracker window."""
 
-import argparse
 import subprocess
 import sys
 import time
@@ -18,7 +17,7 @@ LOG_DIR = Path.home() / ".ableton_tracker"
 LOG_PATH = LOG_DIR / "dashboard.log"
 
 
-def configure_macos_app_icon(app_mode: str) -> bool:
+def configure_macos_app_icon() -> bool:
     """Use the bundle artwork instead of Python's default Dock icon."""
     if sys.platform != "darwin":
         return False
@@ -29,9 +28,8 @@ def configure_macos_app_icon(app_mode: str) -> bool:
         log("AppKit unavailable; keeping the default application icon")
         return False
 
-    app_name = "Planner" if app_mode == "planner" else "Tracker"
     bundled_icon = APP_DIR.parent / "icon.icns"
-    source_icon = APP_DIR / "dist" / f"{app_name}.icns"
+    source_icon = APP_DIR / "dist" / "Tracker.icns"
     icon_path = bundled_icon if bundled_icon.exists() else source_icon
     if not icon_path.exists():
         log(f"Application icon not found: {icon_path}")
@@ -93,7 +91,7 @@ def start_dashboard_if_needed() -> subprocess.Popen | None:
     return proc
 
 
-def run_window(app_mode: str = "tracker") -> None:
+def run_window() -> None:
     server_proc = start_dashboard_if_needed()
 
     if not dashboard_ready(timeout=1.0):
@@ -105,12 +103,11 @@ def run_window(app_mode: str = "tracker") -> None:
         log("ERROR: pywebview is not installed. Run: python3 -m pip install --user pywebview")
         raise RuntimeError("pywebview is not installed") from exc
 
-    app_name = "Planner" if app_mode == "planner" else "Tracker"
-    app_url = f"{DASHBOARD_URL}/?app={app_mode}#{'planner' if app_mode == 'planner' else 'dashboard'}"
-    log(f"Opening embedded {app_name} window")
-    configure_macos_app_icon(app_mode)
+    app_url = f"{DASHBOARD_URL}/#dashboard"
+    log("Opening embedded Tracker window")
+    configure_macos_app_icon()
     webview.create_window(
-        app_name,
+        "Tracker",
         app_url,
         width=1280,
         height=860,
@@ -124,15 +121,12 @@ def run_window(app_mode: str = "tracker") -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("app_mode", nargs="?", choices=("tracker", "planner"), default="tracker")
-    args = parser.parse_args()
     try:
-        run_window(args.app_mode)
+        run_window()
         return 0
     except Exception as exc:
         log(f"ERROR: dashboard window failed: {exc}")
-        print(f"{args.app_mode.title()} window failed: {exc}", file=sys.stderr)
+        print(f"Tracker window failed: {exc}", file=sys.stderr)
         print(f"See log: {LOG_PATH}", file=sys.stderr)
         return 1
 

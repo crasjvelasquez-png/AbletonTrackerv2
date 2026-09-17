@@ -52,38 +52,6 @@ MAX_CUSTOM_CATEGORIES = 12
 CONFIG_CACHE_TTL_SECONDS = 60
 RECENT_SESSION_PAGE_SIZE = 60
 CONFIG_CACHE: dict[str, tuple[float, object]] = {}
-PROJECT_STATUS_OPTIONS = {
-    "idea": "Idea",
-    "needs_work": "Needs Work",
-    "in_progress": "In Progress",
-    "finishing": "Finishing",
-    "final_touches": "Final Touches",
-    "finished": "Finished",
-    "paused": "Paused",
-    "abandoned": "Abandoned",
-}
-PROJECT_TYPE_OPTIONS = {
-    "personal": "Personal",
-    "client": "Client",
-    "other": "Other",
-}
-PROJECT_PRIORITY_OPTIONS = {
-    "low": "Low",
-    "normal": "Normal",
-    "high": "High",
-}
-PROJECT_TASK_STATUS_OPTIONS = {"open", "done"}
-PROJECT_TASK_PRIORITY_OPTIONS = {"low", "normal", "high"}
-PROJECT_TASK_PRIORITY_ORDER_SQL = "CASE pt.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 WHEN 'low' THEN 2 ELSE 1 END"
-PLANNER_GOAL_TYPE_OPTIONS = {
-    "sessions_per_week",
-    "hours_per_week",
-    "projects_finished_per_period",
-    "touch_active_project_every_n_days",
-}
-PLANNER_GOAL_PERIOD_OPTIONS = {"week", "month"}
-PLANNER_GOAL_SCOPE_OPTIONS = {"all", "project_type", "category", "project"}
-ACTIVE_PROJECT_STATUSES = {"idea", "in_progress", "finishing", "final_touches"}
 LEGACY_CATEGORY_KEYS = [
     "c4milo",
     "production",
@@ -538,23 +506,10 @@ def get_last_session_todos(project_name: str) -> dict:
     with db_connection() as conn:
         ensure_sessions_notes_column(conn)
         conn.row_factory = sqlite3.Row
-        
-        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project,)).fetchone()
-        canonical_project = canonical_row[0] if canonical_row else project
-        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
-        names = [canonical_project] + [r[0] for r in aliases]
-        placeholders = ",".join("?" * len(names))
-        
         row = conn.execute(
-            f"""
-            SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name, s.todos_json
-            FROM sessions s
-            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-            WHERE s.project_name IN ({placeholders})
-            ORDER BY s.start_time DESC, s.id DESC
-            LIMIT 1
-            """,
-            names,
+            "SELECT project_name, todos_json FROM sessions WHERE project_name = ? "
+            "ORDER BY start_time DESC, id DESC LIMIT 1",
+            (project,),
         ).fetchone()
     if not row:
         return {"project_name": project, "todos": []}
@@ -569,7 +524,6 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
             sid = int(raw_session_id)
         except (TypeError, ValueError):
             return {"error": "invalid session_id"}
-
     if not DB_PATH.exists():
         return {"error": "no data yet"}
 
@@ -581,48 +535,28 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
         conn.row_factory = sqlite3.Row
         if sid is not None:
             current = conn.execute(
-                """
-                SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json
-                FROM sessions
-                WHERE id = ?
-                """,
-                (sid,),
+                "SELECT project_name FROM sessions WHERE id = ?", (sid,)
             ).fetchone()
             if not current:
                 return {"error": "session not found"}
             if not project:
                 project = current["project_name"]
-
-        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project,)).fetchone()
-        canonical_project = canonical_row[0] if canonical_row else project
-        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
-        names = [canonical_project] + [r[0] for r in aliases]
-        placeholders = ",".join("?" * len(names))
-        
         rows = conn.execute(
-            f"""
-            SELECT s.id, COALESCE(pa.canonical_name, s.project_name) AS project_name, s.start_time, s.last_seen_time, s.end_time, s.active_seconds, s.notes, s.todos_json
-            FROM sessions s
-            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-            WHERE s.project_name IN ({placeholders})
-            ORDER BY s.start_time DESC, s.id DESC
-            """,
-            names,
+            "SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, notes, todos_json "
+            "FROM sessions WHERE project_name = ? ORDER BY start_time DESC, id DESC",
+            (project,),
         ).fetchall()
-
     if sid is None:
         if not rows:
             return {"error": "session not found for project"}
         sid = int(rows[0]["id"])
-
     index = next((i for i, row in enumerate(rows) if int(row["id"]) == sid), None)
     if index is None:
         return {"error": "session not found for project"}
 
     def serialize(row):
         return {
-            "id": int(row["id"]),
-            "project_name": row["project_name"],
+            "id": int(row["id"]), "project_name": row["project_name"],
             "start_time": float(row["start_time"] or 0),
             "last_seen_time": float(row["last_seen_time"] or 0),
             "end_time": float(row["end_time"]) if row["end_time"] is not None else None,
@@ -632,8 +566,7 @@ def get_session_notes_entry(session_id, project_name: str = "") -> dict:
         }
 
     return {
-        "ok": True,
-        "session": serialize(rows[index]),
+        "ok": True, "session": serialize(rows[index]),
         "previous_session_id": int(rows[index + 1]["id"]) if index + 1 < len(rows) else None,
         "next_session_id": int(rows[index - 1]["id"]) if index > 0 else None,
         "history": [serialize(row) for row in rows],
@@ -651,177 +584,6 @@ def ensure_project_category_table(conn: sqlite3.Connection) -> None:
         """
     )
 
-
-def ensure_artists_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS artists (
-            id         TEXT PRIMARY KEY,
-            name       TEXT NOT NULL,
-            email      TEXT NOT NULL DEFAULT '',
-            phone      TEXT NOT NULL DEFAULT '',
-            instagram  TEXT NOT NULL DEFAULT '',
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        )
-        """
-    )
-
-
-def ensure_project_metadata_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_metadata (
-            project_name TEXT PRIMARY KEY,
-            display_name TEXT NOT NULL DEFAULT '',
-            status       TEXT NOT NULL DEFAULT '',
-            type         TEXT NOT NULL DEFAULT '',
-            priority     TEXT NOT NULL DEFAULT '',
-            due_date     TEXT NOT NULL DEFAULT '',
-            hard_deadline TEXT NOT NULL DEFAULT '',
-            turn_in_date TEXT NOT NULL DEFAULT '',
-            artist_id    TEXT NOT NULL DEFAULT '',
-            progress_percent INTEGER NOT NULL DEFAULT 0,
-            pinned       INTEGER NOT NULL DEFAULT 0,
-            project_note TEXT NOT NULL DEFAULT '',
-            board_order  INTEGER NOT NULL DEFAULT 0,
-            completed_at INTEGER NOT NULL DEFAULT 0,
-            prior_status TEXT NOT NULL DEFAULT '',
-            prior_progress_percent INTEGER NOT NULL DEFAULT 0,
-            updated_at   INTEGER NOT NULL
-        )
-        """
-    )
-    existing_columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(project_metadata)").fetchall()
-    }
-    metadata_columns = {
-        "display_name": "TEXT NOT NULL DEFAULT ''",
-        "priority": "TEXT NOT NULL DEFAULT ''",
-        "due_date": "TEXT NOT NULL DEFAULT ''",
-        "hard_deadline": "TEXT NOT NULL DEFAULT ''",
-        "turn_in_date": "TEXT NOT NULL DEFAULT ''",
-        "artist_id": "TEXT NOT NULL DEFAULT ''",
-        "progress_percent": "INTEGER NOT NULL DEFAULT 0",
-        "pinned": "INTEGER NOT NULL DEFAULT 0",
-        "project_note": "TEXT NOT NULL DEFAULT ''",
-        "board_order": "INTEGER NOT NULL DEFAULT 0",
-        "completed_at": "INTEGER NOT NULL DEFAULT 0",
-        "prior_status": "TEXT NOT NULL DEFAULT ''",
-        "prior_progress_percent": "INTEGER NOT NULL DEFAULT 0",
-    }
-    for column, definition in metadata_columns.items():
-        if column not in existing_columns:
-            conn.execute(f"ALTER TABLE project_metadata ADD COLUMN {column} {definition}")
-
-
-def ensure_project_tasks_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_tasks (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_name TEXT NOT NULL,
-            title        TEXT NOT NULL,
-            status       TEXT NOT NULL DEFAULT 'open',
-            priority     TEXT NOT NULL DEFAULT 'normal',
-            due_date     TEXT NOT NULL DEFAULT '',
-            waiting      INTEGER NOT NULL DEFAULT 0,
-            quick        INTEGER NOT NULL DEFAULT 0,
-            label        TEXT NOT NULL DEFAULT '',
-            completed_at INTEGER,
-            sort_order   INTEGER NOT NULL DEFAULT 0,
-            created_at   INTEGER NOT NULL,
-            updated_at   INTEGER NOT NULL
-        )
-        """
-    )
-    existing_columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(project_tasks)").fetchall()
-    }
-    task_columns = {
-        "waiting": "INTEGER NOT NULL DEFAULT 0",
-        "quick": "INTEGER NOT NULL DEFAULT 0",
-        "label": "TEXT NOT NULL DEFAULT ''",
-    }
-    for column, definition in task_columns.items():
-        if column not in existing_columns:
-            conn.execute(f"ALTER TABLE project_tasks ADD COLUMN {column} {definition}")
-
-
-def ensure_project_folders_tables(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_folders (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            name          TEXT NOT NULL COLLATE NOCASE,
-            parent_id     INTEGER REFERENCES project_folders(id),
-            status        TEXT NOT NULL DEFAULT '',
-            type          TEXT NOT NULL DEFAULT '',
-            priority      TEXT NOT NULL DEFAULT '',
-            due_date      TEXT NOT NULL DEFAULT '',
-            hard_deadline TEXT NOT NULL DEFAULT '',
-            turn_in_date  TEXT NOT NULL DEFAULT '',
-            note          TEXT NOT NULL DEFAULT '',
-            board_order   INTEGER NOT NULL DEFAULT 0,
-            created_at    INTEGER NOT NULL,
-            updated_at    INTEGER NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_folder_members (
-            project_name TEXT PRIMARY KEY,
-            folder_id    INTEGER NOT NULL REFERENCES project_folders(id) ON DELETE CASCADE,
-            sort_order   INTEGER NOT NULL DEFAULT 0
-        )
-        """
-    )
-    # Rebuild the legacy globally-unique name table without changing folder IDs.
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(project_folders)")}
-    if "parent_id" not in columns:
-        schema = conn.execute("SELECT sql FROM sqlite_master WHERE name='project_folders'").fetchone()[0]
-        replacement = schema.replace("project_folders", "project_folders_nested", 1).replace(
-            "TEXT NOT NULL UNIQUE COLLATE NOCASE", "TEXT NOT NULL COLLATE NOCASE"
-        )
-        conn.execute("SAVEPOINT nested_folders")
-        try:
-            conn.execute(replacement)
-            old_sequence = conn.execute("SELECT seq FROM sqlite_sequence WHERE name='project_folders'").fetchone()
-            names = ", ".join(row[1] for row in conn.execute("PRAGMA table_info(project_folders)"))
-            conn.execute(f"INSERT INTO project_folders_nested ({names}) SELECT {names} FROM project_folders")
-            conn.execute("DROP TABLE project_folders")
-            conn.execute("ALTER TABLE project_folders_nested RENAME TO project_folders")
-            if old_sequence:
-                conn.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='project_folders'", (old_sequence[0],))
-            conn.execute("ALTER TABLE project_folders ADD COLUMN parent_id INTEGER REFERENCES project_folders(id)")
-            conn.execute("RELEASE nested_folders")
-        except Exception:
-            conn.execute("ROLLBACK TO nested_folders")
-            conn.execute("RELEASE nested_folders")
-            raise
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_sibling_name ON project_folders(COALESCE(parent_id, 0), name COLLATE NOCASE)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_folder_parent ON project_folders(parent_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_folder_members_folder ON project_folder_members(folder_id, sort_order)")
-
-
-def ensure_planner_goals_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS planner_goals (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            goal_type    TEXT NOT NULL,
-            target_value REAL NOT NULL,
-            period       TEXT NOT NULL,
-            scope_type   TEXT NOT NULL,
-            scope_value  TEXT NOT NULL DEFAULT '',
-            active       INTEGER NOT NULL DEFAULT 1,
-            created_at   INTEGER NOT NULL,
-            updated_at   INTEGER NOT NULL
-        )
-        """
-    )
 
 
 def ensure_category_definitions_table(conn: sqlite3.Connection) -> None:
@@ -984,48 +746,14 @@ def ensure_indexes(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_project_categories_key ON project_categories(category_key)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_project_metadata_status ON project_metadata(status)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_project_metadata_type ON project_metadata(type)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_project_tasks_project_name ON project_tasks(project_name)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_project_tasks_status ON project_tasks(status)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_planner_goals_active ON planner_goals(active)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_planner_goals_type ON planner_goals(goal_type)"
-    )
 
-
-def ensure_project_aliases_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS project_aliases (
-            alias_name     TEXT PRIMARY KEY,
-            canonical_name TEXT NOT NULL
-        )
-        """
-    )
 
 
 def run_schema_migrations(conn: sqlite3.Connection) -> None:
-    ensure_artists_table(conn)
     ensure_category_definitions_table(conn)
     ensure_project_category_table(conn)
-    ensure_project_metadata_table(conn)
-    ensure_project_tasks_table(conn)
-    ensure_project_folders_tables(conn)
-    ensure_planner_goals_table(conn)
     ensure_daily_metrics_table(conn)
     ensure_app_settings_table(conn)
-    ensure_project_aliases_table(conn)
     ensure_pauses_table(conn)
     ensure_sessions_notes_column(conn)
     ensure_indexes(conn)
@@ -1112,1611 +840,6 @@ def get_project_categories(conn: sqlite3.Connection) -> dict[str, dict]:
         }
     return categories
 
-
-def get_project_status_options(conn: sqlite3.Connection) -> dict[str, str]:
-    row = conn.execute("SELECT value FROM app_settings WHERE key = 'project_status_options'").fetchone()
-    if row and row[0]:
-        try:
-            return json.loads(row[0])
-        except Exception:
-            pass
-    return PROJECT_STATUS_OPTIONS
-
-
-def get_project_board_lane_order(conn: sqlite3.Connection) -> list[str]:
-    """Return the saved lane order normalized against current status options.
-
-    The order always includes "" (Unsorted) plus every configured status key.
-    Saved positions for removed/unknown keys are discarded; newly configured
-    statuses not yet in the saved order are appended in their configured order.
-    """
-    statuses = get_project_status_options(conn)
-    current_keys = [""] + list(statuses.keys())
-    row = conn.execute(
-        "SELECT value FROM app_settings WHERE key = 'project_board_lane_order'"
-    ).fetchone()
-    saved: list[str] = []
-    if row and row[0]:
-        try:
-            parsed = json.loads(row[0])
-            if isinstance(parsed, list):
-                saved = [str(s) for s in parsed]
-        except Exception:
-            saved = []
-    current_set = set(current_keys)
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for status in saved:
-        if status in current_set and status not in seen:
-            normalized.append(status)
-            seen.add(status)
-    for status in current_keys:
-        if status not in seen:
-            normalized.append(status)
-            seen.add(status)
-    return normalized
-
-
-def save_project_board_lane_order(ordered_statuses: list[str]) -> dict:
-    """Validate and persist the lane order for the project board."""
-    if not DB_PATH.exists():
-        return {"error": "No data"}
-
-    if not isinstance(ordered_statuses, list) or len(ordered_statuses) == 0:
-        return {"error": "ordered_statuses must be a non-empty list"}
-
-    with db_connection() as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        statuses = get_project_status_options(conn)
-        current_keys = [""] + list(statuses.keys())
-
-        submitted = [str(s) for s in ordered_statuses]
-        submitted_set = set(submitted)
-        current_set = set(current_keys)
-
-        if len(submitted) != len(submitted_set):
-            return {"error": "ordered_statuses contains duplicate values"}
-
-        if submitted_set != current_set:
-            missing = current_set - submitted_set
-            extra = submitted_set - current_set
-            if missing:
-                return {"error": f"ordered_statuses is missing lanes: {', '.join(sorted(missing))}"}
-            if extra:
-                return {"error": f"ordered_statuses contains unknown lanes: {', '.join(sorted(extra))}"}
-
-        if len(submitted) != len(current_keys):
-            return {"error": "ordered_statuses must contain exactly the current lanes"}
-
-        set_app_setting("project_board_lane_order", json.dumps(submitted))
-    return {"ok": True, "ordered_statuses": submitted}
-
-
-def get_project_type_options(conn: sqlite3.Connection) -> dict[str, str]:
-    row = conn.execute("SELECT value FROM app_settings WHERE key = 'project_type_options'").fetchone()
-    if row and row[0]:
-        try:
-            return json.loads(row[0])
-        except Exception:
-            pass
-    return PROJECT_TYPE_OPTIONS
-
-
-def get_project_metadata(conn: sqlite3.Connection) -> dict[str, dict]:
-    rows = conn.execute(
-        """
-        SELECT project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent
-        FROM project_metadata
-        """
-    ).fetchall()
-    metadata = {}
-    status_options = get_project_status_options(conn)
-    type_options = get_project_type_options(conn)
-    for row in rows:
-        status = row["status"] if row["status"] in status_options else ""
-        project_type = row["type"] if row["type"] in type_options else ""
-        priority = row["priority"] if row["priority"] in PROJECT_PRIORITY_OPTIONS else ""
-        due_date = row["due_date"] if _is_valid_date_string(row["due_date"]) else ""
-        hard_deadline = row["hard_deadline"] if _is_valid_date_string(row["hard_deadline"]) else ""
-        turn_in_date = row["turn_in_date"] if _is_valid_date_string(row["turn_in_date"]) else ""
-        metadata[row["project_name"]] = {
-            "display_name": (row["display_name"] or "").strip() or row["project_name"],
-            "status": status,
-            "status_label": status_options.get(status, ""),
-            "type": project_type,
-            "type_label": type_options.get(project_type, ""),
-            "priority": priority,
-            "priority_label": PROJECT_PRIORITY_OPTIONS.get(priority, ""),
-            "due_date": due_date,
-            "hard_deadline": hard_deadline,
-            "turn_in_date": turn_in_date,
-            "artist_id": row["artist_id"] or "",
-            "progress_percent": row["progress_percent"] or 0,
-            "pinned": bool(row["pinned"]),
-            "project_note": row["project_note"] or "",
-            "board_order": row["board_order"] or 0,
-            "completed_at": row["completed_at"] or 0,
-            "prior_status": row["prior_status"] or "",
-            "prior_progress_percent": row["prior_progress_percent"] or 0,
-        }
-    return metadata
-
-
-def get_artists(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        """
-        SELECT id, name, email, phone, instagram, created_at, updated_at
-        FROM artists
-        ORDER BY name COLLATE NOCASE ASC
-        """
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def create_artist(conn: sqlite3.Connection, artist_id: str, name: str, email: str = "", phone: str = "", instagram: str = "") -> dict:
-    normalized_name = name.strip()
-    if not normalized_name:
-        return {"error": "Artist name is required."}
-    
-    conn.execute(
-        """
-        INSERT INTO artists (id, name, email, phone, instagram, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
-        """,
-        (artist_id, normalized_name, email.strip(), phone.strip(), instagram.strip())
-    )
-    conn.commit()
-    return {"ok": True, "id": artist_id, "name": normalized_name}
-
-
-def update_artist(conn: sqlite3.Connection, artist_id: str, name: str, email: str = "", phone: str = "", instagram: str = "") -> dict:
-    normalized_name = name.strip()
-    if not normalized_name:
-        return {"error": "Artist name is required."}
-
-    cur = conn.execute(
-        """
-        UPDATE artists
-        SET name = ?, email = ?, phone = ?, instagram = ?, updated_at = strftime('%s', 'now')
-        WHERE id = ?
-        """,
-        (normalized_name, email.strip(), phone.strip(), instagram.strip(), artist_id)
-    )
-    conn.commit()
-    if cur.rowcount == 0:
-        return {"error": "Artist not found."}
-    return {"ok": True, "id": artist_id, "name": normalized_name}
-
-
-def delete_artist(conn: sqlite3.Connection, artist_id: str) -> dict:
-    cur = conn.execute("DELETE FROM artists WHERE id = ?", (artist_id,))
-    conn.commit()
-    if cur.rowcount == 0:
-        return {"error": "Artist not found."}
-    
-    # Remove artist_id from projects
-    conn.execute("UPDATE project_metadata SET artist_id = '' WHERE artist_id = ?", (artist_id,))
-    conn.commit()
-    
-    return {"ok": True, "deleted": cur.rowcount}
-
-
-def _is_valid_date_string(value: str | None) -> bool:
-    normalized = (value or "").strip()
-    if not normalized:
-        return True
-    try:
-        datetime.strptime(normalized, "%Y-%m-%d")
-    except ValueError:
-        return False
-    return True
-
-
-def _normalize_project_metadata_fields(
-    status: str | None,
-    project_type: str | None,
-    priority: str | None = None,
-    due_date: str | None = "",
-    hard_deadline: str | None = "",
-    turn_in_date: str | None = "",
-    artist_id: str | None = "",
-    progress_percent: int | None = 0,
-    pinned: bool | int | str | None = False,
-    project_note: str | None = "",
-    status_options: dict[str, str] | None = None,
-    type_options: dict[str, str] | None = None,
-) -> tuple[str, str, str, str, str, str, str, int, bool, str] | dict:
-    status_options = status_options or PROJECT_STATUS_OPTIONS
-    type_options = type_options or PROJECT_TYPE_OPTIONS
-
-    normalized_status = (status or "").strip().lower()
-    normalized_type = (project_type or "").strip().lower()
-    normalized_priority = (priority or "").strip().lower()
-    normalized_due_date = (due_date or "").strip()
-    normalized_hard_deadline = (hard_deadline or "").strip()
-    normalized_turn_in_date = (turn_in_date or "").strip()
-    normalized_artist_id = (artist_id or "").strip()
-    normalized_project_note = (project_note or "").strip()
-    if isinstance(pinned, str):
-        normalized_pinned = pinned.strip().lower() in {"1", "true", "yes", "on"}
-    else:
-        normalized_pinned = bool(pinned)
-
-    try:
-        normalized_progress = int(progress_percent or 0)
-        normalized_progress = max(0, min(100, normalized_progress))
-    except (ValueError, TypeError):
-        normalized_progress = 0
-
-    if normalized_status and normalized_status not in status_options:
-        return {"error": "Unknown project status."}
-    if normalized_type and normalized_type not in type_options:
-        return {"error": "Unknown project type."}
-    if normalized_priority and normalized_priority not in PROJECT_PRIORITY_OPTIONS:
-        return {"error": "Unknown project priority."}
-    for value in (normalized_due_date, normalized_hard_deadline, normalized_turn_in_date):
-        if not _is_valid_date_string(value):
-            return {"error": "Project dates must be empty or YYYY-MM-DD."}
-
-    return (
-        normalized_status,
-        normalized_type,
-        normalized_priority,
-        normalized_due_date,
-        normalized_hard_deadline,
-        normalized_turn_in_date,
-        normalized_artist_id,
-        normalized_progress,
-        normalized_pinned,
-        normalized_project_note,
-    )
-
-
-def _project_deadline_summary(metadata: dict, today: date | None = None) -> dict:
-    today = today or date.today()
-    due_date = metadata.get("due_date", "")
-    hard_deadline = metadata.get("hard_deadline", "")
-    turn_in_date = metadata.get("turn_in_date", "")
-    deadline_date = hard_deadline or due_date
-    reasons = []
-
-    if turn_in_date:
-        return {
-            "deadline_state": "delivered",
-            "deadline_label": "Delivered",
-            "deadline_reasons": [f"Turned in {turn_in_date}"],
-        }
-    if not deadline_date:
-        return {
-            "deadline_state": "",
-            "deadline_label": "",
-            "deadline_reasons": [],
-        }
-
-    parsed_deadline = datetime.strptime(deadline_date, "%Y-%m-%d").date()
-    days_until = (parsed_deadline - today).days
-    label_source = "Hard deadline" if hard_deadline else "Due date"
-    reasons.append(f"{label_source} {deadline_date}")
-
-    if days_until < 0:
-        reasons.append(f"{abs(days_until)} day{'s' if abs(days_until) != 1 else ''} overdue")
-        return {
-            "deadline_state": "overdue",
-            "deadline_label": "Overdue",
-            "deadline_reasons": reasons,
-        }
-    if days_until <= 3:
-        if days_until == 0:
-            reasons.append("Due today")
-        else:
-            reasons.append(f"Due in {days_until} day{'s' if days_until != 1 else ''}")
-        return {
-            "deadline_state": "due_soon",
-            "deadline_label": "Due Soon",
-            "deadline_reasons": reasons,
-        }
-
-    reasons.append(f"Due in {days_until} days")
-    return {
-        "deadline_state": "upcoming",
-        "deadline_label": "Upcoming",
-        "deadline_reasons": reasons,
-    }
-
-
-def _format_project_task(row: sqlite3.Row) -> dict:
-    return {
-        "id": int(row["id"]),
-        "project_name": row["project_name"],
-        "title": row["title"],
-        "status": row["status"],
-        "priority": row["priority"],
-        "due_date": row["due_date"] or "",
-        "waiting": bool(row["waiting"]),
-        "quick": bool(row["quick"]),
-        "label": row["label"] or "",
-        "completed_at": row["completed_at"],
-        "sort_order": row["sort_order"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
-
-
-def _normalize_project_task_fields(
-    project_name: str | None,
-    title: str | None,
-    status: str | None = "open",
-    priority: str | None = "normal",
-    due_date: str | None = "",
-    waiting=False,
-    quick=False,
-    label: str | None = "",
-    sort_order=0,
-) -> tuple[str, str, str, str, str, int, int, str, int] | dict:
-    normalized_project = (project_name or "").strip()
-    normalized_title = (title or "").strip()
-    normalized_status = (status or "open").strip().lower()
-    normalized_priority = (priority or "normal").strip().lower()
-    normalized_due_date = (due_date or "").strip()
-    normalized_label = " ".join((label or "").strip().split())
-
-    def normalize_flag(value) -> int:
-        if isinstance(value, str):
-            return 1 if value.strip().lower() in {"1", "true", "yes", "on"} else 0
-        return 1 if bool(value) else 0
-
-    normalized_waiting = normalize_flag(waiting)
-    normalized_quick = normalize_flag(quick)
-
-    if not normalized_project:
-        return {"error": "Project name is required."}
-    if not normalized_title:
-        return {"error": "Task title is required."}
-    if normalized_status not in PROJECT_TASK_STATUS_OPTIONS:
-        return {"error": "Unknown task status."}
-    if normalized_priority not in PROJECT_TASK_PRIORITY_OPTIONS:
-        return {"error": "Unknown task priority."}
-    if normalized_due_date:
-        try:
-            parsed_due_date = datetime.strptime(normalized_due_date, "%Y-%m-%d")
-        except ValueError:
-            return {"error": "Task due date must be a valid YYYY-MM-DD date."}
-        if parsed_due_date.strftime("%Y-%m-%d") != normalized_due_date:
-            return {"error": "Task due date must be a valid YYYY-MM-DD date."}
-    if len(normalized_label) > 32:
-        return {"error": "Task label must be 32 characters or fewer."}
-    try:
-        normalized_sort_order = int(sort_order or 0)
-    except (TypeError, ValueError):
-        return {"error": "Task sort order must be a number."}
-
-    return (
-        normalized_project,
-        normalized_title,
-        normalized_status,
-        normalized_priority,
-        normalized_due_date,
-        normalized_waiting,
-        normalized_quick,
-        normalized_label,
-        normalized_sort_order,
-    )
-
-
-def get_project_tasks(conn: sqlite3.Connection, project_name: str | None = None) -> list[dict]:
-    if project_name is None:
-        rows = conn.execute(
-            f"""
-            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date, pt.waiting, pt.quick, pt.label,
-                   pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
-            FROM project_tasks pt
-            LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
-            ORDER BY LOWER(COALESCE(pa.canonical_name, pt.project_name)) ASC,
-                     CASE pt.status WHEN 'open' THEN 0 ELSE 1 END ASC,
-                     {PROJECT_TASK_PRIORITY_ORDER_SQL} ASC,
-                     pt.sort_order ASC, pt.created_at ASC, pt.id ASC
-            """
-        ).fetchall()
-    else:
-        project_name = (project_name or "").strip()
-        canonical_row = conn.execute("SELECT canonical_name FROM project_aliases WHERE alias_name = ?", (project_name,)).fetchone()
-        canonical_project = canonical_row[0] if canonical_row else project_name
-        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (canonical_project,)).fetchall()
-        names = [canonical_project] + [r[0] for r in aliases]
-        placeholders = ",".join("?" * len(names))
-
-        rows = conn.execute(
-            f"""
-            SELECT pt.id, COALESCE(pa.canonical_name, pt.project_name) AS project_name, pt.title, pt.status, pt.priority, pt.due_date, pt.waiting, pt.quick, pt.label,
-                   pt.completed_at, pt.sort_order, pt.created_at, pt.updated_at
-            FROM project_tasks pt
-            LEFT JOIN project_aliases pa ON pt.project_name = pa.alias_name
-            WHERE pt.project_name IN ({placeholders})
-            ORDER BY CASE pt.status WHEN 'open' THEN 0 ELSE 1 END ASC,
-                     {PROJECT_TASK_PRIORITY_ORDER_SQL} ASC,
-                     pt.sort_order ASC, pt.created_at ASC, pt.id ASC
-            """,
-            names,
-        ).fetchall()
-    return [_format_project_task(row) for row in rows]
-
-
-def get_project_tasks_response(project_name: str | None) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    normalized_project = (project_name or "").strip()
-    if not normalized_project:
-        return {"error": "Project name is required."}
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        return {
-            "ok": True,
-            "project_name": normalized_project,
-            "tasks": get_project_tasks(conn, normalized_project),
-        }
-
-
-def get_project_tasks_by_project(conn: sqlite3.Connection) -> dict[str, list[dict]]:
-    tasks_by_project: dict[str, list[dict]] = {}
-    for task in get_project_tasks(conn):
-        tasks_by_project.setdefault(task["project_name"], []).append(task)
-    return tasks_by_project
-
-
-def create_project_task(
-    project_name: str | None,
-    title: str | None,
-    priority: str | None = "normal",
-    due_date: str | None = "",
-    sort_order=0,
-    waiting=False,
-    quick=False,
-    label: str | None = "",
-) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized = _normalize_project_task_fields(
-        project_name, title, "open", priority, due_date, waiting, quick, label, sort_order
-    )
-    if isinstance(normalized, dict):
-        return normalized
-    normalized_project, normalized_title, status, normalized_priority, normalized_due_date, normalized_waiting, normalized_quick, normalized_label, normalized_sort_order = normalized
-
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            """
-            INSERT INTO project_tasks (
-                project_name, title, status, priority, due_date, waiting, quick, label,
-                completed_at, sort_order, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, strftime('%s', 'now'), strftime('%s', 'now'))
-            """,
-            (
-                normalized_project,
-                normalized_title,
-                status,
-                normalized_priority,
-                normalized_due_date,
-                normalized_waiting,
-                normalized_quick,
-                normalized_label,
-                normalized_sort_order,
-            ),
-        )
-        conn.commit()
-        row = conn.execute(
-            """
-            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
-                   completed_at, sort_order, created_at, updated_at
-            FROM project_tasks
-            WHERE id = ?
-            """,
-            (cur.lastrowid,),
-        ).fetchone()
-        return {"ok": True, "task": _format_project_task(row)}
-
-
-def update_project_task(task_id, fields: dict) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    try:
-        normalized_id = int(task_id)
-    except (TypeError, ValueError):
-        return {"error": "Task id is required."}
-
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        existing = conn.execute(
-            """
-            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
-                   completed_at, sort_order, created_at, updated_at
-            FROM project_tasks
-            WHERE id = ?
-            """,
-            (normalized_id,),
-        ).fetchone()
-        if not existing:
-            return {"error": "Task not found."}
-
-        project_name = fields.get("project_name", existing["project_name"])
-        title = fields.get("title", existing["title"])
-        status = fields.get("status", existing["status"])
-        priority = fields.get("priority", existing["priority"])
-        due_date = fields.get("due_date", existing["due_date"])
-        waiting = fields.get("waiting", existing["waiting"])
-        quick = fields.get("quick", existing["quick"])
-        label = fields.get("label", existing["label"])
-        sort_order = fields.get("sort_order", existing["sort_order"])
-        normalized = _normalize_project_task_fields(
-            project_name, title, status, priority, due_date, waiting, quick, label, sort_order
-        )
-        if isinstance(normalized, dict):
-            return normalized
-        normalized_project, normalized_title, normalized_status, normalized_priority, normalized_due_date, normalized_waiting, normalized_quick, normalized_label, normalized_sort_order = normalized
-        completed_at_sql = (
-            "COALESCE(completed_at, strftime('%s', 'now'))"
-            if normalized_status == "done"
-            else "NULL"
-        )
-
-        conn.execute(
-            f"""
-            UPDATE project_tasks
-            SET project_name = ?,
-                title = ?,
-                status = ?,
-                priority = ?,
-                due_date = ?,
-                waiting = ?,
-                quick = ?,
-                label = ?,
-                completed_at = {completed_at_sql},
-                sort_order = ?,
-                updated_at = strftime('%s', 'now')
-            WHERE id = ?
-            """,
-            (
-                normalized_project,
-                normalized_title,
-                normalized_status,
-                normalized_priority,
-                normalized_due_date,
-                normalized_waiting,
-                normalized_quick,
-                normalized_label,
-                normalized_sort_order,
-                normalized_id,
-            ),
-        )
-        conn.commit()
-        row = conn.execute(
-            """
-            SELECT id, project_name, title, status, priority, due_date, waiting, quick, label,
-                   completed_at, sort_order, created_at, updated_at
-            FROM project_tasks
-            WHERE id = ?
-            """,
-            (normalized_id,),
-        ).fetchone()
-        return {"ok": True, "task": _format_project_task(row)}
-
-
-def delete_project_task(task_id) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    try:
-        normalized_id = int(task_id)
-    except (TypeError, ValueError):
-        return {"error": "Task id is required."}
-
-    with db_connection() as conn:
-        cur = conn.execute("DELETE FROM project_tasks WHERE id = ?", (normalized_id,))
-        conn.commit()
-        if cur.rowcount < 1:
-            return {"error": "Task not found."}
-        return {"ok": True, "deleted": cur.rowcount, "id": normalized_id}
-
-
-def _format_planner_goal(row: sqlite3.Row, progress: dict | None = None) -> dict:
-    goal = {
-        "id": int(row["id"]),
-        "goal_type": row["goal_type"],
-        "target_value": row["target_value"],
-        "period": row["period"],
-        "scope_type": row["scope_type"],
-        "scope_value": row["scope_value"] or "",
-        "active": bool(row["active"]),
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
-    if progress is not None:
-        goal["progress"] = progress
-    return goal
-
-
-def _normalize_planner_goal_fields(
-    goal_type: str | None,
-    target_value,
-    period: str | None,
-    scope_type: str | None,
-    scope_value: str | None = "",
-    active=True,
-) -> tuple[str, float, str, str, str, int] | dict:
-    normalized_type = (goal_type or "").strip().lower()
-    normalized_period = (period or "").strip().lower()
-    normalized_scope_type = (scope_type or "all").strip().lower()
-    normalized_scope_value = (scope_value or "").strip()
-
-    if normalized_type not in PLANNER_GOAL_TYPE_OPTIONS:
-        return {"error": "Unknown planner goal type."}
-    if normalized_period not in PLANNER_GOAL_PERIOD_OPTIONS:
-        return {"error": "Unknown planner goal period."}
-    if normalized_scope_type not in PLANNER_GOAL_SCOPE_OPTIONS:
-        return {"error": "Unknown planner goal scope."}
-    if normalized_scope_type == "all":
-        normalized_scope_value = ""
-    elif not normalized_scope_value:
-        return {"error": "Planner goal scope value is required."}
-
-    try:
-        normalized_target = float(target_value)
-    except (TypeError, ValueError):
-        return {"error": "Planner goal target must be a number."}
-    if normalized_target <= 0:
-        return {"error": "Planner goal target must be greater than zero."}
-    if normalized_type in {
-        "sessions_per_week",
-        "projects_finished_per_period",
-        "touch_active_project_every_n_days",
-    }:
-        if normalized_target != int(normalized_target):
-            return {"error": "Planner goal target must be a whole number."}
-        normalized_target = float(int(normalized_target))
-
-    if isinstance(active, str):
-        normalized_active = 0 if active.strip().lower() in {"0", "false", "no", "off"} else 1
-    else:
-        normalized_active = 1 if bool(active) else 0
-    return (
-        normalized_type,
-        normalized_target,
-        normalized_period,
-        normalized_scope_type,
-        normalized_scope_value,
-        normalized_active,
-    )
-
-
-def _planner_goal_period_range(period: str, today: date | None = None) -> tuple[date, date]:
-    today = today or date.today()
-    if period == "month":
-        start = today.replace(day=1)
-        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        return start, end
-    return get_week_range(today)
-
-
-def _scope_matches_project(project_name: str, scope_type: str, scope_value: str, metadata: dict, categories: dict) -> bool:
-    if scope_type == "all":
-        return True
-    if scope_type == "project":
-        return project_name == scope_value
-    if scope_type == "project_type":
-        return metadata.get(project_name, {}).get("type", "") == scope_value
-    if scope_type == "category":
-        category = categories.get(project_name)
-        return bool(category and category.get("key") == scope_value)
-    return False
-
-
-def _count_sessions_in_range(
-    conn: sqlite3.Connection,
-    start_date: date,
-    end_date: date,
-    scope_type: str,
-    scope_value: str,
-    metadata: dict,
-    categories: dict,
-) -> int:
-    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
-    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT project_name
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time >= ?
-          AND start_time < ?
-        """,
-        (range_start, range_end),
-    ).fetchall()
-    return sum(
-        1
-        for row in rows
-        if _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories)
-    )
-
-
-def _sum_scoped_seconds_in_range(
-    conn: sqlite3.Connection,
-    start_date: date,
-    end_date: date,
-    scope_type: str,
-    scope_value: str,
-    metadata: dict,
-    categories: dict,
-) -> int:
-    range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
-    range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT project_name, start_time, last_seen_time, end_time, active_seconds
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time < ?
-          AND COALESCE(end_time, last_seen_time, start_time) >= ?
-        """,
-        (range_end, range_start),
-    ).fetchall()
-    total = 0.0
-    for row in rows:
-        if not _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories):
-            continue
-        end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
-        for day_key, _hour, seconds in allocate_session_activity(
-            row["start_time"],
-            end_time,
-            row["active_seconds"],
-        ):
-            if start_date <= date.fromisoformat(day_key) <= end_date:
-                total += seconds
-    return round(total)
-
-
-def _count_finished_projects(
-    conn: sqlite3.Connection,
-    start_date: date,
-    end_date: date,
-    scope_type: str,
-    scope_value: str,
-    metadata: dict,
-    categories: dict,
-) -> int:
-    rows = conn.execute(
-        """
-        SELECT project_name, status, updated_at, turn_in_date
-        FROM project_metadata
-        WHERE status = 'finished'
-        """
-    ).fetchall()
-    total = 0
-    for row in rows:
-        project_name = row["project_name"]
-        if not _scope_matches_project(project_name, scope_type, scope_value, metadata, categories):
-            continue
-        turn_in_date = row["turn_in_date"] or ""
-        if turn_in_date:
-            finished_date = datetime.strptime(turn_in_date, "%Y-%m-%d").date()
-            if start_date <= finished_date <= end_date:
-                total += 1
-            continue
-        # The metadata table does not yet have a dedicated finished_at timestamp.
-        # Count current finished projects so the v1 goal remains useful until
-        # status transition history exists.
-        total += 1
-    return total
-
-
-def _count_touched_active_projects(
-    conn: sqlite3.Connection,
-    days: int,
-    scope_type: str,
-    scope_value: str,
-    metadata: dict,
-    categories: dict,
-    today: date | None = None,
-) -> tuple[int, int]:
-    today = today or date.today()
-    cutoff = datetime.combine(today - timedelta(days=days - 1), datetime.min.time()).timestamp()
-    placeholders = ",".join("?" * len(ACTIVE_PROJECT_STATUSES))
-    rows = conn.execute(
-        f"""
-        SELECT s.project_name,
-               MAX(COALESCE(s.end_time, s.last_seen_time, s.start_time)) AS last_seen
-        FROM sessions s
-        JOIN project_metadata pm ON pm.project_name = s.project_name
-        WHERE s.active_seconds > 0
-          AND pm.status IN ({placeholders})
-        GROUP BY s.project_name
-        """,
-        tuple(ACTIVE_PROJECT_STATUSES),
-    ).fetchall()
-    active_projects = [
-        row
-        for row in rows
-        if _scope_matches_project(row["project_name"], scope_type, scope_value, metadata, categories)
-    ]
-    touched = sum(1 for row in active_projects if float(row["last_seen"] or 0) >= cutoff)
-    return touched, len(active_projects)
-
-
-def compute_planner_goal_progress(
-    conn: sqlite3.Connection,
-    goal: dict,
-    metadata: dict | None = None,
-    categories: dict | None = None,
-    today: date | None = None,
-) -> dict:
-    metadata = metadata if metadata is not None else get_project_metadata(conn)
-    categories = categories if categories is not None else get_project_categories(conn)
-    today = today or date.today()
-    start_date, end_date = _planner_goal_period_range(goal["period"], today)
-    goal_type = goal["goal_type"]
-    target = float(goal["target_value"])
-    current = 0.0
-    unit = "count"
-    label = ""
-    total_active_projects = None
-
-    if goal_type == "sessions_per_week":
-        current = float(_count_sessions_in_range(
-            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
-        ))
-        unit = "sessions"
-        label = "Sessions this period"
-    elif goal_type == "hours_per_week":
-        seconds = _sum_scoped_seconds_in_range(
-            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
-        )
-        current = round(seconds / 3600, 2)
-        unit = "hours"
-        label = "Hours this period"
-    elif goal_type == "projects_finished_per_period":
-        current = float(_count_finished_projects(
-            conn, start_date, end_date, goal["scope_type"], goal["scope_value"], metadata, categories
-        ))
-        unit = "projects"
-        label = "Finished projects this period"
-    elif goal_type == "touch_active_project_every_n_days":
-        days = int(target)
-        touched, total_active_projects = _count_touched_active_projects(
-            conn, days, goal["scope_type"], goal["scope_value"], metadata, categories, today
-        )
-        current = float(touched)
-        target = float(total_active_projects)
-        unit = "projects"
-        label = f"Active projects touched in {days} days"
-
-    remaining = max(target - current, 0.0)
-    percent = 100.0 if target <= 0 else min(100.0, round((current / target) * 100, 1))
-    return {
-        "current_value": current,
-        "target_value": target,
-        "remaining_value": remaining,
-        "percent": percent,
-        "unit": unit,
-        "label": label,
-        "period_start": start_date.isoformat(),
-        "period_end": end_date.isoformat(),
-        "total_active_projects": total_active_projects,
-    }
-
-
-def get_planner_goals(conn: sqlite3.Connection, include_inactive: bool = True) -> list[dict]:
-    query = """
-        SELECT id, goal_type, target_value, period, scope_type, scope_value,
-               active, created_at, updated_at
-        FROM planner_goals
-    """
-    params = ()
-    if not include_inactive:
-        query += " WHERE active = ?"
-        params = (1,)
-    query += " ORDER BY active DESC, created_at ASC, id ASC"
-    rows = conn.execute(query, params).fetchall()
-    metadata = get_project_metadata(conn)
-    categories = get_project_categories(conn)
-    goals = []
-    for row in rows:
-        base = _format_planner_goal(row)
-        goals.append(_format_planner_goal(row, compute_planner_goal_progress(conn, base, metadata, categories)))
-    return goals
-
-
-def get_planner_goals_response() -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        return {"ok": True, "goals": get_planner_goals(conn)}
-
-
-def create_planner_goal(
-    goal_type: str | None,
-    target_value,
-    period: str | None = "week",
-    scope_type: str | None = "all",
-    scope_value: str | None = "",
-    active=True,
-) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    normalized = _normalize_planner_goal_fields(
-        goal_type, target_value, period, scope_type, scope_value, active
-    )
-    if isinstance(normalized, dict):
-        return normalized
-    normalized_type, normalized_target, normalized_period, normalized_scope_type, normalized_scope_value, normalized_active = normalized
-
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            """
-            INSERT INTO planner_goals (
-                goal_type, target_value, period, scope_type, scope_value,
-                active, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
-            """,
-            (
-                normalized_type,
-                normalized_target,
-                normalized_period,
-                normalized_scope_type,
-                normalized_scope_value,
-                normalized_active,
-            ),
-        )
-        conn.commit()
-        row = conn.execute(
-            """
-            SELECT id, goal_type, target_value, period, scope_type, scope_value,
-                   active, created_at, updated_at
-            FROM planner_goals
-            WHERE id = ?
-            """,
-            (cur.lastrowid,),
-        ).fetchone()
-        goal = _format_planner_goal(row)
-        return {"ok": True, "goal": _format_planner_goal(row, compute_planner_goal_progress(conn, goal))}
-
-
-def update_planner_goal(goal_id, fields: dict) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    try:
-        normalized_id = int(goal_id)
-    except (TypeError, ValueError):
-        return {"error": "Planner goal id is required."}
-
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        existing = conn.execute(
-            """
-            SELECT id, goal_type, target_value, period, scope_type, scope_value,
-                   active, created_at, updated_at
-            FROM planner_goals
-            WHERE id = ?
-            """,
-            (normalized_id,),
-        ).fetchone()
-        if not existing:
-            return {"error": "Planner goal not found."}
-
-        normalized = _normalize_planner_goal_fields(
-            fields.get("goal_type", existing["goal_type"]),
-            fields.get("target_value", existing["target_value"]),
-            fields.get("period", existing["period"]),
-            fields.get("scope_type", existing["scope_type"]),
-            fields.get("scope_value", existing["scope_value"]),
-            fields.get("active", bool(existing["active"])),
-        )
-        if isinstance(normalized, dict):
-            return normalized
-        normalized_type, normalized_target, normalized_period, normalized_scope_type, normalized_scope_value, normalized_active = normalized
-
-        conn.execute(
-            """
-            UPDATE planner_goals
-            SET goal_type = ?,
-                target_value = ?,
-                period = ?,
-                scope_type = ?,
-                scope_value = ?,
-                active = ?,
-                updated_at = strftime('%s', 'now')
-            WHERE id = ?
-            """,
-            (
-                normalized_type,
-                normalized_target,
-                normalized_period,
-                normalized_scope_type,
-                normalized_scope_value,
-                normalized_active,
-                normalized_id,
-            ),
-        )
-        conn.commit()
-        row = conn.execute(
-            """
-            SELECT id, goal_type, target_value, period, scope_type, scope_value,
-                   active, created_at, updated_at
-            FROM planner_goals
-            WHERE id = ?
-            """,
-            (normalized_id,),
-        ).fetchone()
-        goal = _format_planner_goal(row)
-        return {"ok": True, "goal": _format_planner_goal(row, compute_planner_goal_progress(conn, goal))}
-
-
-def delete_planner_goal(goal_id) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    try:
-        normalized_id = int(goal_id)
-    except (TypeError, ValueError):
-        return {"error": "Planner goal id is required."}
-
-    with db_connection() as conn:
-        cur = conn.execute("DELETE FROM planner_goals WHERE id = ?", (normalized_id,))
-        conn.commit()
-        if cur.rowcount < 1:
-            return {"error": "Planner goal not found."}
-        return {"ok": True, "deleted": cur.rowcount, "id": normalized_id}
-
-
-def get_project_folders(conn: sqlite3.Connection | None = None) -> list[dict]:
-    if conn is None:
-        with db_connection() as owned_conn:
-            return get_project_folders(owned_conn)
-    conn.row_factory = sqlite3.Row
-    folders = [dict(row) for row in conn.execute("SELECT * FROM project_folders ORDER BY board_order, id").fetchall()]
-    members = conn.execute(
-        "SELECT folder_id, project_name, sort_order FROM project_folder_members WHERE project_name NOT IN (SELECT alias_name FROM project_aliases) ORDER BY folder_id, sort_order, project_name COLLATE NOCASE"
-    ).fetchall()
-    by_folder: dict[int, list[dict]] = {}
-    for row in members:
-        by_folder.setdefault(row["folder_id"], []).append({"project_name": row["project_name"], "sort_order": row["sort_order"]})
-    for folder in folders:
-        folder["members"] = by_folder.get(folder["id"], [])
-        folder["member_count"] = len(folder["members"])
-        folder["is_folder"] = True
-        folder["project_name"] = folder["name"]
-        folder["project_note"] = folder["note"]
-        folder["pinned"] = False
-        folder["project_tasks"] = get_project_tasks(conn, f"__folder__{folder['id']}")
-    return folders
-
-
-def planner_folder_overviews(projects: list[dict], folders: list[dict], root_tasks: list[dict]) -> dict:
-    """Roll up canonical projects once, including all descendant folders."""
-    parents = {folder["id"]: folder.get("parent_id") for folder in folders}
-    memberships = {member["project_name"]: folder["id"] for folder in folders for member in folder["members"]}
-    result = {}
-    for selected in [None, *parents]:
-        descendants = set()
-        for candidate in parents:
-            current, seen = candidate, set()
-            while current is not None and current not in seen:
-                if current == selected:
-                    descendants.add(candidate)
-                    break
-                seen.add(current)
-                current = parents.get(current)
-        scoped = projects if selected is None else [p for p in projects if memberships.get(p["project_name"]) in descendants]
-        scoped_folders = folders if selected is None else [f for f in folders if f["id"] in descendants]
-        statuses = {}
-        tasks = {t["id"]: t for owner in [*scoped, *scoped_folders] for t in owner.get("project_tasks", [])}
-        if selected is None:
-            tasks.update({t["id"]: t for t in root_tasks})
-        for project in scoped:
-            status = project.get("status") or ""
-            statuses[status] = statuses.get(status, 0) + 1
-        done = sum(t.get("status") == "done" for t in tasks.values())
-        result[str(selected) if selected is not None else "root"] = {
-            "project_count": len(scoped), "total_seconds": sum(p.get("total_seconds", 0) or 0 for p in scoped),
-            "statuses": statuses, "open_tasks": len(tasks) - done, "completed_tasks": done,
-        }
-    return result
-
-
-def save_project_folder(payload: dict) -> dict:
-    try:
-        folder_id = int(payload.get("id") or 0)
-    except (TypeError, ValueError):
-        return {"error": "Invalid folder id."}
-    name = str(payload.get("name") or "").strip()
-    if not name:
-        return {"error": "Folder name is required."}
-    if len(name) > 180:
-        return {"error": "Folder name must be 180 characters or fewer."}
-    with db_connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        existing = None
-        if folder_id:
-            conn.row_factory = sqlite3.Row
-            existing = conn.execute("SELECT * FROM project_folders WHERE id=?", (folder_id,)).fetchone()
-            if not existing:
-                return {"error": "Folder not found."}
-            payload = {**dict(existing), **payload}
-        try:
-            parent_id = int(payload["parent_id"]) if payload.get("parent_id") is not None else None
-        except (TypeError, ValueError):
-            return {"error": "Invalid parent folder."}
-        if parent_id is not None and not conn.execute("SELECT 1 FROM project_folders WHERE id=?", (parent_id,)).fetchone():
-            return {"error": "Destination folder not found."}
-        if folder_id and parent_id != existing["parent_id"]:
-            return {"error": "Use Move To to change a folder's location."}
-        statuses = get_project_status_options(conn)
-        types = get_project_type_options(conn)
-        status = str(payload.get("status") or "").strip()
-        folder_type = str(payload.get("type") or "").strip()
-        priority = str(payload.get("priority") or "").strip()
-        dates = [str(payload.get(key) or "").strip() for key in ("due_date", "hard_deadline", "turn_in_date")]
-        if status and status not in statuses:
-            return {"error": "Unknown project status."}
-        if folder_type and folder_type not in types:
-            return {"error": "Unknown project type."}
-        if priority and priority not in PROJECT_PRIORITY_OPTIONS:
-            return {"error": "Unknown project priority."}
-        try:
-            for value in dates:
-                if value:
-                    datetime.strptime(value, "%Y-%m-%d")
-        except ValueError:
-            return {"error": "Folder dates must be empty or YYYY-MM-DD."}
-        note = str(payload.get("note") or "").strip()
-        if len(note) > 3000:
-            return {"error": "Folder notes must be 3000 characters or fewer."}
-        now = int(time.time())
-        try:
-            if folder_id:
-                cur = conn.execute(
-                    "UPDATE project_folders SET name=?, status=?, type=?, priority=?, due_date=?, hard_deadline=?, turn_in_date=?, note=?, updated_at=? WHERE id=?",
-                    (name, status, folder_type, priority, *dates, note, now, folder_id),
-                )
-                if cur.rowcount < 1:
-                    return {"error": "Folder not found."}
-            else:
-                cur = conn.execute(
-                    "INSERT INTO project_folders(name,status,type,priority,due_date,hard_deadline,turn_in_date,note,created_at,updated_at,parent_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (name, status, folder_type, priority, *dates, note, now, now, parent_id),
-                )
-                folder_id = cur.lastrowid
-            conn.commit()
-        except sqlite3.IntegrityError:
-            return {"error": "A folder with that name already exists in this location."}
-        folder = next(item for item in get_project_folders(conn) if item["id"] == folder_id)
-        return {"ok": True, "folder": folder}
-
-
-def set_project_folder_members(folder_id: object, projects: object) -> dict:
-    try:
-        normalized_id = int(folder_id)
-    except (TypeError, ValueError):
-        return {"error": "Folder id is required."}
-    if not isinstance(projects, list):
-        return {"error": "projects must be a list."}
-    names = [str(name).strip() for name in projects]
-    if any(not name for name in names) or len(names) != len(set(names)):
-        return {"error": "projects must contain unique project names."}
-    with db_connection() as conn:
-        if not conn.execute("SELECT 1 FROM project_folders WHERE id=?", (normalized_id,)).fetchone():
-            return {"error": "Folder not found."}
-        known = {row[0] for row in conn.execute("SELECT DISTINCT project_name FROM sessions UNION SELECT project_name FROM project_metadata")}
-        if any(name not in known for name in names):
-            return {"error": "Unknown project."}
-        conn.execute("DELETE FROM project_folder_members WHERE folder_id=? AND project_name NOT IN (SELECT alias_name FROM project_aliases)", (normalized_id,))
-        for order, name in enumerate(names, 1):
-            conn.execute(
-                "INSERT INTO project_folder_members(project_name,folder_id,sort_order) VALUES(?,?,?) ON CONFLICT(project_name) DO UPDATE SET folder_id=excluded.folder_id, sort_order=excluded.sort_order",
-                (name, normalized_id, order),
-            )
-        conn.commit()
-    return {"ok": True, "folder_id": normalized_id, "projects": names}
-
-
-def move_planner_items(payload: dict) -> dict:
-    """Move only selected references; validate the final tree before any writes."""
-    try:
-        destination = int(payload["parent_id"]) if payload.get("parent_id") is not None else None
-        folders = payload.get("folders", [])
-        projects = payload.get("projects", [])
-        if not isinstance(folders, list) or not isinstance(projects, list):
-            raise ValueError
-        folders = [int(value) for value in folders]
-        if len(set(folders)) != len(folders) or any(not isinstance(name, str) or not name for name in projects) or len(set(projects)) != len(projects):
-            raise ValueError
-        if not folders and not projects:
-            raise ValueError
-    except (TypeError, ValueError):
-        return {"error": "Select valid projects or folders to move."}
-    with db_connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        tree = {row[0]: {"parent": row[1], "name": row[2]} for row in conn.execute("SELECT id,parent_id,name FROM project_folders")}
-        if destination is not None and destination not in tree:
-            return {"error": "Destination folder not found."}
-        if any(folder not in tree for folder in folders):
-            return {"error": "Folder not found."}
-        known = {row[0] for row in conn.execute("SELECT project_name FROM sessions UNION SELECT project_name FROM project_metadata")}
-        aliases = {row[0] for row in conn.execute("SELECT alias_name FROM project_aliases")}
-        if any(name not in known or name in aliases for name in projects):
-            return {"error": "Project not found or already merged. Refresh the Planner."}
-        # Selecting both an ancestor and child moves the ancestor as a unit.
-        selected = set(folders)
-        roots = []
-        for folder in folders:
-            ancestor = tree[folder]["parent"]
-            seen = set()
-            while ancestor is not None and ancestor not in selected and ancestor not in seen:
-                seen.add(ancestor)
-                ancestor = tree[ancestor]["parent"]
-            if ancestor not in selected:
-                roots.append(folder)
-        ancestor = destination
-        seen = set()
-        while ancestor is not None:
-            if ancestor in selected or ancestor in seen:
-                return {"error": "A folder cannot be moved into itself or its subfolders."}
-            seen.add(ancestor)
-            ancestor = tree[ancestor]["parent"]
-        for folder in roots:
-            tree[folder]["parent"] = destination
-        siblings = set()
-        for folder in tree.values():
-            key = (folder["parent"], folder["name"].translate(str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")))
-            if key in siblings:
-                return {"error": "A folder with that name exists at the destination. Rename it first."}
-            siblings.add(key)
-        now = int(time.time())
-        for folder in roots:
-            conn.execute("UPDATE project_folders SET parent_id=?,updated_at=? WHERE id=?", (destination, now, folder))
-        for name in projects:
-            if destination is None:
-                conn.execute("DELETE FROM project_folder_members WHERE project_name=?", (name,))
-            else:
-                conn.execute("INSERT INTO project_folder_members(project_name,folder_id,sort_order) VALUES(?,?,0) ON CONFLICT(project_name) DO UPDATE SET folder_id=excluded.folder_id", (name, destination))
-        conn.commit()
-    return {"ok": True, "parent_id": destination}
-
-
-def delete_project_folder(folder_id: object) -> dict:
-    try:
-        normalized_id = int(folder_id)
-    except (TypeError, ValueError):
-        return {"error": "Invalid folder id."}
-    with db_connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT parent_id FROM project_folders WHERE id=?", (normalized_id,)).fetchone()
-        if not row:
-            return {"error": "Folder not found."}
-        parent = row[0]
-        try:
-            conn.execute("UPDATE project_folders SET parent_id=? WHERE parent_id=?", (parent, normalized_id))
-        except sqlite3.IntegrityError:
-            return {"error": "A child folder has the same name as a folder in the parent location. Rename it first."}
-        if parent is None:
-            conn.execute("DELETE FROM project_folder_members WHERE folder_id=?", (normalized_id,))
-        else:
-            conn.execute("UPDATE project_folder_members SET folder_id=? WHERE folder_id=?", (parent, normalized_id))
-        # Keep folder tasks accessible after deleting their container.
-        task_owner = f"__folder__{parent}" if parent is not None else "__planner_root__"
-        conn.execute("UPDATE project_tasks SET project_name=? WHERE project_name=?", (task_owner, f"__folder__{normalized_id}"))
-        conn.execute("DELETE FROM project_folders WHERE id=?", (normalized_id,))
-        conn.commit()
-    return {"ok": True, "deleted": 1}
-
-
-def reorder_project_folder(folder_id: object, status: str | None, ordered_folders: object) -> dict:
-    try:
-        normalized_id = int(folder_id)
-        ids = [int(value) for value in ordered_folders]
-    except (TypeError, ValueError):
-        return {"error": "Invalid folder order."}
-    if normalized_id not in ids or len(ids) != len(set(ids)):
-        return {"error": "Invalid folder order."}
-    normalized_status = (status or "").strip()
-    with db_connection() as conn:
-        if normalized_status and normalized_status not in get_project_status_options(conn):
-            return {"error": "Unknown project status."}
-        for order, value in enumerate(ids, 1):
-            conn.execute("UPDATE project_folders SET board_order=?, status=?, updated_at=? WHERE id=?", (order, normalized_status, int(time.time()), value))
-        conn.commit()
-    return {"ok": True}
-
-
-def set_project_metadata(
-    project_name: str,
-    status: str | None,
-    project_type: str | None,
-    priority: str | None = None,
-    due_date: str | None = None,
-    hard_deadline: str | None = None,
-    turn_in_date: str | None = None,
-    artist_id: str | None = None,
-    progress_percent: int | None = 0,
-    pinned: bool | int | str | None = None,
-    project_note: str | None = None,
-    display_name: str | None = None,
-) -> dict:
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-
-    normalized_name = (project_name or "").strip()
-    if not normalized_name:
-        return {"error": "Project name is required."}
-
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        existing = conn.execute(
-            """
-            SELECT display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent
-            FROM project_metadata
-            WHERE project_name = ?
-            """,
-            (normalized_name,),
-        ).fetchone()
-        normalized_display_name = (
-            (existing["display_name"] or "").strip() if display_name is None and existing
-            else str(display_name or "").strip()
-        )
-        if not normalized_display_name or normalized_display_name == normalized_name:
-            normalized_display_name = ""
-        if len(normalized_display_name) > 180:
-            return {"error": "Display name must be 180 characters or fewer."}
-        normalized = _normalize_project_metadata_fields(
-            existing["status"] if status is None and existing else status,
-            existing["type"] if project_type is None and existing else project_type,
-            existing["priority"] if priority is None and existing else priority,
-            existing["due_date"] if due_date is None and existing else due_date,
-            existing["hard_deadline"] if hard_deadline is None and existing else hard_deadline,
-            existing["turn_in_date"] if turn_in_date is None and existing else turn_in_date,
-            existing["artist_id"] if artist_id is None and existing else artist_id,
-            existing["progress_percent"] if progress_percent is None and existing else progress_percent,
-            existing["pinned"] if pinned is None and existing else pinned,
-            existing["project_note"] if project_note is None and existing else project_note,
-            get_project_status_options(conn),
-            get_project_type_options(conn),
-        )
-        if isinstance(normalized, dict):
-            return normalized
-        (
-            normalized_status,
-            normalized_type,
-            normalized_priority,
-            normalized_due_date,
-            normalized_hard_deadline,
-            normalized_turn_in_date,
-            normalized_artist_id,
-            normalized_progress,
-            normalized_pinned,
-            normalized_project_note,
-        ) = normalized
-
-        if normalized_pinned:
-            pinned_count = conn.execute(
-                """
-                SELECT COUNT(*)
-                FROM project_metadata
-                WHERE pinned = 1 AND project_name != ?
-                """,
-                (normalized_name,),
-            ).fetchone()[0]
-            if pinned_count >= 3:
-                return {"error": "You can pin up to 3 projects."}
-
-        if not any(
-            (
-                normalized_status,
-                normalized_type,
-                normalized_priority,
-                normalized_due_date,
-                normalized_hard_deadline,
-                normalized_turn_in_date,
-                normalized_artist_id,
-                normalized_progress,
-                normalized_pinned,
-                normalized_project_note,
-                normalized_display_name,
-                existing["board_order"] if existing else 0,
-            )
-        ):
-            cur = conn.execute(
-                "DELETE FROM project_metadata WHERE project_name = ?",
-                (normalized_name,),
-            )
-            conn.commit()
-            return {
-                "ok": True,
-                "deleted": cur.rowcount,
-                "project_name": normalized_name,
-                "metadata": {
-                    "status": "",
-                    "display_name": normalized_name,
-                    "status_label": "",
-                    "type": "",
-                    "type_label": "",
-                    "priority": "",
-                    "priority_label": "",
-                    "due_date": "",
-                    "hard_deadline": "",
-                    "turn_in_date": "",
-                    "artist_id": "",
-                    "progress_percent": 0,
-                    "pinned": False,
-                    "project_note": "",
-                    "board_order": 0,
-                },
-            }
-
-        completion_update = (normalized_status == "finished" and (not existing or existing["status"] != "finished"))
-        completion_clear = (normalized_status != "finished" and existing and existing["status"] == "finished")
-        completed_at = int(time.time()) if completion_update else (existing["completed_at"] if existing else 0)
-        prior_status = (existing["status"] or "") if completion_update and existing else (existing["prior_status"] if existing else "")
-        prior_progress = (existing["progress_percent"] or 0) if completion_update and existing else (existing["prior_progress_percent"] if existing else 0)
-        if completion_update:
-            normalized_progress = 100
-        if completion_clear:
-            completed_at = 0
-            prior_status = ""
-            prior_progress = 0
-
-        conn.execute(
-            """
-            INSERT INTO project_metadata (
-                project_name, display_name, status, type, priority, due_date, hard_deadline, turn_in_date, artist_id, progress_percent, pinned, project_note, completed_at, prior_status, prior_progress_percent, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-            ON CONFLICT(project_name) DO UPDATE SET
-                display_name = excluded.display_name,
-                status = excluded.status,
-                type = excluded.type,
-                priority = excluded.priority,
-                due_date = excluded.due_date,
-                hard_deadline = excluded.hard_deadline,
-                turn_in_date = excluded.turn_in_date,
-                artist_id = excluded.artist_id,
-                progress_percent = excluded.progress_percent,
-                pinned = excluded.pinned,
-                project_note = excluded.project_note,
-                completed_at = excluded.completed_at,
-                prior_status = excluded.prior_status,
-                prior_progress_percent = excluded.prior_progress_percent,
-                updated_at = excluded.updated_at
-            """,
-            (
-                normalized_name,
-                normalized_display_name,
-                normalized_status,
-                normalized_type,
-                normalized_priority,
-                normalized_due_date,
-                normalized_hard_deadline,
-                normalized_turn_in_date,
-                normalized_artist_id,
-                normalized_progress,
-                1 if normalized_pinned else 0,
-                normalized_project_note,
-                completed_at,
-                prior_status,
-                prior_progress,
-            ),
-        )
-        conn.commit()
-        return {
-            "ok": True,
-            "project_name": normalized_name,
-            "metadata": {
-                "display_name": normalized_display_name or normalized_name,
-                "status": normalized_status,
-                "status_label": get_project_status_options(conn).get(normalized_status, ""),
-                "type": normalized_type,
-                "type_label": get_project_type_options(conn).get(normalized_type, ""),
-                "priority": normalized_priority,
-                "priority_label": PROJECT_PRIORITY_OPTIONS.get(normalized_priority, ""),
-                "due_date": normalized_due_date,
-                "hard_deadline": normalized_hard_deadline,
-                "turn_in_date": normalized_turn_in_date,
-                "artist_id": normalized_artist_id,
-                "progress_percent": normalized_progress,
-                "pinned": normalized_pinned,
-                "project_note": normalized_project_note,
-                "board_order": existing["board_order"] if existing else 0,
-                "completed_at": completed_at,
-                "prior_status": prior_status,
-                "prior_progress_percent": prior_progress,
-            },
-        }
-
-
-def set_project_completion(project_name: str, completed: bool) -> dict:
-    """Atomically complete or reopen a known project card."""
-    if not DB_PATH.exists():
-        return {"error": "No data yet — start the tracker first."}
-    name = (project_name or "").strip()
-    if not name:
-        return {"error": "Project name is required."}
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        known = conn.execute(
-            "SELECT 1 FROM sessions WHERE project_name = ? UNION SELECT 1 FROM project_metadata WHERE project_name = ? LIMIT 1",
-            (name, name),
-        ).fetchone()
-        if not known:
-            return {"error": "Unknown project."}
-        row = conn.execute(
-            "SELECT status, progress_percent, completed_at, prior_status, prior_progress_percent FROM project_metadata WHERE project_name = ?",
-            (name,),
-        ).fetchone()
-        now = int(time.time())
-        if completed:
-            if row and row["status"] == "finished" and row["completed_at"]:
-                return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
-            prior_status = (row["status"] if row else "") or ""
-            prior_progress = (row["progress_percent"] if row else 0) or 0
-            conn.execute(
-                """INSERT INTO project_metadata (project_name, status, progress_percent, completed_at, prior_status, prior_progress_percent, updated_at)
-                   VALUES (?, 'finished', 100, ?, ?, ?, ?)
-                   ON CONFLICT(project_name) DO UPDATE SET status='finished', progress_percent=100, completed_at=excluded.completed_at, prior_status=excluded.prior_status, prior_progress_percent=excluded.prior_progress_percent, updated_at=excluded.updated_at""",
-                (name, now, prior_status, prior_progress, now),
-            )
-        else:
-            if not row or row["status"] != "finished":
-                return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
-            restore_status = row["prior_status"] or "in_progress"
-            restore_progress = row["prior_progress_percent"] if row["completed_at"] else row["progress_percent"]
-            conn.execute(
-                "UPDATE project_metadata SET status=?, progress_percent=?, completed_at=0, prior_status='', prior_progress_percent=0, updated_at=? WHERE project_name=?",
-                (restore_status, restore_progress, now, name),
-            )
-        conn.commit()
-        return {"ok": True, "project_name": name, "metadata": get_project_metadata(conn).get(name, {})}
-
-
-def reorder_project_board(project_name: str, status: str | None, ordered_projects: object) -> dict:
-    normalized_name = (project_name or "").strip()
-    normalized_status = (status or "").strip()
-    if not normalized_name:
-        return {"error": "Project name is required."}
-    if not isinstance(ordered_projects, list):
-        return {"error": "ordered_projects must be a list."}
-    names = [str(name).strip() for name in ordered_projects]
-    if any(not name for name in names) or len(names) != len(set(names)):
-        return {"error": "ordered_projects must contain unique project names."}
-    if normalized_name not in names:
-        return {"error": "Moved project is missing from ordered_projects."}
-
-    with db_connection() as conn:
-        statuses = get_project_status_options(conn)
-        if normalized_status and normalized_status not in statuses:
-            return {"error": "Unknown project status."}
-        known = {
-            row[0]
-            for row in conn.execute(
-                "SELECT DISTINCT project_name FROM sessions UNION SELECT project_name FROM project_metadata"
-            ).fetchall()
-        }
-        if any(name not in known for name in names):
-            return {"error": "Unknown project in board order."}
-        now = int(time.time())
-        for position, name in enumerate(names, start=1):
-            conn.execute(
-                """
-                INSERT INTO project_metadata (project_name, status, board_order, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(project_name) DO UPDATE SET
-                    status = excluded.status,
-                    board_order = excluded.board_order,
-                    updated_at = excluded.updated_at
-                """,
-                (name, normalized_status, position, now),
-            )
-        conn.commit()
-    return {"ok": True, "project_name": normalized_name, "status": normalized_status, "ordered_projects": names}
 
 
 def set_project_category(project_name: str, category_key: str | None) -> dict:
@@ -3148,70 +1271,28 @@ def set_weekly_target(goal_hours: object) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 def _compute_data_etag(month_value: str = "") -> str:
-    """Lightweight hash of DB state — returns None if no DB."""
+    """Lightweight hash of tracker data state — returns empty if no DB."""
     if not DB_PATH.exists():
         return ""
     with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
-        s = conn.execute(
-            "SELECT COUNT(*), MAX(rowid), MAX(COALESCE(last_seen_time, start_time)),"
-            "  (SELECT COUNT(*) FROM sessions WHERE end_time IS NULL)"
-            " FROM sessions"
+        sessions = conn.execute(
+            "SELECT COUNT(*), MAX(rowid), MAX(COALESCE(last_seen_time, start_time)), "
+            "(SELECT COUNT(*) FROM sessions WHERE end_time IS NULL) FROM sessions"
         ).fetchone()
-        sn = conn.execute(
-            """
-            SELECT COUNT(*), MAX(rowid),
-                   GROUP_CONCAT(id || ':' || COALESCE(notes, '') || ':' || COALESCE(todo_notes, '') || ':' || COALESCE(todos_json, ''), '|')
-            FROM (
-                SELECT id, rowid, notes, todo_notes, todos_json
-                FROM sessions
-                ORDER BY id
-            )
-            """
+        notes = conn.execute(
+            "SELECT COUNT(*), MAX(rowid), GROUP_CONCAT(id || ':' || COALESCE(notes, '') || ':' || "
+            "COALESCE(todo_notes, '') || ':' || COALESCE(todos_json, ''), '|') FROM "
+            "(SELECT id, rowid, notes, todo_notes, todos_json FROM sessions ORDER BY id)"
         ).fetchone()
-        cd = conn.execute("SELECT COUNT(*), MAX(rowid) FROM category_definitions").fetchone()
-        pc = conn.execute("SELECT COUNT(*), MAX(rowid) FROM project_categories").fetchone()
-        pm = conn.execute(
-            """
-            SELECT COUNT(*), MAX(rowid), MAX(updated_at),
-                   GROUP_CONCAT(project_name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || pinned || ':' || project_note || ':' || board_order || ':' || completed_at || ':' || prior_status || ':' || prior_progress_percent, '|')
-            FROM (
-                SELECT rowid, project_name, status, type, priority, due_date, hard_deadline, turn_in_date, pinned, project_note, board_order, completed_at, prior_status, prior_progress_percent, updated_at
-                FROM project_metadata
-                ORDER BY project_name
-            )
-            """
+        categories = conn.execute("SELECT COUNT(*), MAX(rowid) FROM category_definitions").fetchone()
+        assignments = conn.execute("SELECT COUNT(*), MAX(rowid) FROM project_categories").fetchone()
+        daily_metrics = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
+        settings = conn.execute(
+            "SELECT GROUP_CONCAT(key || ':' || value, '|') FROM "
+            "(SELECT key, value FROM app_settings ORDER BY key)"
         ).fetchone()
-        pt = conn.execute(
-            """
-            SELECT COUNT(*), MAX(id), MAX(updated_at),
-                   GROUP_CONCAT(id || ':' || project_name || ':' || status || ':' || priority || ':' || due_date || ':' || waiting || ':' || quick || ':' || label || ':' || updated_at, '|')
-            FROM (
-                SELECT id, project_name, status, priority, due_date, waiting, quick, label, updated_at
-                FROM project_tasks
-                ORDER BY id
-            )
-            """
-        ).fetchone()
-        pg = conn.execute(
-            """
-            SELECT COUNT(*), MAX(id), MAX(updated_at),
-                   GROUP_CONCAT(id || ':' || goal_type || ':' || target_value || ':' || period || ':' || scope_type || ':' || scope_value || ':' || active || ':' || updated_at, '|')
-            FROM (
-                SELECT id, goal_type, target_value, period, scope_type, scope_value, active, updated_at
-                FROM planner_goals
-                ORDER BY id
-            )
-            """
-        ).fetchone()
-        pf = conn.execute("SELECT COUNT(*), MAX(id), MAX(updated_at), GROUP_CONCAT(id || ':' || COALESCE(parent_id, 0) || ':' || name || ':' || status || ':' || type || ':' || priority || ':' || due_date || ':' || hard_deadline || ':' || turn_in_date || ':' || note || ':' || board_order, '|') FROM project_folders").fetchone()
-        pfm = conn.execute("SELECT COUNT(*), GROUP_CONCAT(project_name || ':' || folder_id || ':' || sort_order, '|') FROM project_folder_members").fetchone()
-        dm = conn.execute("SELECT COUNT(*), MAX(rowid) FROM daily_metrics").fetchone()
-        ast = conn.execute(
-            "SELECT GROUP_CONCAT(key || ':' || value, '|') FROM (SELECT key, value FROM app_settings ORDER BY key)"
-        ).fetchone()
-        pa = conn.execute("SELECT GROUP_CONCAT(alias_name || '->' || canonical_name, '|') FROM (SELECT * FROM project_aliases ORDER BY alias_name)").fetchone()
-        raw = f"{pa}|{s}|{sn}|{cd}|{pc}|{pm}|{pt}|{pg}|{pf}|{pfm}|{dm}|{ast}|{month_value}"
+        raw = f"{sessions}|{notes}|{categories}|{assignments}|{daily_metrics}|{settings}|{month_value}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -3224,57 +1305,28 @@ def get_project_list() -> list[str]:
         return list(cached)
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT DISTINCT COALESCE(pa.canonical_name, s.project_name) AS project_name FROM sessions s LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name WHERE s.project_name IS NOT NULL ORDER BY LOWER(COALESCE(pa.canonical_name, s.project_name)) ASC").fetchall()
+        rows = conn.execute(
+            "SELECT DISTINCT project_name FROM sessions WHERE project_name IS NOT NULL "
+            "ORDER BY LOWER(project_name) ASC"
+        ).fetchall()
         projects = [row["project_name"] for row in rows if row["project_name"]]
         _cache_set(cache_key, projects)
         return projects
 
 
 def get_project_list_recent() -> list[dict]:
-    """Return canonical projects ordered by their most recent session."""
+    """Return tracker projects ordered by their most recent session."""
     if not DB_PATH.exists():
         return []
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            """
-            SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
-                   MAX(COALESCE(s.last_seen_time, s.start_time, 0)) AS last_active
-            FROM sessions s
-            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-            WHERE s.project_name IS NOT NULL
-              AND TRIM(s.project_name) != ''
-            GROUP BY COALESCE(pa.canonical_name, s.project_name)
-            ORDER BY last_active DESC, LOWER(project_name) ASC
-            """
+            "SELECT project_name, MAX(COALESCE(last_seen_time, start_time, 0)) AS last_active "
+            "FROM sessions WHERE project_name IS NOT NULL AND TRIM(project_name) != '' "
+            "GROUP BY project_name ORDER BY last_active DESC, LOWER(project_name) ASC"
         ).fetchall()
-        return [
-            {"project_name": row["project_name"], "last_active": row["last_active"]}
-            for row in rows
-        ]
+        return [{"project_name": row["project_name"], "last_active": row["last_active"]} for row in rows]
 
-
-def get_project_aliases(project_name: str) -> dict:
-    """Return alias information for a project (which projects are merged into it)."""
-    if not DB_PATH.exists():
-        return {"ok": True, "canonical_name": project_name, "aliases": []}
-    with db_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        # Resolve to canonical if the given name is itself an alias
-        canonical_row = conn.execute(
-            "SELECT canonical_name FROM project_aliases WHERE alias_name = ?",
-            (project_name,),
-        ).fetchone()
-        canonical = canonical_row[0] if canonical_row else project_name
-        alias_rows = conn.execute(
-            "SELECT alias_name FROM project_aliases WHERE canonical_name = ?",
-            (canonical,),
-        ).fetchall()
-        return {
-            "ok": True,
-            "canonical_name": canonical,
-            "aliases": [row[0] for row in alias_rows],
-        }
 
 
 def get_project_report(project_name: str) -> dict:
@@ -3282,17 +1334,12 @@ def get_project_report(project_name: str) -> dict:
         return {"error": "No data"}
     with db_connection() as conn:
         conn.row_factory = sqlite3.Row
-        aliases = conn.execute("SELECT alias_name FROM project_aliases WHERE canonical_name = ?", (project_name,)).fetchall()
-        names = [project_name] + [row[0] for row in aliases]
-        placeholders = ",".join("?" * len(names))
-        
-        rows = conn.execute(f"""
-            SELECT id, COALESCE(pa.canonical_name, s.project_name) AS project_name, start_time, last_seen_time, end_time, active_seconds, notes, todo_notes, todos_json
-            FROM sessions s
-            LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-            WHERE s.project_name IN ({placeholders}) AND s.active_seconds > 0
-            ORDER BY s.start_time DESC
-        """, names).fetchall()
+        rows = conn.execute(
+            "SELECT id, project_name, start_time, last_seen_time, end_time, active_seconds, "
+            "notes, todo_notes, todos_json FROM sessions "
+            "WHERE project_name = ? AND active_seconds > 0 ORDER BY start_time DESC",
+            (project_name,),
+        ).fetchall()
         
         if not rows:
             return {
@@ -3376,15 +1423,6 @@ def get_project_report(project_name: str) -> dict:
                 "session_entries": [raw_entries[sid] for sid in session_ids if sid in raw_entries],
             })
             
-        # Query project note for the canonical project
-        project_note = ""
-        metadata_row = conn.execute(
-            "SELECT project_note FROM project_metadata WHERE project_name = ?",
-            (project_name,),
-        ).fetchone()
-        if metadata_row:
-            project_note = (metadata_row["project_note"] or "").strip()
-
         # Build per-session maps keyed by session id string
         session_notes_map = {}
         session_todo_notes_map = {}
@@ -3414,7 +1452,6 @@ def get_project_report(project_name: str) -> dict:
             "total_duration": f"{th:02d}:{tm:02d}:{ts:02d}",
             "total_duration_seconds": total_seconds,
             "session_count": len(sessions),
-            "project_note": project_note,
             "notes": session_notes_map,
             "todo_notes": session_todo_notes_map,
             "todos": session_todos_map,
@@ -3517,31 +1554,24 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             conn.row_factory = sqlite3.Row
             category_options, _ = get_category_maps(conn)
             project_categories = get_project_categories(conn)
-            project_metadata = get_project_metadata(conn)
-            project_tasks = get_project_tasks_by_project(conn)
-            planner_goals = get_planner_goals(conn)
-            artists = get_artists(conn)
 
             activity_rows = conn.execute("""
-                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
-                       s.start_time, s.last_seen_time, s.end_time, s.active_seconds
-                FROM sessions s
-                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-                WHERE s.active_seconds > 0
+                SELECT project_name, start_time, last_seen_time, end_time, active_seconds
+                FROM sessions
+                WHERE active_seconds > 0
             """).fetchall()
             daily_totals, hourly_totals = build_activity_rollups(activity_rows)
 
             projects = conn.execute("""
-                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
-                       SUM(s.active_seconds)  AS total_seconds,
-                       COUNT(*)             AS session_count,
-                       MIN(s.start_time)      AS first_seen,
-                       MAX(COALESCE(s.end_time, s.last_seen_time, s.start_time)) AS last_seen,
-                       AVG(s.active_seconds)  AS avg_seconds
-                FROM   sessions s
-                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
-                WHERE  s.active_seconds > 0
-                GROUP  BY COALESCE(pa.canonical_name, s.project_name)
+                SELECT project_name,
+                       SUM(active_seconds) AS total_seconds,
+                       COUNT(*) AS session_count,
+                       MIN(start_time) AS first_seen,
+                       MAX(COALESCE(end_time, last_seen_time, start_time)) AS last_seen,
+                       AVG(active_seconds) AS avg_seconds
+                FROM sessions
+                WHERE active_seconds > 0
+                GROUP BY project_name
                 ORDER  BY total_seconds DESC
             """).fetchall()
 
@@ -3696,10 +1726,8 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
 
             # Currently active session (end_time IS NULL)
             live = conn.execute("""
-                SELECT COALESCE(pa.canonical_name, s.project_name) AS project_name,
-                       s.start_time, s.last_seen_time, s.active_seconds
-                FROM sessions s
-                LEFT JOIN project_aliases pa ON s.project_name = pa.alias_name
+                SELECT project_name, start_time, last_seen_time, active_seconds
+                FROM sessions
                 WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
             """).fetchone()
             live_duration_seconds = 0.0
@@ -3716,20 +1744,8 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 ableton_has_project = bool((live["project_name"] or "").strip())
             ableton_running = True if ableton_has_project else is_ableton_running()
 
-            display_names = {
-                row["project_name"]: project_metadata.get(row["project_name"], {}).get(
-                    "display_name", row["project_name"]
-                )
-                for row in projects
-            }
-            campaign_names = sorted(
-                month_per_project,
-                key=lambda name: (-month_per_project[name], display_names.get(name, name).casefold(), name.casefold()),
-            )
-            previous_campaign_names = sorted(
-                previous_month_per_project,
-                key=lambda name: (-previous_month_per_project[name], display_names.get(name, name).casefold(), name.casefold()),
-            )
+            campaign_names = sorted(month_per_project, key=lambda name: (-month_per_project[name], name.casefold()))
+            previous_campaign_names = sorted(previous_month_per_project, key=lambda name: (-previous_month_per_project[name], name.casefold()))
             month_ranks = {name: rank for rank, name in enumerate(campaign_names, 1)}
             previous_month_ranks = {name: rank for rank, name in enumerate(previous_campaign_names, 1)}
 
@@ -3740,27 +1756,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 project["category_key"] = category["key"] if category else None
                 project["category_label"] = category["label"] if category else None
                 project["category_color"] = category["color"] if category else None
-                metadata = project_metadata.get(project["project_name"], {})
-                project["status"] = metadata.get("status", "")
-                project["display_name"] = metadata.get("display_name", project["project_name"])
-                project["status_label"] = metadata.get("status_label", "")
-                project["type"] = metadata.get("type", "")
-                project["type_label"] = metadata.get("type_label", "")
-                project["priority"] = metadata.get("priority", "")
-                project["priority_label"] = metadata.get("priority_label", "")
-                project["due_date"] = metadata.get("due_date", "")
-                project["hard_deadline"] = metadata.get("hard_deadline", "")
-                project["turn_in_date"] = metadata.get("turn_in_date", "")
-                project["artist_id"] = metadata.get("artist_id", "")
-                project["progress_percent"] = metadata.get("progress_percent", 0)
-                project["pinned"] = metadata.get("pinned", False)
-                project["project_note"] = metadata.get("project_note", "")
-                project["board_order"] = metadata.get("board_order", 0)
-                project["completed_at"] = metadata.get("completed_at", 0)
-                project["prior_status"] = metadata.get("prior_status", "")
-                project["prior_progress_percent"] = metadata.get("prior_progress_percent", 0)
-                project.update(_project_deadline_summary(metadata, today))
-                project["project_tasks"] = project_tasks.get(project["project_name"], [])
+                project["display_name"] = project["project_name"]
                 project["month_seconds"] = month_per_project.get(project["project_name"], 0)
                 project["previous_month_seconds"] = previous_month_per_project.get(project["project_name"], 0)
                 project["month_rank"] = month_ranks.get(project["project_name"])
@@ -3781,8 +1777,6 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             recent_rows = []
             for row in recent:
                 category = project_categories.get(row["project_name"])
-                metadata = project_metadata.get(row["project_name"], {})
-                deadline_summary = _project_deadline_summary(metadata, today)
                 session_ids = row.get("session_ids", [])
                 # Build per-session notes, start-times, end-times, and last-seen maps
                 session_notes = {}
@@ -3809,7 +1803,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 recent_rows.append(
                     {
                         "project_name": row["project_name"],
-                        "display_name": metadata.get("display_name", row["project_name"]),
+                        "display_name": row["project_name"],
                         "start_time": row["start_time"],
                         "end_time": row["end_time"],
                         "active_seconds": row["active_seconds"],
@@ -3824,28 +1818,9 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                         "category_key": category["key"] if category else None,
                         "category_label": category["label"] if category else None,
                         "category_color": category["color"] if category else None,
-                        "status": metadata.get("status", ""),
-                        "status_label": metadata.get("status_label", ""),
-                        "type": metadata.get("type", ""),
-                        "type_label": metadata.get("type_label", ""),
-                        "priority": metadata.get("priority", ""),
-                        "priority_label": metadata.get("priority_label", ""),
-                        "due_date": metadata.get("due_date", ""),
-                        "hard_deadline": metadata.get("hard_deadline", ""),
-                        "turn_in_date": metadata.get("turn_in_date", ""),
-                        "artist_id": metadata.get("artist_id", ""),
-                        "progress_percent": metadata.get("progress_percent", 0),
-                        "pinned": metadata.get("pinned", False),
-                        "project_note": metadata.get("project_note", ""),
-                        "board_order": metadata.get("board_order", 0),
-                        "deadline_state": deadline_summary["deadline_state"],
-                        "deadline_label": deadline_summary["deadline_label"],
-                        "deadline_reasons": deadline_summary["deadline_reasons"],
                     }
                 )
 
-            planner_folders = get_project_folders(conn)
-            planner_root_tasks = get_project_tasks(conn, "__planner_root__")
             return {
                 "summary": {
                     "total_seconds":  total_s,
@@ -3880,25 +1855,14 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "phantom_closed_count": phantom_closed_count,
                 },
                 "projects": project_rows,
-                "project_folders": planner_folders,
-                "planner_overviews": planner_folder_overviews(project_rows, planner_folders, planner_root_tasks),
-                "planner_root_tasks": planner_root_tasks,
-                "planner_aliases": [dict(row) for row in conn.execute(
-                    "SELECT pa.alias_name, pa.canonical_name, pm.status, pm.project_note FROM project_aliases pa LEFT JOIN project_metadata pm ON pm.project_name=pa.alias_name"
-                )],
                 "year_daily": [dict(r) for r in year_daily],
                 "year_hourly": [dict(r) for r in year_hourly],
                 "recent": recent_rows,
                 "recent_has_more": recent_has_more,
                 "recent_oldest_start_time": min((row["start_time"] for row in recent_rows), default=None),
                 "category_options": category_options,
-                "project_status_options": list(get_project_status_options(conn).items()),
-                "project_type_options": list(get_project_type_options(conn).items()),
-                "planner_goals": planner_goals,
-                "artists": artists,
                 "custom_category_limit": MAX_CUSTOM_CATEGORIES,
                 "custom_category_count": len(category_options),
-                "project_board_lane_order": get_project_board_lane_order(conn),
             }
     except sqlite3.Error as e:
         return {"error": str(e)}
@@ -7230,138 +5194,6 @@ setInterval(tickSessionTimer, 1_000);
 #  HTTP server
 # ─────────────────────────────────────────────────────────────
 
-def merge_projects(canonical_name: str, aliases: list) -> dict:
-    canonical_name = (canonical_name or "").strip()
-    if not canonical_name or not isinstance(aliases, list) or not aliases:
-        return {"error": "Target project and at least one project to merge are required."}
-    if not DB_PATH.exists():
-        return {"error": "No data."}
-    
-    with db_connection() as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
-        try:
-            normalized_aliases = [(alias or "").strip() for alias in aliases]
-            if any(not alias for alias in normalized_aliases):
-                return {"error": "Project names cannot be empty."}
-            if canonical_name in normalized_aliases:
-                return {"error": "A project cannot be merged into itself."}
-            if len(set(normalized_aliases)) != len(normalized_aliases):
-                return {"error": "Duplicate projects were selected."}
-
-            names = [canonical_name, *normalized_aliases]
-            placeholders = ",".join("?" for _ in names)
-            existing = {
-                row[0]
-                for row in conn.execute(
-                    f"SELECT DISTINCT project_name FROM sessions WHERE project_name IN ({placeholders})",
-                    names,
-                ).fetchall()
-            }
-            missing = [name for name in names if name not in existing]
-            if missing:
-                return {"error": f"Project not found: {missing[0]}"}
-
-            mapped = conn.execute(
-                f"SELECT alias_name FROM project_aliases WHERE alias_name IN ({','.join('?' for _ in normalized_aliases)})",
-                normalized_aliases,
-            ).fetchall()
-            if mapped:
-                return {"error": f"Project is already merged: {mapped[0][0]}"}
-
-            source_group = conn.execute(
-                f"SELECT canonical_name FROM project_aliases WHERE canonical_name IN ({','.join('?' for _ in normalized_aliases)})",
-                normalized_aliases,
-            ).fetchone()
-            if source_group:
-                return {"error": "Separate an existing merged group before using it as a source."}
-
-            target_is_alias = conn.execute(
-                "SELECT 1 FROM project_aliases WHERE alias_name = ?", (canonical_name,)
-            ).fetchone()
-            if target_is_alias:
-                return {"error": "The destination project is already merged into another project."}
-
-            conn.execute("BEGIN")
-            for alias in normalized_aliases:
-                conn.execute(
-                    """
-                    INSERT INTO project_aliases (alias_name, canonical_name)
-                    VALUES (?, ?)
-                    """,
-                    (alias, canonical_name)
-                )
-            conn.commit()
-            _cache_clear("project_list")
-            return {
-                "ok": True,
-                "canonical_name": canonical_name,
-                "aliases": normalized_aliases,
-                "merged_count": len(normalized_aliases),
-            }
-        except Exception as e:
-            conn.rollback()
-            return {"error": str(e)}
-
-
-def unmerge_project(alias_name: str) -> dict:
-    """Remove a single alias, restoring it as an independent project."""
-    alias_name = (alias_name or "").strip()
-    if not alias_name:
-        return {"error": "alias_name is required"}
-    if not DB_PATH.exists():
-        return {"error": "No data."}
-
-    with db_connection() as conn:
-        try:
-            cur = conn.execute(
-                "DELETE FROM project_aliases WHERE alias_name = ?",
-                (alias_name,),
-            )
-            if cur.rowcount == 0:
-                return {"error": "Alias not found"}
-            conn.commit()
-            _cache_clear("project_list")
-            return {"ok": True, "removed": alias_name}
-        except Exception as e:
-            conn.rollback()
-            return {"error": str(e)}
-
-
-def unmerge_projects(alias_names: list) -> dict:
-    """Atomically restore several aliases as independent projects."""
-    if not isinstance(alias_names, list) or not alias_names:
-        return {"error": "At least one alias is required."}
-    normalized = [(name or "").strip() for name in alias_names]
-    if any(not name for name in normalized) or len(set(normalized)) != len(normalized):
-        return {"error": "Aliases must be unique, non-empty project names."}
-    if not DB_PATH.exists():
-        return {"error": "No data."}
-
-    with db_connection() as conn:
-        try:
-            placeholders = ",".join("?" for _ in normalized)
-            found = {
-                row[0]
-                for row in conn.execute(
-                    f"SELECT alias_name FROM project_aliases WHERE alias_name IN ({placeholders})",
-                    normalized,
-                ).fetchall()
-            }
-            missing = [name for name in normalized if name not in found]
-            if missing:
-                return {"error": f"Alias not found: {missing[0]}"}
-            conn.execute("BEGIN")
-            conn.execute(
-                f"DELETE FROM project_aliases WHERE alias_name IN ({placeholders})",
-                normalized,
-            )
-            conn.commit()
-            _cache_clear("project_list")
-            return {"ok": True, "removed": normalized, "removed_count": len(normalized)}
-        except Exception as e:
-            conn.rollback()
-            return {"error": str(e)}
-
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -7470,22 +5302,9 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/project-list":
             sort_value = parse_qs(parsed.query).get("sort", [""])[0]
             self._json(get_project_list_recent() if sort_value == "recent" else get_project_list())
-        elif parsed.path == "/api/project-aliases":
-            project = parse_qs(parsed.query).get("project", [""])[0]
-            if not project:
-                self._json({"error": "project required"}, status=400)
-                return
-            self._json(get_project_aliases(project))
         elif parsed.path == "/api/last-session-todos":
             project = parse_qs(parsed.query).get("project", [""])[0]
             self._json(get_last_session_todos(project))
-        elif parsed.path == "/api/project-tasks":
-            project = parse_qs(parsed.query).get("project", [""])[0]
-            result = get_project_tasks_response(project)
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif parsed.path == "/api/planner-goals":
-            result = get_planner_goals_response()
-            self._json(result, status=200 if result.get("ok") else 400)
         elif parsed.path == "/api/session-notes-entry":
             query = parse_qs(parsed.query)
             result = get_session_notes_entry(
@@ -7609,42 +5428,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json(rebuild_pause_history())
         elif self.path == "/api/consolidate-sessions":
             self._json(consolidate_sessions())
-        elif self.path == "/api/merge-projects":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = merge_projects(
-                payload.get("canonical_name", ""),
-                payload.get("aliases", [])
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/unmerge-project":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = unmerge_project(payload.get("alias_name", ""))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/unmerge-projects":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = unmerge_projects(payload.get("aliases", []))
-            self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/delete-session":
             try:
                 payload = self._request_json()
@@ -7685,244 +5468,6 @@ class Handler(BaseHTTPRequestHandler):
                 payload.get("project_name", ""),
                 payload.get("category_key"),
             )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-folders/save":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = save_project_folder(payload or {})
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/planner/move":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = move_planner_items(payload or {})
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-folders/members":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = set_project_folder_members((payload or {}).get("folder_id"), (payload or {}).get("projects"))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-folders/delete":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = delete_project_folder((payload or {}).get("folder_id"))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-folders/reorder":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            result = reorder_project_folder((payload or {}).get("folder_id"), (payload or {}).get("status"), (payload or {}).get("ordered_folders"))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-metadata":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = set_project_metadata(
-                payload.get("project_name", ""),
-                payload.get("status"),
-                payload.get("type"),
-                payload.get("priority"),
-                payload.get("due_date"),
-                payload.get("hard_deadline"),
-                payload.get("turn_in_date"),
-                payload.get("artist_id"),
-                payload.get("progress_percent"),
-                payload.get("pinned"),
-                payload.get("project_note"),
-                payload.get("display_name"),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-completion":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None or not isinstance(payload.get("completed"), bool):
-                self._json({"error": "project_name and boolean completed are required"}, status=400)
-                return
-            result = set_project_completion(payload.get("project_name", ""), payload["completed"])
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-board/reorder":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = reorder_project_board(
-                payload.get("project_name", ""),
-                payload.get("status"),
-                payload.get("ordered_projects"),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-board/lane-order":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = save_project_board_lane_order(
-                payload.get("ordered_statuses", [])
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/artists":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            
-            with db_connection() as conn:
-                result = create_artist(
-                    conn,
-                    payload.get("id", ""),
-                    payload.get("name", ""),
-                    payload.get("email", ""),
-                    payload.get("phone", ""),
-                    payload.get("instagram", ""),
-                )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/artists/update":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            
-            with db_connection() as conn:
-                result = update_artist(
-                    conn,
-                    payload.get("id", ""),
-                    payload.get("name", ""),
-                    payload.get("email", ""),
-                    payload.get("phone", ""),
-                    payload.get("instagram", ""),
-                )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/artists/delete":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            
-            with db_connection() as conn:
-                result = delete_artist(conn, payload.get("id", ""))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-tasks":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = create_project_task(
-                payload.get("project_name", ""),
-                payload.get("title", ""),
-                payload.get("priority", "normal"),
-                payload.get("due_date", ""),
-                payload.get("sort_order", 0),
-                payload.get("waiting", False),
-                payload.get("quick", False),
-                payload.get("label", ""),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-tasks/update":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = update_project_task(payload.get("id"), payload)
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/project-tasks/delete":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = delete_project_task(payload.get("id"))
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/planner-goals":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = create_planner_goal(
-                payload.get("goal_type"),
-                payload.get("target_value"),
-                payload.get("period", "week"),
-                payload.get("scope_type", "all"),
-                payload.get("scope_value", ""),
-                payload.get("active", True),
-            )
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/planner-goals/update":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = update_planner_goal(payload.get("id"), payload)
-            self._json(result, status=200 if result.get("ok") else 400)
-        elif self.path == "/api/planner-goals/delete":
-            try:
-                payload = self._request_json()
-            except json.JSONDecodeError:
-                self._json({"error": "invalid json"}, status=400)
-                return
-            if payload is None:
-                self._json({"error": "request body is required"}, status=400)
-                return
-            result = delete_planner_goal(payload.get("id"))
             self._json(result, status=200 if result.get("ok") else 400)
         elif self.path == "/api/category-options":
             try:

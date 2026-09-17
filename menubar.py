@@ -38,7 +38,7 @@ DASHBOARD_WINDOW_SCRIPT = APP_DIR / "dashboard_window.py"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 REFRESH_INTERVAL = 5
 TRACKER_WAKE_INTERVAL = 5
-NOTIFICATION_CHECK_INTERVAL = 5 * 60
+NOTIFICATION_CHECK_INTERVAL = 30
 NOTIFICATION_STATE_PATH = Path.home() / ".ableton_tracker" / "notification_state.json"
 INSTANCE_LOCK_PATH = Path.home() / ".ableton_tracker" / "tracker-app.lock"
 
@@ -279,6 +279,7 @@ class AbletonTrackerApp(rumps.App):
             today=today,
             week=week,
             weekly_goal=weekly_goal,
+            daily_goal=daily_goal,
             streak=streak,
         )
 
@@ -336,17 +337,26 @@ class AbletonTrackerApp(rumps.App):
         week: float,
         weekly_goal: float | None,
         streak: int,
+        daily_goal: float | None = None,
     ) -> None:
         now_monotonic = time.monotonic()
         if now_monotonic < self._next_notification_check:
             return
         self._next_notification_check = now_monotonic + NOTIFICATION_CHECK_INTERVAL
         try:
+            try:
+                pause_token = str(PAUSE_FILE.stat().st_mtime_ns)
+            except FileNotFoundError:
+                pause_token = None
+            status = self.tracker_thread.status()
             self.notification_coordinator.check(
                 now=datetime.now(),
                 today_seconds=today,
                 week_seconds=week,
                 weekly_goal_hours=weekly_goal,
+                daily_goal_hours=daily_goal,
+                pause_token=pause_token,
+                ableton_running=status.running and self.tracker_thread.consecutive_failures == 0,
                 streak_days=streak,
                 deliver=self._deliver_notification,
             )

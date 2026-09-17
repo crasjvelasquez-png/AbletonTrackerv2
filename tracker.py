@@ -161,12 +161,6 @@ def setup_db():
             )
         """)
         ensure_pauses_table(conn)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS project_aliases (
-                alias_name     TEXT PRIMARY KEY,
-                canonical_name TEXT NOT NULL
-            )
-        """)
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
         }

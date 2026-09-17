@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build self-contained-source Tracker.app and Planner.app macOS bundles."""
+"""Build the self-contained-source Tracker.app macOS bundle."""
 
 import shutil
 import subprocess
@@ -31,12 +31,6 @@ APPS = {
         "ui_element": True,
         "entry": "menubar.py",
     },
-    "Planner": {
-        "bundle_id": "com.abletontracker.planner",
-        "accent": "#8B5CF6",
-        "ui_element": False,
-        "entry": "dashboard_window.py planner",
-    },
 }
 
 
@@ -63,11 +57,6 @@ def build_icon(app_name: str, accent: str) -> Path:
             y = (MASTER_SIZE - height) // 2
             draw.rounded_rectangle((x, y, x + widths, y + height), radius=27, fill=white)
             x += widths + gap
-    else:
-        for index, width in enumerate((360, 300, 230)):
-            y = 350 + index * 145
-            draw.ellipse((292, y - 24, 340, y + 24), fill=white)
-            draw.rounded_rectangle((390, y - 18, 390 + width, y + 18), radius=18, fill=white)
 
     # ICNS supports PNG payloads directly. Building the chunks here avoids
     # iconutil, which rejects valid icon sets on some current macOS releases.
