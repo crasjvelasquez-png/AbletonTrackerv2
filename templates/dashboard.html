@@ -2648,6 +2648,34 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 
 
 
+<!-- Notes modal -->
+<div class="modal-backdrop" id="notesModal">
+  <div class="modal notes-modal" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
+    <div class="notes-modal-head">
+      <div style="flex:1;min-width:0">
+        <div class="notes-modal-title-row">
+          <h3 id="notesModalTitle">Notes</h3>
+          <div class="notes-nav" id="notesNav" aria-label="Navigate session entries" hidden>
+            <button class="notes-nav-btn" id="notesPrevBtn" type="button" aria-label="Previous session">‹</button>
+            <button class="notes-nav-btn" id="notesNextBtn" type="button" aria-label="Next session">›</button>
+          </div>
+        </div>
+        <div class="notes-modal-subtitle" id="notesModalSubtitle"></div>
+        <div id="notesSessionDateTime" style="display:none;font-size:12px;color:var(--ink-4);margin-top:4px;line-height:1.45"></div>
+      </div>
+      <button class="notes-modal-close" id="notesModalClose" type="button" aria-label="Close notes">×</button>
+    </div>
+    <div class="notes-modal-body" id="notesModalBody"></div>
+    <div class="notes-modal-foot">
+      <span class="notes-char-count" id="notesCharCount">0 / 500</span>
+      <div class="modal-actions">
+        <button class="btn" id="notesModalCancel">Cancel</button>
+        <button class="btn primary" id="notesModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" aria-live="polite"></div>
 
 <script>
@@ -2999,6 +3027,10 @@ function getCategoryMeta(categoryKey) {
 
 function projectColor(project, index = 0) {
   return project?.category_color || getCategoryMeta(project?.category_key)?.color || PROJECT_COLORS[index % PROJECT_COLORS.length];
+}
+
+function projectDisplayName(project) {
+  return String(project?.display_name || project?.project_name || 'Untitled');
 }
 
 function projectBadge(project, index = 0) {
@@ -4137,6 +4169,25 @@ const MAX_NOTES_LEN = 500;
 // Bridge for Project Entries → notes modal
 let notesModalState = null;
 
+function bindNotesTriggers() {
+  document.querySelectorAll('.row-note').forEach(button => {
+    button.addEventListener('click', () => {
+      const data = button.dataset;
+      const read = key => JSON.parse(decodeURIComponent(data[key] || '{}'));
+      openNotesPopup({
+        sessionIds: (data.sessionIds || '').split(',').map(Number).filter(Number.isFinite),
+        projectName: decodeURIComponent(data.projectName || ''),
+        notes: read('sessionNotes'),
+        todos: read('sessionTodos'),
+        startTimes: read('sessionStartTimes'),
+        endTimes: read('sessionEndTimes'),
+        lastSeenTimes: read('sessionLastSeenTimes'),
+        activeSeconds: read('sessionActiveSeconds'),
+      });
+    });
+  });
+}
+
 function openNotesPopup({ sessionIds, projectName, notes, todos, startTimes, endTimes, lastSeenTimes, activeSeconds }){
   // Close any existing notes modal first
   if (notesModalState) closeNotesModal();
@@ -4435,6 +4486,30 @@ async function clearPhantoms(){
 let lastETag = '';
 let lastFetchedMonth = '';
 
+async function loadOlderRecent() {
+  const current = latestDashboardData;
+  if (!current?.recent_has_more || !current.recent_oldest_start_time) return;
+  const button = document.getElementById('btnLoadOlderRecent');
+  if (button) button.disabled = true;
+  try {
+    const page = await getJson(`/api/data?month=${encodeURIComponent(currentMonthStateKey())}&recent_before=${encodeURIComponent(current.recent_oldest_start_time)}`);
+    if (latestDashboardData !== current) return;
+    const data = {
+      ...current,
+      recent: [...current.recent, ...page.recent],
+      recent_has_more: page.recent_has_more,
+      recent_oldest_start_time: page.recent_oldest_start_time,
+    };
+    render(data);
+    latestDashboardData = data;
+    document.querySelector('.history-card details').open = true;
+  } catch (error) {
+    toast(error.message || 'Failed to load older entries');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function load() {
   try {
     const monthKey = currentMonthStateKey();
@@ -4447,16 +4522,16 @@ async function load() {
       return;
     }
     const newETag = res.headers.get('ETag');
-    if (newETag) {
-      lastETag = newETag;
-      lastFetchedMonth = monthKey;
-    }
     const data = await res.json();
     if (data?.summary?.selected_month) {
       dashboardMonthState.selectedMonth = data.summary.selected_month;
     }
     latestDashboardData = data;
     render(data);
+    if (newETag) {
+      lastETag = newETag;
+      lastFetchedMonth = monthKey;
+    }
   } catch(e) {
     console.error(e);
   }
@@ -4731,8 +4806,6 @@ function render(data) {
   if (bu) bu.addEventListener('click', clearUnsaved);
   if (bo) bo.addEventListener('click', loadOlderRecent);
   bindCategoryTriggers();
-  bindProjectMetaControls();
-  bindProjectTaskTriggers();
   bindRowDeleteTriggers();
   bindNotesTriggers();
   bindDetailCards({ summary, projects, year_daily });
@@ -5452,10 +5525,7 @@ function renderDailyGoal(summary) {
 }
 
 load();
-if (dashboardRefreshTimer) {
-  clearInterval(dashboardRefreshTimer);
-}
-dashboardRefreshTimer = setInterval(load, 60_000);
+const dashboardRefreshTimer = setInterval(load, 60_000);
 </script>
 </body>
 </html>
