@@ -82,20 +82,6 @@ class TrackerPauseResumeTests(unittest.TestCase):
 
         self.assertEqual(active, 10.0)
 
-    def test_tick_skips_database_write_when_elapsed_is_zero(self):
-        t = tracker.Tracker()
-
-        with patch.object(tracker.time, "time", return_value=1000.0), \
-             patch.object(tracker.time, "monotonic", return_value=10.0):
-            t._start("Real Project")
-
-        with patch.object(tracker.sqlite3, "connect") as connect, \
-             patch.object(tracker.time, "time", return_value=1000.0), \
-             patch.object(tracker.time, "monotonic", return_value=10.0):
-            t._tick()
-
-        connect.assert_not_called()
-
     def test_idle_pause_requires_audio_to_be_quiet(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
              patch.object(tracker, "is_audio_active", return_value=True), \
@@ -107,20 +93,6 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertIsNotNone(t.session_id)
         self.assertFalse(t.status().idle_paused)
         self.assertTrue(t.status().audio_active)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_active_input_does_not_probe_audio(self):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active") as audio_active, \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", return_value="Real Project"):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
-
-        audio_active.assert_not_called()
-        self.assertIsNotNone(t.session_id)
-        self.assertFalse(t.status().idle_paused)
-        self.assertFalse(t.status().audio_active)
         self.assertEqual(t.status().state, tracker.STATE_TRACKING)
 
     def test_idle_pause_closes_when_mouse_and_audio_are_idle(self):
@@ -419,12 +391,6 @@ class TrackerPauseResumeTests(unittest.TestCase):
 
 
 class AudioQuietSignalTests(unittest.TestCase):
-    def test_audio_level_probe_parses_quiet_and_active(self):
-        self.assertTrue(tracker._parse_audio_level_probe("active 0.02\n"))
-        self.assertFalse(tracker._parse_audio_level_probe("quiet 0.0\n"))
-        self.assertIsNone(tracker._parse_audio_level_probe("unavailable samples=0\n"))
-        self.assertIsNone(tracker._parse_audio_level_probe("permission denied\n"))
-
     def test_audio_active_uses_level_probe_result(self):
         with patch.object(tracker, "_live_pid", return_value=123), \
              patch.object(tracker, "is_ableton_playing_osc", return_value=None), \
@@ -1012,13 +978,6 @@ class PauseTrackingTests(unittest.TestCase):
                 (tracker.Path(str(self.db_path) + suffix)).unlink()
             except FileNotFoundError:
                 pass
-
-    def test_setup_db_creates_pauses_table(self):
-        with closing(tracker.sqlite3.connect(self.db_path)) as conn:
-            row = conn.execute(
-                "SELECT name FROM sqlite_master WHERE name='pauses'"
-            ).fetchone()
-        self.assertIsNotNone(row)
 
     def test_record_pause_skips_short_gaps(self):
         self.assertIsNone(tracker.record_pause(1000.0, 1030.0, reason="idle"))

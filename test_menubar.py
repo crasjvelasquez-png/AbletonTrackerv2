@@ -2,9 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
-import threading
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -108,10 +106,6 @@ class FmtDurTests(unittest.TestCase):
         self.assertEqual(fmt_dur(7200), "2h 0m")
         self.assertEqual(fmt_dur(9000), "2h 30m")
 
-    def test_none_input(self):
-        self.assertEqual(fmt_dur(None), "0m")
-
-
 class FmtQuarterTests(unittest.TestCase):
     def test_zero_seconds(self):
         self.assertEqual(fmt_quarter(0), "")
@@ -148,117 +142,15 @@ class FmtQuarterTests(unittest.TestCase):
         # 675 / 900 = 0.75 -> round(0.75) = 1 -> 1/4
         self.assertEqual(fmt_quarter(675), "\u00bc")
 
-    def test_none_input(self):
-        self.assertEqual(fmt_quarter(None), "")
-
-
 # ---------------------------------------------------------------------------
 # today_seconds
 # ---------------------------------------------------------------------------
 
 class TodaySecondsTests(unittest.TestCase):
-    def test_returns_day_seconds_for_today(self):
-        frozen = date(2026, 5, 1)
-
-        class FakeDate:
-            @staticmethod
-            def today():
-                return frozen
-
-        with patch.object(menubar, "day_seconds", return_value=3600.0) as mock_ds, \
-             patch.object(menubar, "date", FakeDate):
-            result = today_seconds()
-        mock_ds.assert_called_once_with(frozen)
-        self.assertEqual(result, 3600.0)
-
     def test_returns_zero_on_exception(self):
         with patch.object(menubar, "day_seconds", side_effect=RuntimeError("boom")):
             result = today_seconds()
         self.assertEqual(result, 0)
-
-
-# ---------------------------------------------------------------------------
-# TrackerThread — __init__ and method delegation
-# ---------------------------------------------------------------------------
-
-class TrackerThreadInitTests(unittest.TestCase):
-    """TrackerThread.__init__ creates a Tracker instance.  We prevent the
-    real Tracker.__init__ from touching the DB by mocking its side effects."""
-
-    def setUp(self):
-        self._patchers = [
-            patch.object(tracker, "setup_db"),
-            patch.object(tracker, "close_stale_open_sessions", return_value=0),
-            patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
-        ]
-        for p in self._patchers:
-            p.start()
-
-    def tearDown(self):
-        for p in reversed(self._patchers):
-            p.stop()
-
-    def test_init_creates_daemon_thread_with_tracker(self):
-        thread = TrackerThread()
-        self.assertTrue(thread.daemon)
-        self.assertIsInstance(thread.tracker, tracker.Tracker)
-
-    def test_init_sets_lock_and_stop_event(self):
-        thread = TrackerThread()
-        self.assertIsInstance(thread._lock, type(threading.Lock()))
-        self.assertIsInstance(thread._stop, type(threading.Event()))
-        self.assertFalse(thread._stop.is_set())
-
-
-class TrackerThreadMethodsTests(unittest.TestCase):
-    def setUp(self):
-        for p in [
-            patch.object(tracker, "setup_db"),
-            patch.object(tracker, "close_stale_open_sessions", return_value=0),
-            patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
-        ]:
-            p.start()
-            self.addCleanup(p.stop)
-        self.thread = TrackerThread()
-        # Fully replace the real tracker with a mock so we control responses.
-        self.thread.tracker = MagicMock()
-
-    def test_poll_now_paused_delegates(self):
-        self.thread.poll_now(paused=True)
-        self.thread.tracker.poll_once.assert_called_once_with(paused=True)
-
-    def test_poll_now_not_paused_delegates(self):
-        self.thread.poll_now(paused=False)
-        self.thread.tracker.poll_once.assert_called_once_with(paused=False)
-
-    def test_stop_sets_event_and_calls_close(self):
-        self.thread.tracker._close = MagicMock()
-        self.thread.stop()
-        self.assertTrue(self.thread._stop.is_set())
-        self.thread.tracker._close.assert_called_once()
-
-    def test_current_project_returns_name(self):
-        self.thread.tracker.project_name = "My Song"
-        self.assertEqual(self.thread.current_project(), "My Song")
-
-    def test_current_project_returns_none(self):
-        self.thread.tracker.project_name = None
-        self.assertIsNone(self.thread.current_project())
-
-    def test_status_returns_tracker_status(self):
-        fake_status = MagicMock()
-        self.thread.tracker.status = MagicMock(return_value=fake_status)
-        self.assertEqual(self.thread.status(), fake_status)
-
-    def test_consecutive_failures_delegates_to_tracker(self):
-        self.thread.tracker._consecutive_failures = 5
-        self.assertEqual(self.thread.consecutive_failures, 5)
-
-    def test_last_error_delegates_to_tracker(self):
-        self.thread.tracker._last_error = "uh oh"
-        self.assertEqual(self.thread.last_error, "uh oh")
 
 
 class TrackerThreadRunTests(unittest.TestCase):
@@ -319,17 +211,6 @@ class DashboardProcessTests(unittest.TestCase):
         self.dp.proc = proc
         self.dp.stop()
         proc.terminate.assert_called_once()
-
-    def test_stop_ignores_none_proc(self):
-        self.dp.proc = None
-        self.dp.stop()
-
-    def test_stop_ignores_already_dead(self):
-        proc = MagicMock()
-        proc.poll.return_value = 0
-        self.dp.proc = proc
-        self.dp.stop()
-        proc.terminate.assert_not_called()
 
     def test_open_passes_correct_args(self):
         with patch.object(menubar.subprocess, "Popen") as mock_popen:

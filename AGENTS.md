@@ -93,6 +93,12 @@ If tracking is not logging or the menu bar appears stuck, establish whether the 
 - Treat SQLite as the source of truth for recorded minutes. The menu title uses `fmt_goal_time()`/`fmt_quarter()` and may display early activity as `0m` or a quarter-hour glyph.
 - Compare current time, process start time, and the latest session's `start_time`/`last_seen_time`. Work performed before the app started cannot be reconstructed from runtime evidence; report that as a startup gap, not a database write failure.
 
+## Testing Rules
+
+- Never write unit tests after you write code.
+- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
+- If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+
 ## Validation
 
 Validation should match the changed surface and risk. Run more than the minimum when a change crosses boundaries or affects user data.

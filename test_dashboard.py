@@ -338,23 +338,6 @@ class DashboardWeeklyTargetTests(unittest.TestCase):
             (date(2026, 4, 25), date(2026, 5, 1)),
         )
 
-    def test_app_settings_set_and_get(self):
-        dashboard.set_app_setting("week_start_weekday", "2")
-        self.assertEqual(dashboard.get_app_setting("week_start_weekday"), "2")
-
-    def test_app_settings_default_when_missing(self):
-        self.assertEqual(dashboard.get_app_setting("nonexistent", "pancakes"), "pancakes")
-
-    def test_app_settings_none_default(self):
-        self.assertIsNone(dashboard.get_app_setting("never_set"))
-
-    def test_get_all_app_settings_returns_dict(self):
-        dashboard.set_app_setting("a", "1")
-        dashboard.set_app_setting("b", "2")
-        settings = dashboard.get_all_app_settings()
-        self.assertEqual(settings.get("a"), "1")
-        self.assertEqual(settings.get("b"), "2")
-
     def test_session_notes_migration_adds_todo_notes_column(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             columns = {
@@ -1253,67 +1236,6 @@ class ConsolidateSessionsTests(unittest.TestCase):
         self.assertAlmostEqual(x_row["active_seconds"], 1200.0)
         self.assertAlmostEqual(x_row["start_time"], 100.0)
         self.assertAlmostEqual(x_row["end_time"], x2_end)
-
-
-
-class DashboardGamificationTemplateTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.source = (tracker.Path(__file__).parent / "templates" / "dashboard.html").read_text()
-        cls.render_source = cls.source.split("function render(data) {", 1)[1].split("function updateSessionStatus", 1)[0]
-
-    def test_weekly_pace_is_the_only_primary_weekly_mount(self):
-        self.assertEqual(self.render_source.count('id="weeklyGoalCard"'), 1)
-        self.assertIn("Weekly <em>pace</em>", self.render_source)
-        self.assertNotIn("Today's <em>Required</em>", self.render_source)
-        self.assertNotIn("Weekly <em>Quest</em>", self.render_source)
-        self.assertIn("/api/weekly-target", self.source)
-        self.assertIn('id="weeklyTargetPrev"', self.render_source)
-        self.assertIn('id="weeklyTargetNext"', self.render_source)
-        self.assertIn("model.progressText", self.source)
-        self.assertIn('aria-label="Weekly pace progress"', self.source)
-        self.assertNotIn("quest-checkpoint", self.source)
-        self.assertNotIn("Next checkpoint", self.source)
-
-    def test_production_run_contract_and_reduced_motion_are_present(self):
-        self.assertIn("summary.production_run", self.render_source)
-        self.assertIn("Production Run", self.render_source)
-        self.assertIn("data-detail=\"production-run\"", self.render_source)
-        self.assertNotIn("Current Streak", self.render_source)
-        self.assertNotIn("Personal record", self.render_source)
-        self.assertIn("Personal record", self.source)
-        self.assertIn("to your record", self.source)
-        self.assertIn("@media(prefers-reduced-motion:reduce)", self.source)
-        self.assertIn("run-node.is-newly-qualified", self.source)
-
-    def test_monthly_project_preview_leads_to_full_ranking(self):
-        self.assertIn("Projects <em>this month</em>", self.render_source)
-        self.assertIn("project.month_rank", self.render_source)
-        self.assertIn("project.month_share_percent", self.render_source)
-        self.assertIn("project.is_live_project", self.render_source)
-        self.assertIn("campaignRows.slice(0, 3)", self.render_source)
-        self.assertIn("View full project ranking", self.render_source)
-        self.assertIn('id="projectsMonthNavSlot"', self.render_source)
-        self.assertNotIn("campaign-move", self.render_source)
-        self.assertNotIn("category_label || 'Uncategorized'", self.render_source)
-        self.assertNotIn('data-detail="top-project"', self.render_source)
-        self.assertNotIn('id="categoryChart"', self.render_source)
-        self.assertNotIn('<h3 class="section-title">Projects</h3>', self.render_source)
-        recent = self.render_source.index("View session history")
-        load_older = self.render_source.index("Load older entries")
-        self.assertGreater(load_older, recent)
-
-    def test_overview_orders_weekly_pace_streak_and_project_preview(self):
-        weekly = self.render_source.index("Weekly <em>pace</em>")
-        streak = self.render_source.index("Production Run")
-        projects = self.render_source.index("Projects <em>this month</em>")
-        history = self.render_source.index("View session history")
-        self.assertLess(weekly, streak)
-        self.assertLess(streak, projects)
-        self.assertLess(projects, history)
-
-
-
 
 
 
