@@ -465,6 +465,7 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         self.assertEqual(values["daily_goal_hours"], 2)
         self.assertEqual(values["pause_token"], str(self._pause_file.stat().st_mtime_ns))
         self.assertTrue(values["ableton_running"])
+        self.assertIs(values["tracker_status"], self.app.tracker_thread.status.return_value)
         self.app._check_notifications(today=7200, week=9000, weekly_goal=10,
                                       daily_goal=2, streak=3)
         self.assertEqual(self.app.notification_coordinator.check.call_count, 1)

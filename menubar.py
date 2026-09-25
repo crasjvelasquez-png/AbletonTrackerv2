@@ -357,6 +357,7 @@ class AbletonTrackerApp(rumps.App):
                 daily_goal_hours=daily_goal,
                 pause_token=pause_token,
                 ableton_running=status.running and self.tracker_thread.consecutive_failures == 0,
+                tracker_status=status,
                 streak_days=streak,
                 deliver=self._deliver_notification,
             )

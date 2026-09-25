@@ -12,7 +12,7 @@ from datetime import datetime, time as datetime_time, timedelta
 from pathlib import Path
 from typing import Callable
 
-from tracker import allocate_session_activity
+from tracker import POLL_INTERVAL, TrackerStatus, allocate_session_activity
 
 
 MORNING_NOTIFICATION_HOUR = 9
@@ -78,6 +78,7 @@ class NotificationCoordinator:
         daily_goal_hours: float | None = None,
         pause_token: str | None = None,
         ableton_running: bool = False,
+        tracker_status: TrackerStatus | None = None,
     ) -> list[NotificationMessage]:
         """Deliver eligible, unsent notifications and return what was delivered."""
         if not self.enabled:
@@ -87,6 +88,7 @@ class NotificationCoordinator:
         for candidate in (
             self._daily_goal_candidate(now, today_seconds, daily_goal_hours),
             self._paused_candidate(now, pause_token, ableton_running),
+            self._idle_candidate(now, pause_token, ableton_running, tracker_status),
             self._streak_candidate(now, today_seconds, streak_days),
             self._recap_candidate(now),
         ):
@@ -137,6 +139,25 @@ class NotificationCoordinator:
         return NotificationMessage(
             (key,), "Daily goal complete 🎉", f"{_format_gap(seconds)} making music today.",
             "You reached your daily Ableton goal.",
+        )
+
+    def _idle_candidate(self, now, pause_token, ableton_running, status):
+        # Use the actual pause boundary, not keyboard inactivity: listening
+        # counts as work, and a stale/failed poll must not trigger a check-in.
+        if (status is None or not ableton_running or pause_token is not None
+                or status.paused or not status.idle_paused or status.audio_active
+                or status.idle_pause_started_at is None):
+            return None
+        timestamp = now.timestamp()
+        if not 0 <= timestamp - status.checked_at <= POLL_INTERVAL * 3:
+            return None
+        if timestamp - status.idle_pause_started_at < 300:
+            return None
+        return NotificationMessage(
+            (f"idle:{status.idle_pause_started_at}",),
+            "A gentle check-in",
+            "You've been idle for 5 minutes.",
+            "Taking a break, thinking/listening, or finished?",
         )
 
     def _paused_candidate(self, now, pause_token, ableton_running):

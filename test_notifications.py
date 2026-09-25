@@ -1,10 +1,12 @@
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from notifications import NotificationCoordinator
+from tracker import TrackerStatus
 
 
 class NotificationCoordinatorTests(unittest.TestCase):
@@ -152,6 +154,51 @@ class NotificationCoordinatorTests(unittest.TestCase):
         self.assertEqual(self.coordinator.check(now=now, today_seconds=0, week_seconds=0,
                          weekly_goal_hours=None, streak_days=2, deliver=fail), [])
         self.assertEqual(len(self.check(now, today_seconds=0, weekly_goal_hours=None)), 1)
+
+    def test_idle_threshold_deduplication_and_new_pause(self):
+        now = datetime(2026, 7, 22, 10)
+        start = now.timestamp()
+        def check(seconds, pause_start=start):
+            current = now + timedelta(seconds=seconds)
+            return self.check(current, ableton_running=True, tracker_status=TrackerStatus(
+                idle_paused=True, checked_at=current.timestamp(),
+                idle_pause_started_at=pause_start,
+            ))
+        self.assertEqual(check(299), [])
+        sent = check(300)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].message, "Taking a break, thinking/listening, or finished?")
+        self.assertEqual(check(330), [])
+        self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
+        self.assertEqual(check(360), [])
+        self.assertEqual(len(check(900, start + 600)), 1)
+
+    def test_idle_suppressed_for_ineligible_or_stale_status(self):
+        now = datetime(2026, 7, 22, 10)
+        status = TrackerStatus(idle_paused=True, checked_at=now.timestamp(),
+                               idle_pause_started_at=now.timestamp() - 300)
+        for changes in ({"idle_paused": False}, {"audio_active": True},
+                        {"paused": True}, {"idle_pause_started_at": None},
+                        {"checked_at": now.timestamp() - 91},
+                        {"checked_at": now.timestamp() + 1}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.check(now, ableton_running=True,
+                                 tracker_status=replace(status, **changes)), [])
+        self.assertEqual(self.check(now, ableton_running=False, tracker_status=status), [])
+        self.assertEqual(self.check(now, ableton_running=True, pause_token="manual",
+                                   tracker_status=status), [])
+
+    def test_idle_delivery_failure_can_retry(self):
+        now = datetime(2026, 7, 22, 10)
+        status = TrackerStatus(idle_paused=True, checked_at=now.timestamp(),
+                               idle_pause_started_at=now.timestamp() - 300)
+        def fail(message):
+            raise RuntimeError("delivery unavailable")
+        self.assertEqual(self.coordinator.check(
+            now=now, today_seconds=3600, week_seconds=0, weekly_goal_hours=None,
+            streak_days=0, ableton_running=True, tracker_status=status, deliver=fail,
+        ), [])
+        self.assertEqual(len(self.check(now, ableton_running=True, tracker_status=status)), 1)
 
     def test_recap_completed_custom_week_aliases_and_boundary_allocation(self):
         with sqlite3.connect(self.db_path) as conn:

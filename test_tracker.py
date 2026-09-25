@@ -137,6 +137,16 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertEqual(t.resume_hint_project, "Real Project")
         self.assertTrue(t.status().idle_paused)
         self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
+        self.assertEqual(t.status().idle_pause_started_at, 1000.0)
+
+        with patch.object(tracker, "is_ableton_running", return_value=True), \
+             patch.object(tracker, "is_audio_active", return_value=False), \
+             patch.object(tracker, "get_idle_seconds", return_value=61), \
+             patch.object(tracker.time, "time", return_value=1030.0):
+            t.poll_once()
+            self.assertEqual(t.status().idle_pause_started_at, 1000.0)
+            t.poll_once(paused=True)
+            self.assertIsNone(t.status().idle_pause_started_at)
 
     def test_unavailable_audio_probe_does_not_idle_pause_open_session(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \

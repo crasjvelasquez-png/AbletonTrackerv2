@@ -945,6 +945,7 @@ class TrackerStatus:
     audio_idle_seconds: float = float("inf")
     idle_paused: bool = False
     checked_at: float = 0.0
+    idle_pause_started_at: float | None = None
 
 
 def _parse_audio_level_probe(output: str) -> bool | None:
@@ -1671,6 +1672,12 @@ class Tracker:
             audio_idle_seconds=self.last_audio_idle,
             idle_paused=state == STATE_IDLE_PAUSED,
             checked_at=self.last_checked_at,
+            idle_pause_started_at=(
+                self._pending_pause_start
+                if state == STATE_IDLE_PAUSED
+                and self._pending_pause_reason == PAUSE_REASON_IDLE
+                else None
+            ),
         )
 
     def poll_once(self, paused: bool = False):
