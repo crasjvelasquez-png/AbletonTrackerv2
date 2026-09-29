@@ -212,14 +212,8 @@ body{
 .chart-card,
 .table-card,
 .intro{
-  animation:fadeSlideUp .65s var(--ease-spring) both;
+  animation:none;
 }
-.cards .card:nth-child(1){animation-delay:.04s}
-.cards .card:nth-child(2){animation-delay:.08s}
-.cards .card:nth-child(3){animation-delay:.12s}
-.cards .card:nth-child(4){animation-delay:.16s}
-.cards .card:nth-child(5){animation-delay:.20s}
-.cards .card:nth-child(6){animation-delay:.24s}
 ::view-transition-old(root),
 ::view-transition-new(root){
   animation-duration:.34s;
@@ -286,7 +280,7 @@ header{
   transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
 }
 .theme-toggle:hover{background:var(--control-bg-strong);border-color:var(--border-strong);color:var(--ink)}
-.theme-toggle:active{transform:scale(.92)}
+.theme-toggle:active{transform:scale(.96)}
 .theme-toggle svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .theme-toggle .sun{display:none}
 :root[data-theme="dark"] .theme-toggle .moon{display:none}
@@ -410,14 +404,12 @@ header{
   display:flex;flex-direction:column;align-items:flex-start;
 }
 .card:hover{
-  box-shadow:var(--shadow-card-hover), 0 0 32px color-mix(in srgb, var(--accent) 5%, transparent);
-  transform:translateY(-4px) scale(1.008);
-  border-color:color-mix(in srgb, var(--border-strong) 80%, var(--accent));
+  border-color:var(--border-strong);
   z-index:2;
 }
 .card:active,
 .target-card:active,
-.chart-card:active{transform:translateY(-1px) scale(.995)}
+.chart-card:active{transform:none}
 .card[data-detail]{cursor:pointer}
 .card[data-detail]:focus-visible{
   outline:2px solid var(--accent);
@@ -1541,15 +1533,83 @@ header{
 .run-nodes,.quest-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:20px}
 .production-run-card .run-nodes{width:100%;margin-top:0}
 .run-node,.quest-day{display:grid;justify-items:center;gap:6px;min-width:0;color:var(--ink-4)}
-.run-node-dot,.quest-day-dot{width:18px;height:18px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink-4) 38%,transparent);background:transparent;transition:transform .24s cubic-bezier(.2,0,0,1),background-color .18s ease,border-color .18s ease}
-.run-node.is-qualified .run-node-dot,.run-node.is-completed .run-node-dot,.quest-day.is-logged .quest-day-dot{background:var(--accent);border-color:var(--accent)}
+.run-node-dot,.quest-dot{width:18px;height:18px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink-4) 38%,transparent);background:transparent;transition:transform .24s cubic-bezier(.2,0,0,1),background-color .18s ease,border-color .18s ease}
+.run-node.is-qualified .run-node-dot,.run-node.is-completed .run-node-dot,.quest-day.is-logged .quest-dot{background:var(--accent);border-color:var(--accent)}
 .run-node.is-partial .run-node-dot{border-color:var(--accent);background:linear-gradient(90deg,var(--accent) var(--run-progress),transparent var(--run-progress))}
 .run-node.is-missed .run-node-dot{border-style:dashed;opacity:.55}
-.run-node.is-future{opacity:.4}.run-node.is-today .run-node-dot,.quest-day.is-today .quest-day-dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+.run-node.is-future{opacity:.4}.run-node.is-today .run-node-dot,.quest-day.is-today .quest-dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
 .run-node span,.quest-day span{font-size:10px;font-weight:750;text-transform:uppercase;white-space:nowrap}
 .production-run-card.is-advancing .card-value,.run-node.is-newly-qualified .run-node-dot{transform:scale(1.06)}
 
-.weekly-quest{margin-top:18px;margin-bottom:0}.weekly-quest .chart-wrap{min-height:0}
+/* Overview surfaces stay still while controls and focus communicate interaction. */
+#appDashboard > .weekly-quest,
+#appDashboard > .production-run-card,
+#appDashboard > .table-card{
+  background:var(--bg-card-strong);
+  box-shadow:0 2px 8px rgba(0,0,0,.035);
+  transition:border-color .16s ease;
+}
+#appDashboard > .weekly-quest:hover,
+#appDashboard > .production-run-card:hover{border-color:var(--border-strong)}
+.weekly-quest:focus-visible,
+button:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:4px;
+}
+::selection{background:var(--accent);color:var(--bg)}
+.weekly-quest{margin-top:18px;margin-bottom:0;padding:26px}
+.weekly-quest .chart-wrap{min-height:0}
+.weekly-quest .section-meta{display:block;margin-top:7px}
+#weeklyGoalCard > div{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);
+  column-gap:48px;align-items:center;
+}
+#weeklyGoalCard .quest-summary{grid-column:1;grid-row:1;margin-top:28px}
+#weeklyGoalCard .quest-track{grid-column:1;grid-row:2;height:8px;margin-top:20px}
+#weeklyGoalCard .quest-strip{grid-column:2;grid-row:1 / 3;align-self:stretch;margin-top:26px}
+#weeklyGoalCard .quest-edit-row{grid-column:1 / -1;margin-top:20px}
+#weeklyGoalCard .quest-edit{grid-column:1 / -1;justify-self:end}
+.quest-strip .quest-day{align-content:center;gap:10px;padding:14px 2px;border-radius:10px}
+.quest-strip .quest-day.is-today{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.quest-strip .quest-day.is-today span{color:var(--accent)}
+.quest-strip .quest-day span{font-size:11px;letter-spacing:.03em;font-weight:600}
+.quest-strip .quest-day strong{font-weight:500;white-space:nowrap}
+.production-run-card .run-nodes{position:relative}
+.production-run-card .run-node{position:relative;isolation:isolate}
+.production-run-card .run-node:not(:last-child)::after{
+  content:"";position:absolute;top:8px;left:calc(50% + 15px);
+  width:calc(100% - 22px);height:2px;background:var(--border);z-index:-1;
+}
+.production-run-card .run-node.is-qualified:not(:last-child)::after{background:var(--accent-line)}
+.monthly-campaign .campaign-row{padding-top:20px;padding-bottom:20px}
+.monthly-campaign .campaign-rank{font-size:18px;color:var(--ink-4);font-weight:500}
+.monthly-campaign .campaign-project-name{font-weight:600;line-height:1.4}
+.history-card > .overview-disclosure{margin-top:0;border-top:0}
+.history-card > .overview-disclosure > summary{padding-top:2px}
+@media(max-width:960px){
+  #weeklyGoalCard > div{grid-template-columns:1fr;column-gap:0}
+  #weeklyGoalCard .quest-strip{grid-column:1;grid-row:3;margin-top:20px}
+}
+@media(max-width:640px){
+  .weekly-quest{padding:20px 16px}
+  .quest-head{gap:12px;flex-wrap:wrap}
+  .quest-head .quest-nav{margin-left:auto}
+  .quest-strip{gap:3px}
+  .quest-strip .quest-day{gap:9px;padding:12px 0}
+  .quest-strip .quest-day strong{font-size:10px}
+  .campaign-head-actions{width:100%}
+  .campaign-head-actions #projectsMonthNavSlot{width:100%}
+  .campaign-head-actions .month-nav{justify-content:space-between;gap:6px}
+  .monthly-campaign .campaign-project-name span{white-space:normal;overflow-wrap:anywhere}
+  .monthly-campaign .campaign-time{font-size:18px;white-space:nowrap}
+  header .header-right{flex-wrap:nowrap;gap:8px}
+  header .header-nav{order:0;width:auto}
+  .logo{gap:9px}
+  .logo-text h1{font-size:18px}
+  .nav-tab{padding:9px 10px}
+  .live-badge{max-width:100px;overflow:hidden}
+  #liveProject{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
 .quest-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .quest-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .quest-summary{margin-top:20px}
@@ -1574,7 +1634,7 @@ header{
 .overview-disclosure[open]>.campaign-list,.overview-disclosure[open]>.history-content{margin-top:10px}
 .history-card{padding-bottom:18px}.history-content>.table-scroll{margin-top:0}
 @media(max-width:820px){.card.production-run-card{display:flex;align-items:stretch;min-height:auto;padding:16px 18px}.production-run-card .run-nodes{margin-top:14px}.campaign-row{grid-template-columns:34px minmax(0,1fr) auto;gap:9px}.campaign-head{align-items:flex-start}.campaign-head-actions{justify-content:flex-start}.campaign-summary{display:none}}
-@media(prefers-reduced-motion:reduce){.run-node-dot,.quest-day-dot,.quest-track-fill,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
+@media(prefers-reduced-motion:reduce){.run-node-dot,.quest-dot,.quest-track-fill,.campaign-row,.production-run-card .card-value{transition:none!important;transform:none!important}}
 .detail-empty{
   padding:34px 16px;text-align:center;color:var(--ink-4);
   border:1px dashed var(--border);border-radius:16px;font-size:13px;
