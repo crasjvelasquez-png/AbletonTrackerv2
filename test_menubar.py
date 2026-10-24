@@ -19,6 +19,13 @@ class _RumpsMenuItem:
         self.title = title
         self.callback = callback
         self.key = key
+        self.children = []
+
+    def add(self, item):
+        self.children.append(item)
+
+    def clear(self):
+        self.children.clear()
 
     def set_callback(self, callback):
         self.callback = callback
@@ -232,6 +239,8 @@ class _AppTestBase(unittest.TestCase):
     def setUp(self):
         # Prevent Tracker.__init__ from hitting the real DB / filesystem.
         self._patchers = [
+            patch.object(menubar.AbletonTrackerApp, "_refresh_projects"),
+            patch.object(menubar, "yesterday_seconds", return_value=0),
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
@@ -265,6 +274,7 @@ class AbletonTrackerAppPauseTests(_AppTestBase):
         super().setUp()
         self.app = AbletonTrackerApp()
         self.app._refresh = MagicMock()
+        self.app.tracker_thread.poll_now = MagicMock()
 
     def tearDown(self):
         super().tearDown()
@@ -357,7 +367,7 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             tracker.STATE_PAUSED)
         with patch.object(menubar, "day_seconds", return_value=0):
             self.app._refresh(None)
-        self.assertEqual(self.app.pause_item.title, "Resume tracking")
+        self.assertNotIn("Resume tracking", [item.title for item in self.app.menu if item])
         self.assertEqual(self.app.status_item.title, "Paused")
 
     def test_refresh_shows_idle_paused(self):
@@ -493,19 +503,19 @@ class AbletonTrackerAppInitTests(_AppTestBase):
         self._pause_patch.stop()
         self._tmpdir.cleanup()
 
-    def test_init_resume_tracking_when_paused(self):
+    def test_init_clears_old_manual_pause_when_control_is_hidden(self):
         self._pause_dir.mkdir(parents=True, exist_ok=True)
         self._pause_file.touch()
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.title, "Resume tracking")
+        self.assertFalse(self._pause_file.exists())
 
-    def test_init_pause_tracking_when_not_paused(self):
+    def test_init_omits_manual_pause_control(self):
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.title, "Pause tracking")
+        self.assertNotIn("Pause tracking", [item.title for item in app.menu if item])
 
     def test_init_sets_menu_shortcuts(self):
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.key, "p")
+        self.assertIn("Open Project", [item.title for item in app.menu if item])
         keyed_items = {item.title: item.key for item in app.menu if item and item.key}
         self.assertEqual(keyed_items["Open Tracker"], "d")
         self.assertEqual(keyed_items["Quit"], "q")

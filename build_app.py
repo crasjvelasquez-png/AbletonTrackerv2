@@ -21,6 +21,7 @@ SOURCE_FILES = (
     "dashboard_window.py",
     "menubar.py",
     "notifications.py",
+    "projects.py",
     "tracker.py",
 )
 SOURCE_DIRS = ("templates", "static")

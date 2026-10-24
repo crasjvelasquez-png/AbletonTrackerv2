@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
+from projects import PINNED_FOLDERS_KEY, normalize_pinned_folders
 
 from tracker import (
     allocate_session_activity,
@@ -688,6 +689,8 @@ def _cache_clear(key: str | None = None) -> None:
 
 
 def set_app_setting(key: str, value: str) -> None:
+    if key == PINNED_FOLDERS_KEY:
+        value = json.dumps(normalize_pinned_folders(value), ensure_ascii=False)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -1378,6 +1381,7 @@ def get_project_report(project_name: str) -> dict:
                 "end_time": end_dt.strftime("%H:%M"),
                 "start_timestamp": start_ts,
                 "end_timestamp": end_ts,
+                "active_seconds": float(r["active_seconds"] or 0),
             }
             
         recent = condense_recent_sessions([dict(r) for r in rows])
@@ -1646,6 +1650,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             today_project_names = set()
             month_per_project = {}
             previous_month_per_project = {}
+            week_per_project = {}
             for row in activity_rows:
                 row_today_seconds = 0.0
                 row_month_seconds = 0.0
@@ -1658,6 +1663,9 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 ):
                     if day_key == today_str:
                         row_today_seconds += seconds
+                    if goal_week_start.isoformat() <= day_key <= today_str:
+                        name = row["project_name"]
+                        week_per_project[name] = week_per_project.get(name, 0.0) + seconds
                     if month_start_key <= day_key <= month_end_key:
                         row_month_seconds += seconds
                     if previous_month_start_key <= day_key <= previous_month_end_key:
@@ -1721,6 +1729,35 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 cursor_day -= timedelta(days=1)
 
             production_run = calculate_production_run(daily_totals, today)
+
+            # Compare equal, completed weekdays. Today's incomplete day is excluded
+            # from both comparison periods, but remains in the current week total.
+            completed_days = (today - goal_week_start).days
+            comparison_seconds = sum(
+                daily_totals.get((goal_week_start + timedelta(days=offset)).isoformat(), 0)
+                for offset in range(completed_days)
+            )
+            previous_comparison_seconds = sum(
+                daily_totals.get((goal_week_start + timedelta(days=offset - 7)).isoformat(), 0)
+                for offset in range(completed_days)
+            )
+            week_days = [
+                {"day": day_key, "total_seconds": seconds}
+                for day_key, seconds in daily_totals.items()
+                if goal_week_start.isoformat() <= day_key <= today_str and seconds > 0
+            ]
+            best_day = min(week_days, key=lambda row: (-row["total_seconds"], row["day"])) if week_days else None
+            top_name = min(week_per_project, key=lambda name: (-week_per_project[name], name.casefold())) if week_per_project else None
+            weekly_review = {
+                "week_start": goal_week_start.isoformat(),
+                "week_end": goal_week_end.isoformat(),
+                "total_seconds": sum(week_per_project.values()),
+                "top_project": {"project_name": top_name, "total_seconds": week_per_project[top_name]} if top_name else None,
+                "best_day": best_day,
+                "completed_days": completed_days,
+                "comparison_seconds": comparison_seconds,
+                "previous_comparison_seconds": previous_comparison_seconds,
+            }
 
             now_ts = time.time()
 
@@ -1849,6 +1886,9 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "live_project":   live["project_name"] if live else None,
                     "live_session_start_time": live_start_time,
                     "live_session_duration_seconds": live_duration_seconds,
+                    "live_session_recorded_seconds": max(float(live["active_seconds"] or 0), 0) if live else 0,
+                    "live_session_last_seen_time": float(live["last_seen_time"] or 0) if live else None,
+                    "weekly_review": weekly_review,
                     "tracking_paused": tracking_paused,
                     "tracking_active": tracking_active,
                     "ableton_running": ableton_running,
@@ -1881,7 +1921,14 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
 
 def _load_html() -> str:
     if TEMPLATE_PATH.exists():
-        return TEMPLATE_PATH.read_text(encoding="utf-8")
+        html = TEMPLATE_PATH.read_text(encoding="utf-8")
+        # Static files are cached for an hour. Version the local assets so a
+        # source update cannot mix a fresh template with stale CSS/JavaScript.
+        for asset in ("js/settings.js", "js/dashboard.js", "css/dashboard.css"):
+            path = STATIC_DIR / asset
+            if path.is_file():
+                html = html.replace(f'"/static/{asset}"', f'"/static/{asset}?v={path.stat().st_mtime_ns}"')
+        return html
     raise FileNotFoundError(f"Dashboard template missing: {TEMPLATE_PATH}")
 
 
@@ -2244,7 +2291,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "key is required"}, status=400)
                 return
             value = payload.get("value", "")
-            set_app_setting(key, str(value))
+            try:
+                set_app_setting(key, str(value))
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
+                return
             self._json({"ok": True, "key": key, "value": value})
         else:
             self._json({"error": "not found"}, status=404)

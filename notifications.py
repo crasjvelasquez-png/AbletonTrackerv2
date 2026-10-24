@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
-from collections import defaultdict
-from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, time as datetime_time, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from tracker import POLL_INTERVAL, STATE_TRACKING, TrackerStatus, allocate_session_activity
+from tracker import STATE_TRACKING, TrackerStatus
 
 
-MORNING_NOTIFICATION_HOUR = 9
-LATE_NOTIFICATION_HOUR = 17
-STREAK_NOTIFICATION_HOURS = (18, 19, 20)
-MINIMUM_PACE_GAP_SECONDS = 15 * 60
-DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
+INVITE_HOUR = 8
+INVITE_CUTOFF_HOUR = 21
+SNOOZE_SECONDS = 3600
+INVITE_TITLE = "Some time for music today?"
+INVITE_MESSAGE = "Pick up a project or start something new."
+# Notification actions that end the day's invitations.
+ENDING_ACTIONS = {"skip", "open", "dismiss"}
 
 
 @dataclass(frozen=True)
@@ -28,6 +27,8 @@ class NotificationMessage:
     title: str
     subtitle: str
     message: str
+    category: str = ""
+    day: str = ""
 
 
 def _format_gap(seconds: float) -> str:
@@ -40,17 +41,13 @@ def _format_gap(seconds: float) -> str:
     return f"{minutes}m"
 
 
-def _join_labels(labels: list[str], limit: int = 3) -> str:
-    visible = labels[:limit]
-    body = " · ".join(visible)
-    remaining = len(labels) - len(visible)
-    if remaining > 0:
-        body += f" · +{remaining} more"
-    return body
-
-
 class NotificationCoordinator:
-    """Evaluates notification rules and persists sent-event deduplication."""
+    """Evaluates notification rules and persists daily invitation state.
+
+    One neutral invitation at 8 a.m. toward the daily target. Ignoring it ends
+    the day; only an explicit "Later" action schedules one more, an hour on.
+    Actions arrive from the native sender as JSON lines in ``actions_path``.
+    """
 
     def __init__(
         self,
@@ -58,11 +55,13 @@ class NotificationCoordinator:
         state_path: Path,
         *,
         enabled: bool = True,
+        actions_path: Path | None = None,
     ):
         self.db_path = Path(db_path)
         self.state_path = Path(state_path)
+        self.actions_path = Path(actions_path) if actions_path else self.state_path.with_name("notification_actions.jsonl")
         self.enabled = enabled
-        self._sent = self._load_state()
+        self._sent, self._snooze = self._load_state()
         self._paused_since: datetime | None = None
         self._pause_token: str | None = None
 
@@ -71,44 +70,39 @@ class NotificationCoordinator:
         *,
         now: datetime,
         today_seconds: float,
-        week_seconds: float,
-        weekly_goal_hours: float | None,
-        streak_days: int,
         deliver: Callable[[NotificationMessage], None],
         daily_goal_hours: float | None = None,
         pause_token: str | None = None,
         ableton_running: bool = False,
         tracker_status: TrackerStatus | None = None,
+        **_retired,
     ) -> list[NotificationMessage]:
-        """Deliver eligible, unsent notifications and return what was delivered."""
+        """Deliver eligible, unsent notifications and return what was delivered.
+
+        ``week_seconds``, ``weekly_goal_hours`` and ``streak_days`` are still
+        accepted from callers but no longer drive any notification.
+        """
         if not self.enabled:
             return []
+        self._ingest_actions()
+
+        day = now.date().isoformat()
+        active = tracker_status is not None and tracker_status.state == STATE_TRACKING
+        goal_seconds = daily_goal_hours * 3600 if daily_goal_hours and daily_goal_hours > 0 else None
+        goal_met = goal_seconds is not None and today_seconds >= goal_seconds
 
         candidates: list[NotificationMessage] = []
-        operational = (
-            self._paused_candidate(now, pause_token, ableton_running),
-            self._idle_candidate(now, pause_token, ableton_running, tracker_status),
-        )
-        candidates.extend(candidate for candidate in operational if candidate)
-        # Do not interrupt recording/listening with goal or recap banners.
-        active = tracker_status is not None and tracker_status.state == STATE_TRACKING
-        if not active:
-            goal = self._daily_goal_candidate(now, today_seconds, daily_goal_hours)
-            if goal:
-                candidates.append(goal)
-            if 9 <= now.hour < 21:
-                reminder_key = f"reminder:{now.date().isoformat()}"
-                recap = self._recap_candidate(now)
-                if recap:
-                    candidates.append(recap)
-                if reminder_key not in self._sent:
-                    reminder = self._streak_candidate(now, today_seconds, streak_days)
-                    if reminder is None and now.hour >= 18:
-                        reminder = self._weekly_pace_candidate(now, week_seconds, weekly_goal_hours)
-                    if reminder:
-                        candidates.append(NotificationMessage(
-                            reminder.event_keys + (reminder_key,), reminder.title,
-                            reminder.subtitle, reminder.message))
+        paused = self._paused_candidate(now, pause_token, ableton_running)
+        if paused:
+            candidates.append(paused)
+        if not active and goal_met:
+            key = f"daily-goal:{day}"
+            if key not in self._sent:
+                candidates.append(NotificationMessage(
+                    (key,), "Daily target reached", "", f"{_format_gap(today_seconds)} in Ableton today."))
+        invite = self._invite_candidate(now, day, active, goal_met, today_seconds, goal_seconds)
+        if invite:
+            candidates.append(invite)
 
         delivered: list[NotificationMessage] = []
         for candidate in candidates:
@@ -119,57 +113,72 @@ class NotificationCoordinator:
             except Exception as exc:
                 print(f"[notifications] delivery error: {exc}")
                 continue
+            if candidate.category == "invite" and self._snooze.get("day") == day:
+                self._snooze = {}
             self._mark_sent(candidate.event_keys, now)
             delivered.append(candidate)
             break  # One banner per check; remaining events are deferred.
         return delivered
 
+    def _invite_candidate(self, now, day, active, goal_met, today_seconds, goal_seconds):
+        if not INVITE_HOUR <= now.hour < INVITE_CUTOFF_HOUR or f"ended:{day}" in self._sent:
+            return None
+        morning_key = f"invite:{day}"
+        snooze_until = self._snooze.get("until") if self._snooze.get("day") == day else None
+        if morning_key not in self._sent:
+            key = morning_key
+        elif snooze_until is not None and now.timestamp() >= snooze_until:
+            key = f"later:{day}:{int(snooze_until)}"
+        else:
+            return None
+        if active or goal_met:
+            # Working or done: the invitation is moot, so let it lapse quietly.
+            if key != morning_key:
+                self._snooze = {}
+            self._mark_sent((key,), now)
+            return None
+        if goal_seconds is None:
+            subtitle = ""
+        elif today_seconds > 0:
+            subtitle = f"{_format_gap(goal_seconds - today_seconds)} left toward today’s target"
+        else:
+            subtitle = f"Today’s target: {_format_gap(goal_seconds)}"
+        return NotificationMessage((key,), INVITE_TITLE, subtitle, INVITE_MESSAGE,
+                                   category="invite", day=day)
 
-    def _streak_candidate(
-        self, now: datetime, today_seconds: float, streak_days: int
-    ) -> NotificationMessage | None:
-        event_key = f"run-reminder:{now.date().isoformat()}"
-        if (
-            now.hour not in STREAK_NOTIFICATION_HOURS
-            or event_key in self._sent
-            or today_seconds >= 900
-            or streak_days <= 0
-        ):
-            return None
-        return NotificationMessage(
-            (event_key,),
-            "Make a little music today",
-            f"Your Production Run: {streak_days} days.",
-            f"{_format_gap(900 - today_seconds)} more making music completes today’s run day.",
-        )
-
-    def _daily_goal_candidate(self, now, seconds, goal_hours):
-        key = f"daily-goal:{now.date().isoformat()}"
-        if key in self._sent or not goal_hours or goal_hours <= 0 or seconds < goal_hours * 3600:
-            return None
-        return NotificationMessage(
-            (key,), "Daily goal complete 🎉", f"{_format_gap(seconds)} making music today.",
-            "You reached your daily Ableton goal.",
-        )
-
-    def _idle_candidate(self, now, pause_token, ableton_running, status):
-        # Use the actual pause boundary, not keyboard inactivity: listening
-        # counts as work, and a stale/failed poll must not trigger a check-in.
-        if (status is None or not ableton_running or pause_token is not None
-                or status.paused or not status.idle_paused or status.audio_active
-                or status.idle_pause_started_at is None):
-            return None
-        timestamp = now.timestamp()
-        if not 0 <= timestamp - status.checked_at <= POLL_INTERVAL * 3:
-            return None
-        if timestamp - status.idle_pause_started_at < 300:
-            return None
-        return NotificationMessage(
-            (f"idle:{status.idle_pause_started_at}",),
-            "A gentle check-in",
-            "You've been idle for 5 minutes.",
-            "Taking a break, thinking/listening, or finished?",
-        )
+    def _ingest_actions(self) -> None:
+        processing = self.actions_path.with_name(f".{self.actions_path.name}.{os.getpid()}.processing")
+        try:
+            os.replace(self.actions_path, processing)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            print(f"[notifications] action read error: {exc}")
+            return
+        try:
+            lines = processing.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
+        finally:
+            processing.unlink(missing_ok=True)
+        changed = False
+        for line in lines:
+            try:
+                entry = json.loads(line)
+                action, day, at = str(entry["action"]), str(entry["day"]), float(entry["at"])
+            except (ValueError, TypeError, KeyError):
+                continue
+            if action == "later":
+                self._snooze = {"day": day, "until": at + SNOOZE_SECONDS}
+            elif action in ENDING_ACTIONS:
+                self._sent[f"ended:{day}"] = datetime.fromtimestamp(at).isoformat(timespec="seconds")
+                if self._snooze.get("day") == day:
+                    self._snooze = {}
+            else:
+                continue
+            changed = True
+        if changed:
+            self._save_state()
 
     def _paused_candidate(self, now, pause_token, ableton_running):
         if pause_token != self._pause_token or not ableton_running or pause_token is None:
@@ -189,119 +198,25 @@ class NotificationCoordinator:
             "Choose Resume tracking in the menu bar to record your time.",
         )
 
-    def _recap_candidate(self, now):
-        # Use the completed week, including a catch-up when the app next opens.
-        if now.hour < MORNING_NOTIFICATION_HOUR or not self.db_path.exists():
-            return None
-        end = now.date() - timedelta(days=(now.weekday() - self._week_start_weekday()) % 7)
-        start = end - timedelta(days=7)
-        key = f"weekly-recap:{start.isoformat()}"
-        if key in self._sent:
-            return None
-        totals = defaultdict(float)
-        try:
-            with closing(sqlite3.connect(self.db_path, timeout=3)) as conn:
-                conn.row_factory = sqlite3.Row
-                tables = self._table_names(conn)
-                aliases = dict(conn.execute("SELECT alias_name, canonical_name FROM project_aliases")) if "project_aliases" in tables else {}
-                labels = dict(conn.execute("SELECT project_name, display_name FROM project_metadata")) if "project_metadata" in tables else {}
-                rows = conn.execute(
-                    """SELECT project_name, start_time, end_time, last_seen_time, active_seconds
-                       FROM sessions WHERE active_seconds > 0 AND start_time < ?
-                       AND COALESCE(end_time, last_seen_time, start_time) >= ?""",
-                    (datetime.combine(end, datetime_time.min).timestamp(),
-                     datetime.combine(start, datetime_time.min).timestamp()),
-                ).fetchall()
-            for row in rows:
-                project = aliases.get(row["project_name"], row["project_name"])
-                for day, _, seconds in allocate_session_activity(
-                    row["start_time"], row["end_time"] or row["last_seen_time"] or row["start_time"], row["active_seconds"]
-                ):
-                    if start.isoformat() <= day < end.isoformat():
-                        totals[project] += seconds
-        except sqlite3.Error as exc:
-            print(f"[notifications] recap query error: {exc}")
-            return None
-        if not totals:
-            return None
-        top = max(totals, key=totals.get)
-        count = len(totals)
-        return NotificationMessage(
-            (key,), "Your weekly recap", f"{start:%b %d} – {end - timedelta(days=1):%b %d}",
-            f"{_format_gap(sum(totals.values()))} across {count} project{'s' if count != 1 else ''}. "
-            f"Most time: {labels.get(top) or top}.",
-        )
-
-    def _weekly_pace_candidate(
-        self,
-        now: datetime,
-        week_seconds: float,
-        weekly_goal_hours: float | None,
-    ) -> NotificationMessage | None:
-        if weekly_goal_hours is None or weekly_goal_hours <= 0:
-            return None
-
-        week_start_weekday = self._week_start_weekday()
-        week_start_date = now.date() - timedelta(
-            days=(now.weekday() - week_start_weekday) % 7
-        )
-        week_start = datetime.combine(week_start_date, datetime_time.min)
-        elapsed_seconds = max(
-            0.0, min((now - week_start).total_seconds(), 7 * 86400)
-        )
-        expected_seconds = (
-            weekly_goal_hours * 3600 * (elapsed_seconds / (7 * 86400))
-        )
-        gap = expected_seconds - max(0.0, week_seconds)
-        event_key = f"weekly-pace:{now.date().isoformat()}"
-        if event_key in self._sent or gap < MINIMUM_PACE_GAP_SECONDS:
-            return None
-        return NotificationMessage(
-            (event_key,),
-            "Weekly goal check-in",
-            f"{_format_gap(week_seconds)} recorded this week.",
-            f"Your weekly goal is {_format_gap(weekly_goal_hours * 3600)}. Open Tracker to see your progress.",
-        )
-
-
-    def _week_start_weekday(self) -> int:
-        if not self.db_path.exists():
-            return DEFAULT_WEEK_START_WEEKDAY
-        try:
-            with closing(sqlite3.connect(self.db_path, timeout=3)) as conn:
-                if "app_settings" not in self._table_names(conn):
-                    return DEFAULT_WEEK_START_WEEKDAY
-                row = conn.execute(
-                    "SELECT value FROM app_settings WHERE key = 'week_start_weekday'"
-                ).fetchone()
-                value = int(row[0]) if row else DEFAULT_WEEK_START_WEEKDAY
-                return value if 0 <= value <= 6 else DEFAULT_WEEK_START_WEEKDAY
-        except (sqlite3.Error, TypeError, ValueError):
-            return DEFAULT_WEEK_START_WEEKDAY
-
-    @staticmethod
-    def _table_names(conn: sqlite3.Connection) -> set[str]:
-        return {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
-
-    def _load_state(self) -> dict[str, str]:
+    def _load_state(self) -> tuple[dict[str, str], dict]:
         try:
             payload = json.loads(self.state_path.read_text(encoding="utf-8"))
             sent = payload.get("sent", {})
-            if isinstance(sent, dict):
-                return {str(key): str(value) for key, value in sent.items()}
-        except (OSError, ValueError, TypeError):
-            pass
-        return {}
+            snooze = payload.get("snooze", {})
+            sent = {str(k): str(v) for k, v in sent.items()} if isinstance(sent, dict) else {}
+            if not (isinstance(snooze, dict) and isinstance(snooze.get("until"), (int, float))):
+                snooze = {}
+            return sent, snooze
+        except (OSError, ValueError, TypeError, AttributeError):
+            return {}, {}
 
     def _mark_sent(self, event_keys: tuple[str, ...], now: datetime) -> None:
         timestamp = now.isoformat(timespec="seconds")
         for event_key in event_keys:
             self._sent[event_key] = timestamp
+        self._save_state()
+
+    def _save_state(self) -> None:
         if len(self._sent) > 500:
             self._sent = dict(list(self._sent.items())[-400:])
         try:
@@ -310,7 +225,7 @@ class NotificationCoordinator:
                 f".{self.state_path.name}.{os.getpid()}.tmp"
             )
             temp_path.write_text(
-                json.dumps({"sent": self._sent}, indent=2, sort_keys=True),
+                json.dumps({"sent": self._sent, "snooze": self._snooze}, indent=2, sort_keys=True),
                 encoding="utf-8",
             )
             os.replace(temp_path, self.state_path)

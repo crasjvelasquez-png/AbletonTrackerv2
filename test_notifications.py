@@ -1,7 +1,7 @@
+import json
 import sqlite3
 import tempfile
 import unittest
-from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -55,75 +55,125 @@ class NotificationCoordinatorTests(unittest.TestCase):
             **values,
         )
 
-    def test_one_supportive_reminder_per_day(self):
-        sent = self.check(datetime(2026, 7, 23, 18), today_seconds=0,
-                          week_seconds=0, weekly_goal_hours=7, streak_days=12)
+    # Failure modes covered below: early/late delivery, repeats after being
+    # ignored, repeats across restarts, interrupting an active session,
+    # wrong remaining time, missing/duplicate goal acknowledgment, snooze
+    # firing early or from a stale day, skip not sticking, malformed action
+    # files, lost retry after failed delivery, and midnight rollover.
+
+    def invite(self, now, **overrides):
+        values = {"today_seconds": 0, "daily_goal_hours": 2}
+        values.update(overrides)
+        return self.check(now, **values)
+
+    def act(self, action, day, at):
+        with self.coordinator.actions_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"action": action, "day": day, "at": at}) + "\n")
+
+    def test_invitation_waits_for_8am_and_shows_target(self):
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 7, 59)), [])
+        sent = self.invite(datetime(2026, 7, 23, 8))
         self.assertEqual(len(sent), 1)
-        self.assertEqual(sent[0].title, "Make a little music today")
-        self.assertIn("15m", sent[0].message)
-        self.assertEqual(self.check(datetime(2026, 7, 23, 19), today_seconds=0,
-                         week_seconds=0, weekly_goal_hours=7, streak_days=12), [])
+        self.assertEqual(sent[0].title, "Some time for music today?")
+        self.assertEqual(sent[0].subtitle, "Today’s target: 2h")
+        self.assertEqual(sent[0].category, "invite")
+        self.assertEqual(sent[0].day, "2026-07-23")
 
-    def test_active_tracking_defers_non_operational_notifications(self):
-        now = datetime(2026, 7, 23, 18)
-        self.assertEqual(self.check(now, daily_goal_hours=1, tracker_status=TrackerStatus(
-            state="tracking", checked_at=now.timestamp())), [])
-        self.assertEqual(len(self.check(now, daily_goal_hours=1)), 1)
-
-    def test_notifications_are_deduplicated_across_coordinator_instances(self):
-        now = datetime(2026, 7, 23, 18, 0)
-        first = self.check(
-            now,
-            today_seconds=0,
-            week_seconds=0,
-            weekly_goal_hours=7,
-            streak_days=3,
-        )
-        reloaded = NotificationCoordinator(
-            self.db_path, self.state_path, enabled=True
-        )
-        second = reloaded.check(
-            now=now,
-            today_seconds=0,
-            week_seconds=0,
-            weekly_goal_hours=7,
-            streak_days=3,
-            deliver=self.delivered.append,
-        )
-
-        self.assertEqual(len(first), 1)
-        self.assertEqual(second, [])
-
-    def test_no_notifications_before_morning_window(self):
-        sent = self.check(
-            datetime(2026, 7, 23, 8, 59),
-            today_seconds=0,
-            week_seconds=0,
-            weekly_goal_hours=7,
-            streak_days=3,
-        )
-
-        self.assertEqual(sent, [])
-
-    def test_run_reminder_window_and_qualifying_threshold(self):
-        for hour in (8, 12, 17, 21, 23):
-            self.assertEqual(self.check(datetime(2026, 7, 22, hour), today_seconds=0, weekly_goal_hours=None), [])
-        self.assertEqual(len(self.check(datetime(2026, 7, 22, 18), today_seconds=899, weekly_goal_hours=None)), 1)
-        self.assertEqual(self.check(datetime(2026, 7, 23, 18), today_seconds=900, weekly_goal_hours=None), [])
-        self.assertEqual(self.check(datetime(2026, 7, 23, 18), today_seconds=0, streak_days=0, weekly_goal_hours=None), [])
-
-    def test_daily_goal_threshold_and_persistence(self):
-        now = datetime(2026, 7, 22, 8)
-        self.assertEqual(self.check(now, daily_goal_hours=2, today_seconds=7199), [])
-        self.assertEqual(self.check(now, daily_goal_hours=0, today_seconds=7200), [])
-        sent = self.check(now, daily_goal_hours=2, today_seconds=7200)
-        self.assertEqual(sent[0].title, "Daily goal complete 🎉")
+    def test_ignored_invitation_is_not_repeated_even_after_restart(self):
+        self.assertEqual(len(self.invite(datetime(2026, 7, 23, 8))), 1)
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 12)), [])
         self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
-        self.assertEqual(self.check(now, daily_goal_hours=2, today_seconds=8000), [])
-        self.assertEqual(len(self.check(now + timedelta(days=1), daily_goal_hours=2, today_seconds=7200)), 1)
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 15)), [])
+
+    def test_new_day_gets_a_new_invitation(self):
+        self.invite(datetime(2026, 7, 23, 8))
+        self.assertEqual(len(self.invite(datetime(2026, 7, 24, 8, 1))), 1)
+
+    def test_catch_up_until_9pm_only(self):
+        self.assertEqual(len(self.invite(datetime(2026, 7, 23, 20, 59))), 1)
+        self.assertEqual(self.invite(datetime(2026, 7, 24, 21)), [])
+
+    def test_active_session_suppresses_that_days_invitation(self):
+        now = datetime(2026, 7, 23, 8)
+        status = TrackerStatus(state="tracking", checked_at=now.timestamp())
+        self.assertEqual(self.invite(now, tracker_status=status), [])
+        self.assertEqual(self.invite(now + timedelta(hours=2)), [])
+
+    def test_partial_progress_shows_remaining_time(self):
+        sent = self.invite(datetime(2026, 7, 23, 9), today_seconds=75 * 60)
+        self.assertEqual(sent[0].subtitle, "45m left toward today’s target")
+
+    def test_no_goal_invites_without_target(self):
+        sent = self.invite(datetime(2026, 7, 23, 8), daily_goal_hours=None)
+        self.assertEqual(sent[0].subtitle, "")
+        self.assertEqual(sent[0].message, "Pick up a project or start something new.")
+
+    def test_goal_reached_acknowledged_once_after_session(self):
+        now = datetime(2026, 7, 23, 11)
+        active = TrackerStatus(state="tracking", checked_at=now.timestamp())
+        self.assertEqual(self.invite(now, today_seconds=7200, tracker_status=active), [])
+        sent = self.invite(now, today_seconds=7200)
+        self.assertEqual([m.title for m in sent], ["Daily target reached"])
+        self.assertEqual(sent[0].message, "2h in Ableton today.")
+        self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
+        self.assertEqual(self.invite(now + timedelta(hours=1), today_seconds=8000), [])
+
+    def test_later_reminds_after_one_hour(self):
+        self.invite(datetime(2026, 7, 23, 8))
+        self.act("later", "2026-07-23", datetime(2026, 7, 23, 8, 5).timestamp())
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 9, 4)), [])
+        self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
+        self.assertEqual(len(self.invite(datetime(2026, 7, 23, 9, 5))), 1)
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 10, 30)), [])
+        self.act("later", "2026-07-23", datetime(2026, 7, 23, 10, 30).timestamp())
+        self.assertEqual(len(self.invite(datetime(2026, 7, 23, 11, 31))), 1)
+
+    def test_later_not_delivered_while_working_or_after_goal(self):
+        self.invite(datetime(2026, 7, 23, 8))
+        self.act("later", "2026-07-23", datetime(2026, 7, 23, 8).timestamp())
+        now = datetime(2026, 7, 23, 9, 30)
+        status = TrackerStatus(state="tracking", checked_at=now.timestamp())
+        self.assertEqual(self.invite(now, tracker_status=status), [])
+        self.assertEqual([m.title for m in self.invite(now, today_seconds=7200)],
+                         ["Daily target reached"])
+
+    def test_skip_and_open_end_the_day(self):
+        for action in ("skip", "open", "dismiss"):
+            with self.subTest(action=action):
+                day = {"skip": 23, "open": 24, "dismiss": 25}[action]
+                self.invite(datetime(2026, 7, day, 8))
+                self.act("later", f"2026-07-{day}", datetime(2026, 7, day, 8).timestamp())
+                self.act(action, f"2026-07-{day}", datetime(2026, 7, day, 8, 1).timestamp())
+                self.assertEqual(self.invite(datetime(2026, 7, day, 10)), [])
+
+    def test_stale_and_malformed_actions_are_ignored(self):
+        self.act("later", "2026-07-22", datetime(2026, 7, 22, 20).timestamp())
+        with self.coordinator.actions_path.open("a") as handle:
+            handle.write("not json\n{\"action\": 5}\n")
+        self.invite(datetime(2026, 7, 23, 8))
+        self.assertEqual(self.invite(datetime(2026, 7, 23, 9, 30)), [])
+        self.assertFalse(self.coordinator.actions_path.exists())
+
+    def test_failed_delivery_retries(self):
+        def fail(message):
+            raise RuntimeError("test delivery failure")
+        self.assertEqual(self.coordinator.check(now=datetime(2026, 7, 22, 8), today_seconds=0,
+                         week_seconds=0, weekly_goal_hours=None, streak_days=0,
+                         daily_goal_hours=2, deliver=fail), [])
+        self.assertEqual(len(self.invite(datetime(2026, 7, 22, 8, 1))), 1)
+
+    def test_retired_reminders_never_fire(self):
+        now = datetime(2026, 7, 22, 10)
+        status = TrackerStatus(idle_paused=True, checked_at=now.timestamp(),
+                               idle_pause_started_at=now.timestamp() - 600)
+        self.invite(datetime(2026, 7, 22, 8))
+        for hour in (9, 18, 19, 20):
+            self.assertEqual(self.invite(now.replace(hour=hour), streak_days=12,
+                             week_seconds=0, weekly_goal_hours=40,
+                             ableton_running=True, tracker_status=status), [])
 
     def test_pause_requires_five_continuous_minutes_and_once_per_pause(self):
-        now = datetime(2026, 7, 22, 10)
+        now = datetime(2026, 7, 22, 7)
         def check(minutes, token="one", running=True):
             return self.check(now + timedelta(minutes=minutes), pause_token=token, ableton_running=running)
         self.assertEqual(check(0), [])
@@ -138,85 +188,6 @@ class NotificationCoordinatorTests(unittest.TestCase):
         self.assertEqual(check(18, "two"), [])
         self.assertEqual(check(22, "two"), [])
         self.assertEqual(len(check(23, "two")), 1)
-
-    def test_failed_delivery_retries(self):
-        now = datetime(2026, 7, 22, 18)
-        def fail(message):
-            raise RuntimeError("test delivery failure")
-        self.assertEqual(self.coordinator.check(now=now, today_seconds=0, week_seconds=0,
-                         weekly_goal_hours=None, streak_days=2, deliver=fail), [])
-        self.assertEqual(len(self.check(now, today_seconds=0, weekly_goal_hours=None)), 1)
-
-    def test_idle_threshold_deduplication_and_new_pause(self):
-        now = datetime(2026, 7, 22, 10)
-        start = now.timestamp()
-        def check(seconds, pause_start=start):
-            current = now + timedelta(seconds=seconds)
-            return self.check(current, ableton_running=True, tracker_status=TrackerStatus(
-                idle_paused=True, checked_at=current.timestamp(),
-                idle_pause_started_at=pause_start,
-            ))
-        self.assertEqual(check(299), [])
-        sent = check(300)
-        self.assertEqual(len(sent), 1)
-        self.assertEqual(sent[0].message, "Taking a break, thinking/listening, or finished?")
-        self.assertEqual(check(330), [])
-        self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
-        self.assertEqual(check(360), [])
-        self.assertEqual(len(check(900, start + 600)), 1)
-
-    def test_idle_suppressed_for_ineligible_or_stale_status(self):
-        now = datetime(2026, 7, 22, 10)
-        status = TrackerStatus(idle_paused=True, checked_at=now.timestamp(),
-                               idle_pause_started_at=now.timestamp() - 300)
-        for changes in ({"idle_paused": False}, {"audio_active": True},
-                        {"paused": True}, {"idle_pause_started_at": None},
-                        {"checked_at": now.timestamp() - 91},
-                        {"checked_at": now.timestamp() + 1}):
-            with self.subTest(changes=changes):
-                self.assertEqual(self.check(now, ableton_running=True,
-                                 tracker_status=replace(status, **changes)), [])
-        self.assertEqual(self.check(now, ableton_running=False, tracker_status=status), [])
-        self.assertEqual(self.check(now, ableton_running=True, pause_token="manual",
-                                   tracker_status=status), [])
-
-    def test_idle_delivery_failure_can_retry(self):
-        now = datetime(2026, 7, 22, 10)
-        status = TrackerStatus(idle_paused=True, checked_at=now.timestamp(),
-                               idle_pause_started_at=now.timestamp() - 300)
-        def fail(message):
-            raise RuntimeError("delivery unavailable")
-        self.assertEqual(self.coordinator.check(
-            now=now, today_seconds=3600, week_seconds=0, weekly_goal_hours=None,
-            streak_days=0, ableton_running=True, tracker_status=status, deliver=fail,
-        ), [])
-        self.assertEqual(len(self.check(now, ableton_running=True, tracker_status=status)), 1)
-
-    def test_recap_completed_custom_week_aliases_and_boundary_allocation(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.executescript("""
-                INSERT INTO app_settings VALUES ('week_start_weekday', '0', 0);
-                CREATE TABLE project_aliases (alias_name TEXT, canonical_name TEXT);
-                INSERT INTO project_aliases VALUES ('old', 'song');
-                CREATE TABLE project_metadata (project_name TEXT, display_name TEXT);
-                INSERT INTO project_metadata VALUES ('song', 'Blue Hour');
-            """)
-            for name, start, end, seconds in (
-                ('old', datetime(2026, 7, 19, 23), datetime(2026, 7, 20, 1), 7200),
-                ('song', datetime(2026, 7, 15, 10), datetime(2026, 7, 15, 11), 3600),
-                ('new', datetime(2026, 7, 20, 10), datetime(2026, 7, 20, 11), 3600),
-            ):
-                conn.execute('INSERT INTO sessions (project_name,start_time,end_time,active_seconds) VALUES (?,?,?,?)',
-                             (name, start.timestamp(), end.timestamp(), seconds))
-        self.assertEqual(self.check(datetime(2026, 7, 20, 8, 59)), [])
-        sent = self.check(datetime(2026, 7, 20, 9))
-        self.assertEqual(len(sent), 1)
-        self.assertEqual(sent[0].message, '2h across 1 project. Most time: Blue Hour.')
-        self.coordinator = NotificationCoordinator(self.db_path, self.state_path)
-        self.assertEqual(self.check(datetime(2026, 7, 21, 9)), [])
-
-    def test_empty_week_has_no_recap(self):
-        self.assertEqual(self.check(datetime(2026, 7, 24, 9)), [])
 
 
 if __name__ == "__main__":

@@ -725,6 +725,139 @@
     });
   }
 
+  // Folder edits are a draft until Save; dashboard polling never replaces them.
+  function bindProjectFolders(root) {
+    const form = $('[data-project-folders-form]', root);
+    const list = $('[data-project-folders-list]', root);
+    const feedback = $('[data-project-folders-feedback]', root);
+    const pathInput = $('[data-project-folder-path]', root);
+    const labelInput = $('[data-project-folder-label]', root);
+    const add = $('[data-project-folder-add]', root);
+    const save = $('[data-project-folders-save]', root);
+    let folders = [];
+    let ready = false;
+    let busy = false;
+    let dirty = false;
+    function changed() {
+      dirty = true;
+      save.disabled = !ready || busy;
+      setFeedback(feedback, 'Unsaved folder changes.');
+    }
+    function render() {
+      list.replaceChildren();
+      if (!folders.length) {
+        const empty = document.createElement('p');
+        empty.className = 'settings-copy';
+        empty.textContent = 'No pinned folders yet. Add a folder path below.';
+        list.append(empty);
+      }
+      folders.forEach((folder, index) => {
+        const row = document.createElement('div');
+        row.className = 'action-row project-folder-row';
+        const field = document.createElement('label');
+        field.className = 'field';
+        field.style.minWidth = '0';
+        const caption = document.createElement('span');
+        caption.className = 'field-label';
+        caption.textContent = 'Menu label';
+        const input = document.createElement('input');
+        input.className = 'text-input';
+        input.maxLength = 80;
+        input.value = folder.label;
+        input.disabled = busy;
+        input.addEventListener('input', () => { folder.label = input.value; changed(); });
+        const path = document.createElement('span');
+        path.className = 'field-note';
+        path.style.overflowWrap = 'anywhere';
+        path.textContent = folder.path;
+        field.append(caption, input, path);
+        row.append(field);
+        const actions = document.createElement('div');
+        actions.className = 'project-folder-actions';
+        [['Up', -1], ['Down', 1], ['Remove', 0]].forEach(([text, offset]) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn subtle small';
+          button.textContent = text;
+          button.setAttribute('aria-label', `${text} folder ${folder.label || index + 1}`);
+          button.disabled = busy || (offset !== 0 && (index + offset < 0 || index + offset >= folders.length));
+          button.addEventListener('click', () => {
+            const next = offset ? index + offset : Math.min(index, folders.length - 2);
+            if (offset) [folders[index], folders[next]] = [folders[next], folders[index]];
+            else folders.splice(index, 1);
+            changed();
+            render();
+            list.querySelectorAll('input')[Math.max(next, 0)]?.focus();
+          });
+          actions.append(button);
+        });
+        row.append(actions);
+        list.append(row);
+      });
+      add.disabled = !ready || busy || folders.length >= 20;
+      save.disabled = !ready || busy || !dirty;
+    }
+    function addDraft() {
+      const path = pathInput.value.trim();
+      if (!path) {
+        setFeedback(feedback, 'Enter a folder path first.', 'error');
+        pathInput.focus();
+        return false;
+      }
+      if (folders.length >= 20) {
+        setFeedback(feedback, 'Choose up to 20 folders.', 'error');
+        return false;
+      }
+      folders.push({path, label: labelInput.value.trim()});
+      pathInput.value = '';
+      labelInput.value = '';
+      changed();
+      render();
+      return true;
+    }
+    add.addEventListener('click', addDraft);
+    pathInput.addEventListener('input', changed);
+    labelInput.addEventListener('input', changed);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!ready || busy) return;
+      if (pathInput.value.trim() && !addDraft()) return;
+      busy = true;
+      pathInput.disabled = labelInput.disabled = true;
+      render();
+      setFeedback(feedback, 'Saving folders…');
+      try {
+        await window.postJson('/api/app-settings', {key: 'pinned_project_folders', value: JSON.stringify(folders)});
+        dirty = false;
+        setFeedback(feedback, 'Folders saved. The menu updates within 30 seconds.');
+      } catch (error) {
+        setFeedback(feedback, error.message || 'Could not save folders. Try again.', 'error');
+      } finally {
+        busy = false;
+        pathInput.disabled = labelInput.disabled = false;
+        render();
+      }
+    });
+    fetch('/api/app-settings').then(async response => {
+      if (!response.ok) throw new Error('Could not load pinned folders. Reopen Settings to try again.');
+      const data = await response.json();
+      let parsed;
+      try {
+        parsed = JSON.parse(data.pinned_project_folders || '[]');
+        if (!Array.isArray(parsed) || parsed.some(folder => !folder || typeof folder.path !== 'string' || typeof folder.label !== 'string')) throw new Error();
+      } catch (_) {
+        parsed = [];
+        dirty = true;
+        setFeedback(feedback, 'Saved folder settings are invalid. Add folders and save to replace them.', 'error');
+      }
+      folders = parsed;
+      ready = true;
+      render();
+    }).catch(error => {
+      setFeedback(feedback, error.message, 'error');
+    });
+  }
+
   // ── lifecycle ──────────────────────────────────────────────────────
 
   function bindTabNavigation(root) {
@@ -756,7 +889,7 @@
         btn.addEventListener('click', () => {
           const val = btn.dataset.fontValue;
           localStorage.setItem('ableton_tracker_typography', val);
-          if (val === 'Inter') document.documentElement.style.setProperty('--font-body', "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+          if (val === 'Inter') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
           if (val === 'System') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
           if (val === 'Mono') document.documentElement.style.setProperty('--font-body', "'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace");
         });
@@ -810,6 +943,7 @@
       input.addEventListener('input', () => { input.dataset.dirty = 'true'; });
     });
     bindTabNavigation(root);
+    bindProjectFolders(root);
     bindAppearanceControls(root);
     bindWidgetControls(root);
     bindCategoryDelegation(root);

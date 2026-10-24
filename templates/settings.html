@@ -135,6 +135,31 @@
 
       <!-- ───────────────────────  PROJECTS & CATEGORIES TAB  ───────────────────── -->
       <div class="settings-pane" data-tab-pane="projects">
+        <section class="chart-card settings-card" data-settings-section="project-folders">
+          <div class="section-head">
+            <h3 class="section-title">Open Project</h3>
+            <span class="section-meta">menu bar</span>
+          </div>
+          <p class="settings-copy">Pin folders below your 10 most recently tracked projects. Each folder shows its 25 newest Live sets, including subfolders. Backup folders are skipped. Menu changes appear within 30 seconds.</p>
+          <form class="project-folders-form" data-project-folders-form>
+            <div class="action-list" data-project-folders-list aria-label="Pinned project folders"></div>
+            <div class="field-grid" style="margin-top:20px;">
+              <label class="field">
+                <span class="field-label">Folder path</span>
+                <input class="text-input" data-project-folder-path type="text" placeholder="~/Music/Ableton Projects" autocomplete="off">
+              </label>
+              <label class="field">
+                <span class="field-label">Menu label (optional)</span>
+                <input class="text-input" data-project-folder-label type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button class="btn subtle" type="button" data-project-folder-add disabled>Add folder</button>
+              <button class="btn" type="submit" data-project-folders-save disabled>Save folders</button>
+            </div>
+            <div class="goal-form-feedback" data-project-folders-feedback role="status" aria-live="polite" hidden></div>
+          </form>
+        </section>
         <!-- CATEGORIES -->
         <div class="chart-card settings-card" data-settings-section="categories-create">
           <div class="section-head">
@@ -169,7 +194,7 @@
           </div>
         </div>
 
-
+      </div>
       <!-- ─────────────────────────  ADVANCED TAB  ──────────────────────── -->
       <div class="settings-pane" data-tab-pane="advanced">
         <section class="chart-card settings-card" data-settings-section="data">

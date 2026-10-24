@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ableton Tracker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>
 (() => {
   try {
@@ -30,7 +27,7 @@
     if (accent) document.documentElement.style.setProperty('--accent', accent);
     const typography = localStorage.getItem('ableton_tracker_typography');
     if (typography) {
-      if (typography === 'Inter') document.documentElement.style.setProperty('--font-body', "'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
+      if (typography === 'Inter') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
       if (typography === 'System') document.documentElement.style.setProperty('--font-body', "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif");
       if (typography === 'Mono') document.documentElement.style.setProperty('--font-body', "'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace");
     }
@@ -45,164 +42,6 @@
 </script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{
-  color-scheme:light;
-  --bg:#f5f5f7;
-  --bg-elev:rgba(255,255,255,.78);
-  --surface:rgba(255,255,255,.62);
-  --surface-2:rgba(255,255,255,.94);
-  --surface-hover:rgba(60,60,67,.06);
-  --bg-card:rgba(255,255,255,.72);
-  --bg-card-strong:rgba(255,255,255,.94);
-  --text-primary:#1d1d1f;
-  --text-secondary:#6e6e73;
-  --target-track:rgba(60,60,67,.10);
-  --target-shadow:0 22px 56px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
-  --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.65);
-  --border:rgba(60,60,67,.12);
-  --border-strong:rgba(60,60,67,.18);
-  --ink:#1d1d1f;
-  --ink-2:#3a3a3c;
-  --ink-3:#6e6e73;
-  --ink-4:#75757a;
-  --accent:#4f46e5;
-  --accent-soft:color-mix(in srgb, var(--accent) 10%, transparent);
-  --accent-line:color-mix(in srgb, var(--accent) 18%, transparent);
-  --live:#34c759;
-  --danger:#ff3b30;
-  --danger-soft:rgba(255,59,48,.08);
-  --page-wash:linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,0) 220px);
-  --page-glow-a:radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 60%);
-  --page-glow-b:radial-gradient(700px 420px at 100% 0%, rgba(14,165,233,.07), transparent 52%);
-  --header-bg:rgba(245,245,247,.58);
-  --logo-bg:linear-gradient(180deg, #ffffff, #f2f7ff);
-  --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
-  --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
-  --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0));
-  --control-bg:rgba(255,255,255,.8);
-  --control-bg-strong:#fff;
-  --control-inner:rgba(255,255,255,.96);
-  --row-border:rgba(60,60,67,.08);
-  --bar-bg:rgba(60,60,67,.08);
-  --toast-shadow:0 18px 40px rgba(15,23,42,.12);
-  --modal-backdrop:rgba(245,247,251,.74);
-  --modal-backdrop-shadow:inset 0 0 0 9999px rgba(255,255,255,.18);
-
-  --font-display:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-  --font-body:"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-  --font-mono:"SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace;
-
-  --radius:16px;
-  --radius-sm:14px;
-  --shadow-1:0 1px 2px rgba(15,23,42,.04), 0 18px 40px rgba(15,23,42,.06);
-  --shadow-card-hover:0 16px 32px rgba(15,23,42,.12), 0 32px 64px rgba(15,23,42,.08);
-  --ease-smooth:cubic-bezier(.22,1,.36,1);
-  --ease-press:cubic-bezier(.34,1.56,.64,1);
-  --ease-spring:linear(0, .009, .035 2.1%, .141, .281 6.7%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.112 22.6%, 1.134 24.9%, 1.144 27.6%, 1.146 30.4%, 1.013 48.3%, 1.001 55.4%, .995 62.1%, 1 100%);
-
-  --ui-gap:14px;
-  --ui-section-gap:28px;
-  --ui-card-pad-y:28px;
-  --ui-card-pad-x:22px;
-  --ui-card-min-h:203px;
-  --ui-page-max:1200px;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    color-scheme:dark;
-    --bg:#080808;
-    --bg-elev:rgba(16,16,18,.92);
-    --surface:rgba(18,18,20,.45);
-    --surface-2:rgba(24,24,28,.94);
-    --surface-hover:rgba(255,255,255,.06);
-    --bg-card:rgba(18,18,20,.72);
-    --bg-card-strong:rgba(24,24,28,.94);
-    --text-primary:#f5f5f7;
-    --text-secondary:#aaaab3;
-    --target-track:rgba(255,255,255,.08);
-    --target-shadow:0 24px 58px rgba(0,0,0,.44), 0 1px 1px rgba(255,255,255,.02);
-    --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.04);
-    --border:rgba(255,255,255,.08);
-    --border-strong:rgba(255,255,255,.12);
-    --ink:#f5f5f7;
-    --ink-2:#d7d7dc;
-    --ink-3:#aaaab3;
-    --ink-4:#90909a;
-    --accent:#818cf8;
-    --accent-soft:color-mix(in srgb, var(--accent) 16%, transparent);
-    --accent-line:color-mix(in srgb, var(--accent) 28%, transparent);
-    --live:#30d158;
-    --danger:#ff453a;
-    --danger-soft:rgba(255,69,58,.14);
-    --page-wash:linear-gradient(180deg, #080808, #080808);
-    --page-glow-a:none;
-    --page-glow-b:none;
-    --header-bg:rgba(8,8,8,.72);
-    --logo-bg:linear-gradient(180deg, rgba(32,32,36,.94), rgba(18,18,20,.94));
-    --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
-    --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
-    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
-    --control-bg:rgba(30,30,34,.82);
-    --control-bg-strong:rgba(38,38,44,.96);
-    --control-inner:rgba(12,12,14,.96);
-    --row-border:rgba(255,255,255,.06);
-    --bar-bg:rgba(255,255,255,.06);
-    --toast-shadow:0 18px 40px rgba(0,0,0,.48);
-    --modal-backdrop:rgba(0,0,0,.58);
-    --modal-backdrop-shadow:inset 0 0 0 9999px rgba(0,0,0,.08);
-    --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
-    --shadow-card-hover:0 18px 36px rgba(0,0,0,.48), 0 36px 72px rgba(255,255,255,.06);
-  }
-}
-
-:root[data-theme="dark"]{
-    color-scheme:dark;
-    --bg:#080808;
-    --bg-elev:rgba(16,16,18,.92);
-    --surface:rgba(18,18,20,.45);
-    --surface-2:rgba(24,24,28,.94);
-    --surface-hover:rgba(255,255,255,.06);
-    --bg-card:rgba(18,18,20,.72);
-    --bg-card-strong:rgba(24,24,28,.94);
-    --text-primary:#f5f5f7;
-    --text-secondary:#aaaab3;
-    --target-track:rgba(255,255,255,.08);
-    --target-shadow:0 24px 58px rgba(0,0,0,.44), 0 1px 1px rgba(255,255,255,.02);
-    --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.04);
-    --border:rgba(255,255,255,.08);
-    --border-strong:rgba(255,255,255,.12);
-    --ink:#f5f5f7;
-    --ink-2:#d7d7dc;
-    --ink-3:#aaaab3;
-    --ink-4:#90909a;
-    --accent:#818cf8;
-    --accent-soft:color-mix(in srgb, var(--accent) 16%, transparent);
-    --accent-line:color-mix(in srgb, var(--accent) 28%, transparent);
-    --live:#30d158;
-    --danger:#ff453a;
-    --danger-soft:rgba(255,69,58,.14);
-    --page-wash:linear-gradient(180deg, #080808, #080808);
-    --page-glow-a:none;
-    --page-glow-b:none;
-    --header-bg:rgba(8,8,8,.72);
-    --logo-bg:linear-gradient(180deg, rgba(32,32,36,.94), rgba(18,18,20,.94));
-    --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
-    --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
-    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
-    --control-bg:rgba(30,30,34,.82);
-    --control-bg-strong:rgba(38,38,44,.96);
-    --control-inner:rgba(12,12,14,.96);
-    --row-border:rgba(255,255,255,.06);
-    --bar-bg:rgba(255,255,255,.06);
-    --toast-shadow:0 18px 40px rgba(0,0,0,.48);
-    --modal-backdrop:rgba(0,0,0,.58);
-    --modal-backdrop-shadow:inset 0 0 0 9999px rgba(0,0,0,.08);
-    --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
-    --shadow-card-hover:0 18px 36px rgba(0,0,0,.48), 0 36px 72px rgba(255,255,255,.06);
-}
-
-:root[data-theme="light"]{color-scheme:light}
-
 /* Dark mode scrollbar styling for webkit browsers */
 :root[data-theme="dark"]::-webkit-scrollbar{width:10px;height:10px}
 :root[data-theme="dark"]::-webkit-scrollbar-track{background:rgba(20,20,24,.5);border-radius:5px}
@@ -2667,6 +2506,12 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 .settings-content{min-width:0}
 .settings-content .section-head{margin-bottom:12px}
 .settings-copy{color:var(--ink-3);font-size:14px;line-height:1.6;margin-bottom:16px}
+.project-folders-form .project-folder-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px}
+.project-folder-actions,.project-folders-form .settings-actions{display:flex;flex-wrap:wrap;gap:8px}
+.project-folders-form .settings-actions{margin-top:16px}
+.project-folders-form .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.project-folder-row .field-note{font-size:12px;line-height:1.5;color:var(--ink-3)}
+@media(max-width:700px){.project-folders-form .project-folder-row,.project-folders-form .field-grid{grid-template-columns:minmax(0,1fr)}}
 .field{display:grid;gap:8px;min-width:0}
 .field-label{font-size:12px;font-weight:600;color:var(--ink-3)}
 .text-input{width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--control-bg);color:var(--ink);font:inherit}
@@ -2689,6 +2534,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 .color-error{color:var(--danger);font-size:12px}
 @media(max-width:700px){.settings-layout{grid-template-columns:1fr;gap:16px}.settings-sidebar{position:static;display:flex;flex-wrap:wrap}.settings-nav-tab{font-size:12px;padding:10px}.text-input{font-size:16px}.settings-content .goal-form-row{flex-wrap:wrap}}
 </style>
+<link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
 <div class="page-bg" aria-hidden="true"></div>
@@ -2712,6 +2558,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
       <button class="nav-tab is-active" id="navDashboard" type="button" role="tab" aria-selected="true" data-view-tab="dashboard">Dashboard</button>
       <button class="nav-tab" id="navSettings" type="button" role="tab" aria-selected="false" data-view-tab="settings">Settings</button>
     </div>
+    <button class="btn small command-trigger" id="commandTrigger" type="button" aria-label="Search projects and actions" title="Search projects and actions (⌘K / Ctrl+K)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><kbd>⌘K</kbd></button>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M21 14.7A8 8 0 0 1 9.3 3 7 7 0 1 0 21 14.7Z"/>
@@ -2721,10 +2568,6 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
         <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
       </svg>
     </button>
-    <div id="liveBadge" style="display:none" class="live-badge">
-      <span class="dot"></span>
-      <span id="liveProject">Recording</span>
-    </div>
   </div>
 </header>
 
@@ -2733,13 +2576,14 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
     <div>
       <h2 id="pageTitle" class="sr-only">Dashboard</h2>
       <div class="sub" id="pageSubtitle">
-        <span class="session-status" id="sessionStatus" data-state="live">
-          <span class="session-status__text" id="sessionStatusText">Live</span>
+        <span class="session-status" id="sessionStatus" data-state="unavailable">
+          <span class="session-status__text" id="sessionStatusText">Loading tracking status…</span>
           <span class="session-status__indicator session-status__indicator--live" id="sessionStatusIndicator" aria-hidden="true">
             <span class="session-status__dot"></span>
           </span>
+          <span class="session-timer" id="sessionTimer" hidden></span>
         </span>
-        · <span id="introDate"></span> · <span id="introTime"></span>
+        <span aria-hidden="true">·</span> <span id="introDate"></span> · <span id="introTime"></span>
       </div>
     </div>
     <div class="month-nav" id="monthNav" aria-label="Dashboard month navigation">
@@ -3165,7 +3009,17 @@ hydrateUiScaleSetting();
 document.getElementById('appBrand').textContent = 'Tracker';
 document.getElementById('appFooterBrand').innerHTML = 'Tracker · <em>v1</em>';
 document.title = 'Tracker';
+async function applyLocationView() {
+  if (location.hash === '#settings-projects') {
+    await setActiveView('settings');
+    document.querySelector('[data-tab-target="projects"]')?.click();
+  } else if (location.hash === '#settings') {
+    await setActiveView('settings');
+  }
+}
+window.addEventListener('hashchange', applyLocationView);
 setActiveView();
+applyLocationView();
 
 const fmt = {
   dur(s) {
@@ -3573,27 +3427,13 @@ function dailySecondsByKey(rows = []) {
 function renderWeekStrip(model) {
   const byDay = dailySecondsByKey(weeklyTargetState.dailyRows);
   const start = dateFromKey(model.weekStart);
-  const todayKey = model.todayKey;
-  return `
-    <div class="week-strip" aria-label="Weekly activity by day">
-      ${Array.from({ length: 7 }, (_, index) => {
-        const dateKey = localDateKey(addDays(start, index));
-        const seconds = byDay.get(dateKey) || 0;
-        const classes = [
-          'week-day',
-          seconds > 0 ? 'is-logged' : '',
-          dateKey === todayKey ? 'is-today' : '',
-        ].filter(Boolean).join(' ');
-        const dayLabel = dateFromKey(dateKey).toLocaleDateString('en-US', { weekday: 'short' });
-        return `
-          <div class="${classes}" title="${dayLabel} · ${fmt.dur(seconds)}">
-            <span>${dayLabel.slice(0, 3)}</span>
-            <strong>${fmt.dur(seconds)}</strong>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
+  const days = Array.from({length:7},(_,index) => localDateKey(addDays(start,index)));
+  const max = Math.max(1,...days.map(key => byDay.get(key) || 0));
+  return `<div class="week-strip" aria-label="Weekly activity by day; bars relative to the busiest day" title="Daily bars are relative to the busiest day in this week">${days.map(dateKey => {
+    const seconds = byDay.get(dateKey) || 0;
+    const label = dateFromKey(dateKey).toLocaleDateString('en-US',{weekday:'short'});
+    return `<button type="button" class="week-day${seconds>0?' is-logged':''}${dateKey===model.todayKey?' is-today':''}" data-activity-date="${dateKey}" aria-label="${dateKey}, ${fmt.dur(seconds)} recorded" ${dateKey===model.todayKey?'aria-current="date"':''}><span>${label}</span><span class="week-day-bar" aria-hidden="true" style="--day-progress:${seconds/max*100}%"><i></i></span><strong>${fmt.dur(seconds)}</strong></button>`;
+  }).join('')}</div>`;
 }
 
 function renderWeeklyTargetDetail() {
@@ -3774,7 +3614,7 @@ function bindDetailCards(data) {
     const card = event.target.closest('[data-detail]');
     if (!card || !detailRoot.contains(card)) return;
     if (card.dataset.detail === 'daily-target' && event.target.closest('.daily-target-nav-btn, #dailyTargetTodayBtn, input, button, label, .goal-input-wrap')) return;
-    if (card.dataset.detail === 'weekly-target' && event.target.closest('.daily-target-nav-btn, #weeklyTargetCurrentBtn, input, button, label, .goal-input-wrap')) return;
+    if (card.dataset.detail === 'weekly-target' && card.tagName !== 'BUTTON' && event.target.closest('.daily-target-nav-btn, #weeklyTargetCurrentBtn, input, button, label, .goal-input-wrap')) return;
     openDetail(card.dataset.detail);
   }, { signal });
 
@@ -3932,60 +3772,41 @@ function rgbaString(parts, alpha) {
 }
 
 function heatmapColorParts(value, maxValue) {
-  const t = Math.pow(value / Math.max(maxValue, 1), 1.2);
-  return colorStops([
-    [50, 145, 75],   // dim forest green
-    [90, 185, 85],   // mid green
-    [48, 209, 88],   // #30d158 bright ring green
-    [110, 255, 125], // peak lime
-  ], t);
+  const styles = getComputedStyle(document.documentElement);
+  const rgb = token => {
+    const hex = styles.getPropertyValue(token).trim().replace('#','');
+    return [0,2,4].map(index => parseInt(hex.slice(index,index+2),16));
+  };
+  return mixColor(rgb('--heatmap-base'),rgb('--accent'),clamp(value/Math.max(maxValue,1),0,1));
 }
 
-function heatmapColor(value, maxValue) {
-  if (value <= 0) return 'rgba(48, 209, 88, 0.08)';
-  return rgbString(heatmapColorParts(value, maxValue));
+function heatmapColor(value,maxValue) {
+  return rgbString(heatmapColorParts(value,maxValue));
 }
 
 function paintHeatmapCanvas(canvas, container, days, activityByDayHour) {
   if (!canvas || !container) return;
   const rect = container.getBoundingClientRect();
-  const W = rect.width;
-  const H = rect.height;
-  if (W <= 0 || H <= 0) return;
+  if (!rect.width || !rect.height) return;
   const dpr = window.devicePixelRatio || 1;
-  canvas.width  = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  canvas.style.width = `${rect.width}px`;
+  canvas.style.height = `${rect.height}px`;
   const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
-
-  const cw = W / 7;
-  const ch = H / 24;
-  // Very tight radius + fast falloff = small bright dots, not haze.
-  const radius = Math.max(cw, ch) * 0.48;
-
-  for (let col = 0; col < days.length; col++) {
-    const day = days[col];
-    if (!day.inRange) continue;
-    for (let h = 0; h < 24; h++) {
-      const secs = Math.min(activityByDayHour[`${day.key}_${h}`] || 0, 3600);
-      if (secs <= 0) continue;
-      const row = 23 - h;
-      const cx  = col * cw + cw / 2;
-      const cy  = row * ch + ch / 2;
-      const intensity = Math.pow(secs / 3600, 0.4);
-      const [r, g, b] = heatmapColorParts(secs, 3600);
-      const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      g2.addColorStop(0,    `rgba(${r},${g},${b},${Math.min(1, 1.7 * intensity)})`);
-      g2.addColorStop(0.18, `rgba(${r},${g},${b},${0.45 * intensity})`);
-      g2.addColorStop(0.38, `rgba(${r},${g},${b},${0.08 * intensity})`);
-      g2.addColorStop(1,    `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = g2;
-      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,rect.width,rect.height);
+  const width = rect.width/7;
+  const height = rect.height/24;
+  days.forEach((day,col) => {
+    if (!day.inRange) return;
+    for (let hour=0;hour<24;hour++) {
+      const seconds = Math.min(activityByDayHour[`${day.key}_${hour}`] || 0,3600);
+      if (!seconds) continue;
+      ctx.fillStyle = heatmapColor(seconds,3600);
+      ctx.fillRect(col*width+2,(23-hour)*height+1,Math.max(1,width-4),Math.max(1,height-2));
     }
-  }
+  });
 }
 
 function heatmapGlowColor(value, maxValue) {
@@ -4163,7 +3984,7 @@ function confirmDialog({ title, body, confirmLabel = 'Confirm' }) {
     const onYes = () => close(true);
     const onNo  = () => close(false);
     const onBackdrop = e => { if (e.target === modal) close(false); };
-    const onKey = e => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') close(true); };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); close(false); } };
     confirmBtn.addEventListener('click', onYes);
     cancelBtn.addEventListener('click', onNo);
     modal.addEventListener('click', onBackdrop);
@@ -4708,6 +4529,8 @@ async function load() {
       dashboardMonthState.selectedMonth = data.summary.selected_month;
     }
     latestDashboardData = data;
+    window.DashboardExtras?.acceptData(data);
+    if (window.DashboardExtras?.isEditing()) { lastETag = null; return; }
     render(data);
     if (activeView === 'settings') Settings.render(data);
     if (newETag) {
@@ -4716,6 +4539,7 @@ async function load() {
     }
   } catch(e) {
     console.error(e);
+    window.DashboardExtras?.connectionFailed();
   }
 }
 
@@ -4807,13 +4631,6 @@ function render(data) {
 
   updateSessionStatus(summary);
 
-  if (summary.live_project && !summary.tracking_paused && summary.tracking_active) {
-    document.getElementById('liveBadge').style.display = 'inline-flex';
-    document.getElementById('liveProject').textContent = summary.live_project;
-  } else {
-    document.getElementById('liveBadge').style.display = 'none';
-  }
-
   const unsavedCount = summary.unsaved_closed_count || 0;
   const closedSessionCount = summary.closed_session_count || 0;
   const phantomCount = summary.phantom_closed_count || 0;
@@ -4843,7 +4660,7 @@ function render(data) {
       : '';
     return `<div class="campaign-row${project.is_live_project ? ' is-live' : ''}" data-campaign-project="${encodeURIComponent(project.project_name || '')}">
       <div class="campaign-rank">${project.month_rank || index + 1}</div>
-      <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(projectDisplayName(project))}</span></div>${categoryLabel}</div>
+      <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<button type="button" class="project-link" data-open-project="${encodeURIComponent(project.project_name)}" title="${escapeHtml(project.project_name)}">${escapeHtml(projectDisplayName(project))}</button></div>${categoryLabel}<div class="campaign-bar" aria-hidden="true" style="--project-share:${clamp(Number(project.month_share_percent || 0),0,100)}%"><i></i></div></div>
       <div class="campaign-values"><div class="campaign-time">${fmt.dur(project.month_seconds)}</div><div class="campaign-share">${Number(project.month_share_percent || 0).toFixed(1).replace(/\.0$/, '')}% of month</div></div>
     </div>`;
   };
@@ -4851,9 +4668,9 @@ function render(data) {
   const historyOpen = !!document.querySelector('.history-card details[open]');
   const visibleRecent = recent.filter(row => showShortSessions || !row.end_time || row.active_seconds >= 60 || Object.keys(row.session_notes || {}).length || Object.keys(row.session_todos || {}).length);
   document.getElementById('appDashboard').innerHTML = `
-    <div class="chart-card chart-card-wide weekly-quest" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
+    <section class="chart-card chart-card-wide weekly-quest" aria-label="Weekly pace">
       <div class="quest-head">
-        <div><h3 class="section-title">Weekly <em>pace</em></h3><span class="section-meta" id="weeklyTargetRangeLabel">Current Week</span></div>
+        <div><h3 class="section-title"><button class="project-link" type="button" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">Weekly <em>pace</em></button></h3><div class="section-meta" id="weeklyTargetRangeLabel">Current Week</div></div>
         <div class="quest-nav" aria-label="Weekly pace navigation">
           <button class="btn small weekly-target-current-btn" id="weeklyTargetCurrentBtn" type="button" hidden>Current Week</button>
           <button class="daily-target-nav-btn" id="weeklyTargetPrev" type="button" aria-label="Show previous week"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M8.75 2.5L4.25 7l4.5 4.5"></path></svg></button>
@@ -4863,7 +4680,7 @@ function render(data) {
       <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
       <button class="run-summary" type="button" data-detail="production-run" aria-haspopup="dialog" aria-controls="detailModal">Run: Day ${run.current_days || 0} · Today ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)} <span aria-hidden="true">›</span></button>
 
-    </div>
+    </section>
 
     <div class="table-card monthly-campaign">
       <div class="section-head campaign-head">
@@ -4980,6 +4797,7 @@ function render(data) {
   bindDetailCards({ summary, projects, year_daily });
 
   renderWeeklyGoal(summary, year_daily);
+  window.DashboardExtras?.render(data);
 }
 
 function updateSessionStatus(summary) {
@@ -5022,7 +4840,7 @@ function updateSessionStatus(summary) {
   indicator.innerHTML = indicatorHtml;
 }
 
-function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null) {
+function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null, selectedDateKey = '') {
   const mount = targetMount || document.getElementById('activityHeatmap');
   if (!mount) return;
 
@@ -5043,7 +4861,7 @@ function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null) {
       const key = localDateKey(day);
       const inRange = day >= start && day <= today;
       const isUpcoming = day > today;
-      const value = inRange ? Math.round((activityByDay[key] || 0) * 10) / 10 : 0;
+      const value = inRange ? activityByDay[key] || 0 : 0;
       days.push({ index, key, date: day, inRange, isUpcoming, value, isToday: key === todayKey });
     }
     if (days.some(d => d.inRange)) {
@@ -5057,7 +4875,8 @@ function renderActivityHeatmap(yearDaily, yearHourly, targetMount = null) {
     return;
   }
 
-  let currentWeekIndex = weeks.length - 1;
+  const selectedIndex = weeks.findIndex(week => week.days.some(day => day.key === selectedDateKey));
+  let currentWeekIndex = selectedIndex >= 0 ? selectedIndex : weeks.length - 1;
 
   const hourLabel = h => {
     if (h === 0)  return '12am';
@@ -5410,6 +5229,7 @@ function renderWeeklyTargetCard(target) {
     </div>
   `;
 
+  mount.querySelectorAll('[data-activity-date]').forEach(button => { button.onclick = event => { event.stopPropagation(); window.DashboardExtras?.activityDetail(button.dataset.activityDate); }; });
   const input = mount.querySelector('#weeklyGoalCardInput');
   const editBtn = mount.querySelector('#weeklyGoalEditBtn');
   const editPanel = mount.querySelector('#weeklyGoalEdit');
@@ -5471,6 +5291,20 @@ async function loadWeeklyTarget(summary = {}, yearDaily = []) {
     const res = await fetch(`/api/weekly-target?date=${encodeURIComponent(weekStart)}`);
     const payload = await res.json();
     if (!res.ok || payload.error) throw new Error(payload.error || 'Failed to load weekly target');
+    const oldestDailyKey = localDateKey(addDays(new Date(), -364));
+    if (weekStart < oldestDailyKey) {
+      // /api/data intentionally contains only a rolling year. Older goal weeks
+      // can still use the existing date-target API for authoritative day totals.
+      const dailyRows = await Promise.all(Array.from({ length:7 }, async (_,index) => {
+        const day = localDateKey(addDays(dateFromKey(weekStart),index));
+        const response = await fetch(`/api/daily-target?date=${encodeURIComponent(day)}`);
+        const daily = await response.json();
+        if (!response.ok || daily.error) throw new Error(daily.error || 'Daily activity could not load.');
+        return { day, total_seconds:daily.progress_seconds || 0 };
+      }));
+      if (token !== weeklyTargetState.requestToken || weeklyTargetState.currentWeekStartDate !== weekStart) return;
+      weeklyTargetState.dailyRows = dailyRows;
+    }
     if (token !== weeklyTargetState.requestToken || weeklyTargetState.currentWeekStartDate !== weekStart) return;
     weeklyTargetState.currentWeekStartDate = payload.week_start;
     renderWeeklyTargetCard(payload);
@@ -5706,7 +5540,13 @@ function renderDailyGoal(summary) {
 }
 
 load();
-const dashboardRefreshTimer = setInterval(load, 60_000);
+let lastDashboardRefresh = Date.now();
+const dashboardRefreshTimer = setInterval(() => {
+  if (latestDashboardData?.summary?.tracking_active || Date.now()-lastDashboardRefresh >= 60_000) {
+    lastDashboardRefresh = Date.now(); load();
+  }
+}, 15_000);
 </script>
+<script src="/static/js/dashboard.js"></script>
 </body>
 </html>

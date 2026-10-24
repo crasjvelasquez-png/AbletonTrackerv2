@@ -30,6 +30,7 @@ from tracker import (
     Tracker,
 )
 from notifications import NotificationCoordinator, NotificationMessage
+from projects import ProjectCatalog, open_project
 
 DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
@@ -217,6 +218,19 @@ class AbletonTrackerApp(rumps.App):
             enabled="unittest" not in sys.modules,
         )
         self._next_notification_check = 0.0
+        # The manual pause control is hidden; do not strand an old paused run.
+        try:
+            PAUSE_FILE.unlink(missing_ok=True)
+        except OSError as exc:
+            print(f"[startup] could not clear manual pause: {exc}", file=sys.stderr)
+        from tracker import DB_PATH
+        self.project_catalog = ProjectCatalog(DB_PATH)
+        self._next_project_refresh = 0.0
+        self._project_snapshot = None
+        self.open_project_item = rumps.MenuItem("Open Project")
+        self.open_project_item.add(rumps.MenuItem("Loading projects…"))
+        self.open_project_item.add(None)
+        self.open_project_item.add(rumps.MenuItem("Customize…", callback=self.customize_projects))
 
         self.open_ableton_item = rumps.MenuItem(
             "Open Ableton", callback=self.open_ableton
@@ -231,12 +245,6 @@ class AbletonTrackerApp(rumps.App):
         self.week_item.set_callback(None)
         self.streak_item = rumps.MenuItem("Run: —")
         self.streak_item.set_callback(None)
-        self.pause_item = rumps.MenuItem(
-            "Pause tracking" if not PAUSE_FILE.exists() else "Resume tracking",
-            callback=self.toggle_pause,
-            key="p",
-        )
-
         self.menu = [
             self.open_ableton_item,
             self.status_item,
@@ -244,8 +252,8 @@ class AbletonTrackerApp(rumps.App):
             self.week_item,
             self.streak_item,
             None,
+            self.open_project_item,
             rumps.MenuItem("Open Tracker", callback=self.open_dashboard, key="d"),
-            self.pause_item,
             None,
             rumps.MenuItem("Quit", callback=self.quit_app, key="q"),
         ]
@@ -259,8 +267,7 @@ class AbletonTrackerApp(rumps.App):
         self._refresh(None)
 
     def _refresh(self, _):
-        paused = PAUSE_FILE.exists()
-        self.pause_item.title = "Resume tracking" if paused else "Pause tracking"
+        self._refresh_projects()
 
         daily_goal, weekly_goal = _get_default_goals()
         today = today_seconds()
@@ -369,7 +376,10 @@ class AbletonTrackerApp(rumps.App):
         sender = packaged if packaged.exists() else development
         if not sender.exists():
             raise RuntimeError("Build Tracker.app to enable Tracker notifications")
-        result = subprocess.run([str(sender), notification.title, notification.subtitle, notification.message],
+        args = [str(sender), notification.title, notification.subtitle, notification.message]
+        if notification.category:
+            args += [notification.category, notification.day]
+        result = subprocess.run(args,
                                 timeout=15, capture_output=True, text=True)
         if result.returncode:
             raise RuntimeError(result.stderr.strip() or f"Tracker notification sender exited {result.returncode}")
@@ -412,6 +422,61 @@ class AbletonTrackerApp(rumps.App):
 
     def open_dashboard(self, _):
         self.dashboard.open()
+
+    def customize_projects(self, _):
+        # Always reaches Projects, even when the embedded dashboard is open.
+        import webbrowser
+        self.dashboard.start_server()
+        webbrowser.open(f"{DASHBOARD_URL}/#settings-projects")
+
+    def _refresh_projects(self):
+        now = time.monotonic()
+        if now >= self._next_project_refresh:
+            self._next_project_refresh = now + 30
+            self.project_catalog.refresh_async()
+        snapshot = self.project_catalog.take_snapshot()
+        if snapshot is None or snapshot == self._project_snapshot:
+            return
+        self._project_snapshot = snapshot
+        menu = self.open_project_item
+        menu.clear()
+        menu.add(rumps.MenuItem("Recent"))
+        # Explicit keys avoid collisions with headings or identically named sets.
+        def add(parent, key, title, path=None):
+            item = rumps.MenuItem(title, callback=(lambda _: self._open_project(path)) if path else None)
+            parent[key] = item
+        for index, project in enumerate(snapshot["recent"]):
+            add(menu, f"recent-{index}", project["name"] if project["path"] else project["name"] + " (not found)", project["path"])
+        if not snapshot["recent"]:
+            menu.add(rumps.MenuItem("No saved projects tracked yet"))
+        menu.add(None)
+        menu.add(rumps.MenuItem("Pinned Folders"))
+        for index, folder in enumerate(snapshot["folders"]):
+            item = rumps.MenuItem(folder["label"] + (" (missing)" if folder["missing"] else ""))
+            menu[f"folder-{index}"] = item
+            if folder["missing"]:
+                continue
+            for project_index, project in enumerate(folder["projects"]):
+                label = os.path.relpath(project["path"], folder["path"])
+                add(item, f"set-{project_index}", label, project["path"])
+            if not folder["projects"]:
+                item.add(rumps.MenuItem("No Live sets found"))
+            if folder["more"]:
+                item.add(rumps.MenuItem("Showing the 25 newest sets"))
+            if folder["warning"]:
+                item.add(rumps.MenuItem(folder["warning"]))
+        if not snapshot["folders"]:
+            menu.add(rumps.MenuItem("Pin folders in Customize…"))
+        if snapshot.get("warning"):
+            menu.add(rumps.MenuItem(snapshot["warning"]))
+        menu.add(None)
+        menu.add(rumps.MenuItem("Customize…", callback=self.customize_projects))
+
+    def _open_project(self, path):
+        try:
+            open_project(path, _find_ableton_app())
+        except Exception as exc:
+            rumps.alert(title="Could not open project", message=str(exc))
 
     def toggle_pause(self, sender):
         if PAUSE_FILE.exists():
