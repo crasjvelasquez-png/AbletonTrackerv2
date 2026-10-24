@@ -12,12 +12,12 @@ from datetime import datetime, time as datetime_time, timedelta
 from pathlib import Path
 from typing import Callable
 
-from tracker import POLL_INTERVAL, TrackerStatus, allocate_session_activity
+from tracker import POLL_INTERVAL, STATE_TRACKING, TrackerStatus, allocate_session_activity
 
 
 MORNING_NOTIFICATION_HOUR = 9
 LATE_NOTIFICATION_HOUR = 17
-STREAK_NOTIFICATION_HOURS = (12, 18, 23)
+STREAK_NOTIFICATION_HOURS = (18, 19, 20)
 MINIMUM_PACE_GAP_SECONDS = 15 * 60
 DEFAULT_WEEK_START_WEEKDAY = 4  # Friday
 
@@ -85,20 +85,30 @@ class NotificationCoordinator:
             return []
 
         candidates: list[NotificationMessage] = []
-        for candidate in (
-            self._daily_goal_candidate(now, today_seconds, daily_goal_hours),
+        operational = (
             self._paused_candidate(now, pause_token, ableton_running),
             self._idle_candidate(now, pause_token, ableton_running, tracker_status),
-            self._streak_candidate(now, today_seconds, streak_days),
-            self._recap_candidate(now),
-        ):
-            if candidate:
-                candidates.append(candidate)
-
-        if now.hour >= LATE_NOTIFICATION_HOUR:
-            pace = self._weekly_pace_candidate(now, week_seconds, weekly_goal_hours)
-            if pace:
-                candidates.append(pace)
+        )
+        candidates.extend(candidate for candidate in operational if candidate)
+        # Do not interrupt recording/listening with goal or recap banners.
+        active = tracker_status is not None and tracker_status.state == STATE_TRACKING
+        if not active:
+            goal = self._daily_goal_candidate(now, today_seconds, daily_goal_hours)
+            if goal:
+                candidates.append(goal)
+            if 9 <= now.hour < 21:
+                reminder_key = f"reminder:{now.date().isoformat()}"
+                recap = self._recap_candidate(now)
+                if recap:
+                    candidates.append(recap)
+                if reminder_key not in self._sent:
+                    reminder = self._streak_candidate(now, today_seconds, streak_days)
+                    if reminder is None and now.hour >= 18:
+                        reminder = self._weekly_pace_candidate(now, week_seconds, weekly_goal_hours)
+                    if reminder:
+                        candidates.append(NotificationMessage(
+                            reminder.event_keys + (reminder_key,), reminder.title,
+                            reminder.subtitle, reminder.message))
 
         delivered: list[NotificationMessage] = []
         for candidate in candidates:
@@ -111,25 +121,26 @@ class NotificationCoordinator:
                 continue
             self._mark_sent(candidate.event_keys, now)
             delivered.append(candidate)
+            break  # One banner per check; remaining events are deferred.
         return delivered
 
 
     def _streak_candidate(
         self, now: datetime, today_seconds: float, streak_days: int
     ) -> NotificationMessage | None:
-        event_key = f"streak-risk:{now.date().isoformat()}:{now.hour}"
+        event_key = f"run-reminder:{now.date().isoformat()}"
         if (
             now.hour not in STREAK_NOTIFICATION_HOURS
             or event_key in self._sent
-            or today_seconds > 0
+            or today_seconds >= 900
             or streak_days <= 0
         ):
             return None
         return NotificationMessage(
             (event_key,),
-            f"Your {streak_days}-day streak is at risk 🔥",
-            "A little Ableton time keeps it alive.",
-            "Open a project before midnight and keep the streak going.",
+            "Make a little music today",
+            f"Your Production Run: {streak_days} days.",
+            f"{_format_gap(900 - today_seconds)} more making music completes today’s run day.",
         )
 
     def _daily_goal_candidate(self, now, seconds, goal_hours):
@@ -248,8 +259,8 @@ class NotificationCoordinator:
         return NotificationMessage(
             (event_key,),
             "Weekly goal check-in",
-            f"You’re {_format_gap(gap)} behind pace.",
-            "A focused session today can close the gap.",
+            f"{_format_gap(week_seconds)} recorded this week.",
+            f"Your weekly goal is {_format_gap(weekly_goal_hours * 3600)}. Open Tracker to see your progress.",
         )
 
 

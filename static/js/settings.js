@@ -17,13 +17,13 @@
   const CUSTOM_CATEGORY_LIMIT_FALLBACK = 12;
   const DEFAULT_NEW_COLOR = '#7C5CFF';
   const WEEK_DAYS = [
-    { name: 'Monday',    abbrev: 'Mon', jsDay: 1 },
-    { name: 'Tuesday',   abbrev: 'Tue', jsDay: 2 },
-    { name: 'Wednesday', abbrev: 'Wed', jsDay: 3 },
-    { name: 'Thursday',  abbrev: 'Thu', jsDay: 4 },
-    { name: 'Friday',    abbrev: 'Fri', jsDay: 5 },
-    { name: 'Saturday',  abbrev: 'Sat', jsDay: 6 },
-    { name: 'Sunday',    abbrev: 'Sun', jsDay: 0 },
+    { name: 'Monday',    abbrev: 'Mon', jsDay: 0 },
+    { name: 'Tuesday',   abbrev: 'Tue', jsDay: 1 },
+    { name: 'Wednesday', abbrev: 'Wed', jsDay: 2 },
+    { name: 'Thursday',  abbrev: 'Thu', jsDay: 3 },
+    { name: 'Friday',    abbrev: 'Fri', jsDay: 4 },
+    { name: 'Saturday',  abbrev: 'Sat', jsDay: 5 },
+    { name: 'Sunday',    abbrev: 'Sun', jsDay: 6 },
   ];
   let currentWeekStartDay = null;
   let currentLaneHeaderColors = {};
@@ -246,9 +246,9 @@
     try {
       const res = await fetch('/api/app-settings');
       const data = await res.json();
-      currentWeekStartDay = (data && data.week_start_weekday != null) ? String(data.week_start_weekday) : '5'; // Friday=5 default
+      currentWeekStartDay = (data && data.week_start_weekday != null) ? String(data.week_start_weekday) : '4'; // Python weekday: Friday=4
     } catch (_) {
-      currentWeekStartDay = '5';
+      currentWeekStartDay = '4';
     }
     renderWeekStartPicker();
     syncWeekRefreshMeta();
@@ -467,6 +467,30 @@
     return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
   }
 
+  async function refreshGoal(kind) {
+    const root = $('[data-settings-root]');
+    if (!root) return;
+    const input = $(`[data-${kind}-input]`, root);
+    const progress = $(`[data-${kind}-progress]`, root);
+    try {
+      const res = await fetch(`/api/${kind}-target${kind === 'daily' ? `?date=${todayIso()}` : ''}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Could not load goals');
+      if (input && document.activeElement !== input && !input.dataset.dirty) {
+        input.value = data.goal_hours || '';
+      }
+      if (progress) progress.textContent = `${fmtHours(data.progress_seconds)} recorded`;
+    } catch (error) {
+      setFeedback($(`[data-${kind}-feedback]`, root), error.message, 'error');
+    }
+  }
+  function refreshDaily() { return refreshGoal('daily'); }
+  function refreshWeekly() { return refreshGoal('weekly'); }
+  async function refreshGoals() {
+    await Promise.all([refreshDaily(), refreshWeekly()]);
+    updateGoalsMeta();
+  }
+
   function updateGoalsMeta() {
     const root = $('[data-settings-root]');
     const meta = $('[data-goals-meta]', root);
@@ -505,6 +529,7 @@
         goal_hours: value,
       });
       setFeedback(feedback, `Saved · ${fmtHours(result.progress_seconds)} of ${result.goal_hours}h today`, 'success');
+      delete input.dataset.dirty;
       await refreshDaily();
       updateGoalsMeta();
       window.load?.();
@@ -531,6 +556,7 @@
       const normalized = Math.round(value * 10) / 10;
       await window.postJson('/api/weekly-target', { goal_hours: normalized });
       setFeedback(feedback, `Saved · target is ${normalized}h per week`, 'success');
+      delete input.dataset.dirty;
       await refreshWeekly();
       updateGoalsMeta();
       window.load?.();
@@ -780,6 +806,9 @@
     if (!root) return;
     inited = true;
     mountedAt = Date.now();
+    root.querySelectorAll('[data-daily-input], [data-weekly-input]').forEach(input => {
+      input.addEventListener('input', () => { input.dataset.dirty = 'true'; });
+    });
     bindTabNavigation(root);
     bindAppearanceControls(root);
     bindWidgetControls(root);
@@ -798,7 +827,7 @@
     const root = $('[data-settings-root]');
     if (!root) return;
     if (!inited) init();
-    if (lastData) {
+    if (lastData && !root.querySelector('.category-editor:not([hidden])') && !document.activeElement?.closest('[data-category-create-form]')) {
       renderCategories(lastData);
     }
     syncThemePicker();

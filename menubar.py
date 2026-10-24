@@ -24,7 +24,7 @@ from tracker import (
     STATE_TRACKING,
     day_seconds,
     is_ableton_running,
-    streak_days,
+    production_run_days,
     week_seconds,
     yesterday_seconds,
     Tracker,
@@ -229,7 +229,7 @@ class AbletonTrackerApp(rumps.App):
         self.yesterday_item.set_callback(None)
         self.week_item = rumps.MenuItem("This week: 0m")
         self.week_item.set_callback(None)
-        self.streak_item = rumps.MenuItem("Streak: —")
+        self.streak_item = rumps.MenuItem("Run: —")
         self.streak_item.set_callback(None)
         self.pause_item = rumps.MenuItem(
             "Pause tracking" if not PAUSE_FILE.exists() else "Resume tracking",
@@ -239,10 +239,8 @@ class AbletonTrackerApp(rumps.App):
 
         self.menu = [
             self.open_ableton_item,
-            None,
             self.status_item,
             self.today_item,
-            self.yesterday_item,
             self.week_item,
             self.streak_item,
             None,
@@ -270,7 +268,7 @@ class AbletonTrackerApp(rumps.App):
         streak = 0
         week = 0.0
         try:
-            streak = streak_days()
+            streak = production_run_days()
             week = week_seconds()
         except Exception as e:
             print(f"[refresh] streak/week error: {e}", file=sys.stderr)
@@ -366,20 +364,21 @@ class AbletonTrackerApp(rumps.App):
 
     @staticmethod
     def _deliver_notification(notification: NotificationMessage) -> None:
-        rumps.notification(
-            notification.title,
-            notification.subtitle,
-            notification.message,
-            sound=False,
-        )
+        packaged = APP_DIR.parent / "Tracker Notifications.app" / "Contents" / "MacOS" / "tracker-notify"
+        development = APP_DIR / "dist" / "Tracker.app" / "Contents" / "Resources" / "Tracker Notifications.app" / "Contents" / "MacOS" / "tracker-notify"
+        sender = packaged if packaged.exists() else development
+        if not sender.exists():
+            raise RuntimeError("Build Tracker.app to enable Tracker notifications")
+        result = subprocess.run([str(sender), notification.title, notification.subtitle, notification.message],
+                                timeout=15, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or f"Tracker notification sender exited {result.returncode}")
 
     def _build_title(
         self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
     ) -> str:
-        time_str = fmt_goal_time(seconds, goal)
+        time_str = fmt_goal_time(seconds, None)
         parts = [icon, time_str]
-        if goal is not None and goal > 0 and (seconds or 0) >= goal * 3600:
-            parts.append("✓")
         if streak > 0:
             parts.append(f"💿{streak}")
         return " ".join(parts)
@@ -387,17 +386,14 @@ class AbletonTrackerApp(rumps.App):
     def _update_streak(self, streak: int):
         if streak > 0:
             day_word = "day" if streak == 1 else "days"
-            self.streak_item.title = f"💿 Streak: {streak} {day_word}"
+            self.streak_item.title = f"💿 Run: {streak} {day_word}"
         else:
-            self.streak_item.title = "Streak: —"
+            self.streak_item.title = "Run: —"
 
     def _update_open_ableton(self, show: bool):
-        if show:
-            self.open_ableton_item.title = "Open Ableton"
-            self.open_ableton_item.set_callback(self.open_ableton)
-        else:
-            self.open_ableton_item.title = "Ableton is running"
-            self.open_ableton_item.set_callback(None)
+        native_item = getattr(self.open_ableton_item, "_menuitem", None)
+        if native_item is not None:
+            native_item.setHidden_(not show)
 
     def open_ableton(self, _):
         app_path = _find_ableton_app()

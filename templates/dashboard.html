@@ -155,6 +155,52 @@
   }
 }
 
+:root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#080808;
+    --bg-elev:rgba(16,16,18,.92);
+    --surface:rgba(18,18,20,.45);
+    --surface-2:rgba(24,24,28,.94);
+    --surface-hover:rgba(255,255,255,.06);
+    --bg-card:rgba(18,18,20,.72);
+    --bg-card-strong:rgba(24,24,28,.94);
+    --text-primary:#f5f5f7;
+    --text-secondary:#aaaab3;
+    --target-track:rgba(255,255,255,.08);
+    --target-shadow:0 24px 58px rgba(0,0,0,.44), 0 1px 1px rgba(255,255,255,.02);
+    --target-inner-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+    --border:rgba(255,255,255,.08);
+    --border-strong:rgba(255,255,255,.12);
+    --ink:#f5f5f7;
+    --ink-2:#d7d7dc;
+    --ink-3:#aaaab3;
+    --ink-4:#90909a;
+    --accent:#818cf8;
+    --accent-soft:color-mix(in srgb, var(--accent) 16%, transparent);
+    --accent-line:color-mix(in srgb, var(--accent) 28%, transparent);
+    --live:#30d158;
+    --danger:#ff453a;
+    --danger-soft:rgba(255,69,58,.14);
+    --page-wash:linear-gradient(180deg, #080808, #080808);
+    --page-glow-a:none;
+    --page-glow-b:none;
+    --header-bg:rgba(8,8,8,.72);
+    --logo-bg:linear-gradient(180deg, rgba(32,32,36,.94), rgba(18,18,20,.94));
+    --logo-border:color-mix(in srgb, var(--accent) 12%, transparent);
+    --logo-shadow:0 10px 24px color-mix(in srgb, var(--accent) 8%, transparent);
+    --glass-highlight:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
+    --control-bg:rgba(30,30,34,.82);
+    --control-bg-strong:rgba(38,38,44,.96);
+    --control-inner:rgba(12,12,14,.96);
+    --row-border:rgba(255,255,255,.06);
+    --bar-bg:rgba(255,255,255,.06);
+    --toast-shadow:0 18px 40px rgba(0,0,0,.48);
+    --modal-backdrop:rgba(0,0,0,.58);
+    --modal-backdrop-shadow:inset 0 0 0 9999px rgba(0,0,0,.08);
+    --shadow-1:0 1px 2px rgba(0,0,0,.28), 0 18px 42px rgba(0,0,0,.32);
+    --shadow-card-hover:0 18px 36px rgba(0,0,0,.48), 0 36px 72px rgba(255,255,255,.06);
+}
+
 :root[data-theme="light"]{color-scheme:light}
 
 /* Dark mode scrollbar styling for webkit browsers */
@@ -2601,6 +2647,47 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 
 
 
+
+.weekly-quest{margin-bottom:28px}
+.run-summary{display:block;border:0;background:none;color:var(--ink-2);font:inherit;font-size:14px;font-weight:600;text-align:left;padding:12px 0 0;cursor:pointer}
+.run-summary:hover{color:var(--accent)}
+.session-status__text{font-size:14px;font-weight:600;color:var(--ink)}
+.row-del{width:32px;height:32px;opacity:1}
+.row-note{width:auto;min-width:48px;height:32px;padding:0 6px;opacity:1}
+.short-session-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);margin:12px 0}
+[hidden]{display:none!important}
+@media(max-width:520px){.header{gap:8px}.header-right{gap:8px}.nav-tab{padding:8px}.logo-text{display:none}.quest-head{flex-wrap:wrap}.run-summary{line-height:1.6}}
+
+.settings-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:24px;align-items:start}
+.settings-sidebar{display:grid;gap:6px;position:sticky;top:90px}
+.settings-nav-tab{font:inherit;font-size:13px;text-align:left;padding:12px;border:0;border-radius:10px;background:transparent;color:var(--ink-3);cursor:pointer}
+.settings-nav-tab.is-active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.settings-pane{display:none}
+.settings-pane.is-active{display:grid;gap:24px}
+.settings-content{min-width:0}
+.settings-content .section-head{margin-bottom:12px}
+.settings-copy{color:var(--ink-3);font-size:14px;line-height:1.6;margin-bottom:16px}
+.field{display:grid;gap:8px;min-width:0}
+.field-label{font-size:12px;font-weight:600;color:var(--ink-3)}
+.text-input{width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--control-bg);color:var(--ink);font:inherit}
+.color-field{display:grid;gap:12px}
+.color-control{display:flex;align-items:center;gap:10px}
+.color-preview,.color-picker-button-swatch{display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--color-value);border:1px solid var(--border-strong)}
+.color-summary{display:grid;gap:3px;font-size:12px;color:var(--ink-3)}
+.color-presets{display:flex;flex-wrap:wrap;gap:8px}
+.color-preset{width:28px;height:28px;background:var(--color-value);border:2px solid var(--border-strong);border-radius:50%;cursor:pointer}
+.color-preset.is-active{outline:2px solid var(--ink);outline-offset:2px}
+.color-picker-button{display:flex;align-items:center;gap:8px;justify-self:start;background:var(--control-bg);border:1px solid var(--border);border-radius:8px;color:var(--ink);padding:8px;font:inherit;font-size:13px;cursor:pointer}
+.color-popover{position:fixed;z-index:1200;width:min(280px,calc(100vw - 24px));padding:16px;background:var(--control-bg-strong);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow-1)}
+.color-popover-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:13px}
+.color-popover-close{width:32px;height:32px;background:none;border:0;color:var(--ink);font-size:22px;cursor:pointer}
+.color-saturation{height:145px;position:relative;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent),hsl(var(--picker-hue) 100% 50%)}
+.color-saturation-thumb{position:absolute;width:12px;height:12px;left:calc(var(--picker-saturation) * 1%);top:calc((100 - var(--picker-value)) * 1%);border:2px solid white;border-radius:50%;transform:translate(-50%,-50%)}
+.color-hue{width:100%;margin:12px 0;accent-color:var(--accent)}
+.color-hex-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.color-hex-input{min-width:0;width:160px;padding:8px;background:var(--control-bg);color:var(--ink);border:1px solid var(--border);border-radius:6px}
+.color-error{color:var(--danger);font-size:12px}
+@media(max-width:700px){.settings-layout{grid-template-columns:1fr;gap:16px}.settings-sidebar{position:static;display:flex;flex-wrap:wrap}.settings-nav-tab{font-size:12px;padding:10px}.text-input{font-size:16px}.settings-content .goal-form-row{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -2622,7 +2709,8 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
   </div>
   <div class="header-right">
     <div class="header-nav" role="tablist" aria-label="Pages">
-      <button class="nav-tab is-active" id="navDashboard" type="button" data-view-tab="dashboard">Dashboard</button>
+      <button class="nav-tab is-active" id="navDashboard" type="button" role="tab" aria-selected="true" data-view-tab="dashboard">Dashboard</button>
+      <button class="nav-tab" id="navSettings" type="button" role="tab" aria-selected="false" data-view-tab="settings">Settings</button>
     </div>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
@@ -2643,7 +2731,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 <div class="page">
   <div class="intro">
     <div>
-      <h2 id="pageTitle">Dashboard </h2>
+      <h2 id="pageTitle" class="sr-only">Dashboard</h2>
       <div class="sub" id="pageSubtitle">
         <span class="session-status" id="sessionStatus" data-state="live">
           <span class="session-status__text" id="sessionStatusText">Live</span>
@@ -2670,6 +2758,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
     </div>
   </div>
   <div id="app">
+    <div id="appSettings" hidden></div>
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
   </div>
   <div class="mark">
@@ -2738,6 +2827,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 
 <div class="toast" id="toast" aria-live="polite"></div>
 
+<script src="/static/js/settings.js"></script>
 <script>
 const PROJECT_COLORS = [
   '#4f46e5','#0ea5e9','#6366f1','#8b5cf6','#34c759',
@@ -3017,22 +3107,54 @@ function updateMonthNav(summary = null) {
   if (resetBtn) resetBtn.hidden = monthKey === currentMonthKey();
 }
 
+let settingsLoaded = false;
+let settingsRequest = null;
+let showShortSessions = false;
 function updateHeaderForView() {
-  document.getElementById('navDashboard').classList.add('is-active');
-  const intro = document.querySelector('.intro');
-  if (intro) intro.hidden = false;
-  document.getElementById('pageTitle').innerHTML = '<strong class="page-title-dashboard">Dashboard</strong>';
-  const pageSubtitle = document.getElementById('pageSubtitle');
-  pageSubtitle.hidden = false;
+  const isSettings = activeView === 'settings';
+  document.querySelectorAll('[data-view-tab]').forEach(button => {
+    const selected = button.dataset.viewTab === activeView;
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  document.getElementById('pageTitle').textContent = isSettings ? 'Settings' : 'Dashboard';
   setIntroDates();
   updateMonthNav(latestDashboardData?.summary || null);
 }
-
-function setActiveView() {
-  activeView = 'dashboard';
+async function setActiveView(view = 'dashboard') {
+  activeView = view;
   updateHeaderForView();
-  document.getElementById('appDashboard').hidden = false;
+  document.getElementById('appDashboard').hidden = view !== 'dashboard';
+  const mount = document.getElementById('appSettings');
+  mount.hidden = view !== 'settings';
+  if (view !== 'settings') return;
+  try {
+    if (!settingsLoaded) {
+      if (!settingsRequest) settingsRequest = fetch('/partials/settings.html').then(async res => {
+        if (!res.ok) throw new Error('Settings could not load. Try again.');
+        mount.innerHTML = await res.text();
+        Settings.init();
+        settingsLoaded = true;
+      }).finally(() => { settingsRequest = null; });
+      await settingsRequest;
+    }
+    Settings.render(latestDashboardData);
+  } catch (error) {
+    mount.innerHTML = '<div class="empty"><p>Settings could not load.</p><button class="btn" id="retrySettings">Try again</button></div>';
+    document.getElementById('retrySettings').onclick = () => setActiveView('settings');
+    toast(error.message);
+  }
 }
+document.querySelectorAll('[data-view-tab]').forEach(button => {
+  button.addEventListener('click', () => setActiveView(button.dataset.viewTab));
+  button.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const next = button.dataset.viewTab === 'dashboard' ? 'settings' : 'dashboard';
+    document.querySelector(`[data-view-tab="${next}"]`).focus();
+    setActiveView(next);
+  });
+});
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 systemTheme.addEventListener('change', () => {
@@ -3321,12 +3443,12 @@ function renderDailyTargetDetail() {
       ${rows.map(target => {
         const model = buildDailyTargetModel(target);
         const meta = model.hasGoal ? (model.isMet ? 'Goal met' : model.shortfallText) : 'No daily goal saved';
-        const value = `${model.progressText} · ${model.isMet ? 'Yes' : 'No'}`;
+        const value = `${model.progressText}${model.isMet ? ' · Goal met' : ''}`;
         return detailRow({
           title: longDailyTargetLabel(model.dateKey),
           meta,
           value,
-          color: model.tone.accent,
+          color: 'var(--accent)',
           pct: clamp(model.progressRatio * 100, 0, 100),
         });
       }).join('')}
@@ -3430,7 +3552,7 @@ function weeklyPaceStatus({ hasGoal, progressSeconds, goalHours, paceDeltaSecond
   if (progressSeconds >= goalSeconds) return { label: 'Goal met', accent: '#30a455', className: 'is-met' };
   if (isFutureWeek) return { label: 'Starts soon', accent: '#8e8e93', className: 'is-empty' };
   const abs = Math.abs(paceDeltaSeconds);
-  if (isPastWeek) return { label: `${fmt.dur(goalSeconds - progressSeconds)} short`, accent: '#a05050', className: 'is-far' };
+  if (isPastWeek) return { label: 'Recorded time', accent: 'var(--ink-3)', className: '' };
   if (paceDeltaSeconds >= 0) return { label: `Ahead by ${fmt.dur(abs)}`, accent: '#30a455', className: 'is-met' };
   const amberCutoff = Math.max(30 * 60, goalSeconds * 0.04);
   return {
@@ -3465,7 +3587,6 @@ function renderWeekStrip(model) {
         const dayLabel = dateFromKey(dateKey).toLocaleDateString('en-US', { weekday: 'short' });
         return `
           <div class="${classes}" title="${dayLabel} · ${fmt.dur(seconds)}">
-            <i class="week-dot" aria-hidden="true"></i>
             <span>${dayLabel.slice(0, 3)}</span>
             <strong>${fmt.dur(seconds)}</strong>
           </div>
@@ -3483,16 +3604,16 @@ function renderWeeklyTargetDetail() {
       ${rows.map(target => {
         const model = buildWeeklyTargetModel(target);
         const meta = model.hasGoal
-          ? `${Math.min(model.percent, 999)}% complete · ${model.isMet ? 'Target hit' : model.shortfallText}`
+          ? `${Math.min(model.percent, 999)}% of goal`
           : 'No weekly goal saved';
         const value = model.hasGoal
-          ? `${model.progressText} · ${model.isMet ? 'Yes' : 'No'}`
+          ? `${model.progressText}${model.isMet ? ' · Goal met' : ''}`
           : `${fmt.dur(model.progressSeconds)} · No goal`;
         return detailRow({
           title: weeklyTargetRangeLabel(model.weekStart, model.weekEnd),
           meta: `${humanWeeklyTargetLabel(model.weekStart)} · ${meta}`,
           value,
-          color: model.tone.accent,
+          color: 'var(--accent)',
           pct: clamp(model.progressRatio * 100, 0, 100),
         });
       }).join('')}
@@ -4588,6 +4709,7 @@ async function load() {
     }
     latestDashboardData = data;
     render(data);
+    if (activeView === 'settings') Settings.render(data);
     if (newETag) {
       lastETag = newETag;
       lastFetchedMonth = monthKey;
@@ -4685,7 +4807,7 @@ function render(data) {
 
   updateSessionStatus(summary);
 
-  if (summary.live_project) {
+  if (summary.live_project && !summary.tracking_paused && summary.tracking_active) {
     document.getElementById('liveBadge').style.display = 'inline-flex';
     document.getElementById('liveProject').textContent = summary.live_project;
   } else {
@@ -4721,11 +4843,13 @@ function render(data) {
       : '';
     return `<div class="campaign-row${project.is_live_project ? ' is-live' : ''}" data-campaign-project="${encodeURIComponent(project.project_name || '')}">
       <div class="campaign-rank">${project.month_rank || index + 1}</div>
-      <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(project.project_name)}</span></div>${categoryLabel}</div>
+      <div class="campaign-project"><div class="campaign-project-name">${project.is_live_project ? '<i class="campaign-live-dot" aria-hidden="true"></i><span class="sr-only">Live project</span>' : ''}<span title="${escapeHtml(project.project_name)}">${escapeHtml(projectDisplayName(project))}</span></div>${categoryLabel}</div>
       <div class="campaign-values"><div class="campaign-time">${fmt.dur(project.month_seconds)}</div><div class="campaign-share">${Number(project.month_share_percent || 0).toFixed(1).replace(/\.0$/, '')}% of month</div></div>
     </div>`;
   };
 
+  const historyOpen = !!document.querySelector('.history-card details[open]');
+  const visibleRecent = recent.filter(row => showShortSessions || !row.end_time || row.active_seconds >= 60 || Object.keys(row.session_notes || {}).length || Object.keys(row.session_todos || {}).length);
   document.getElementById('appDashboard').innerHTML = `
     <div class="chart-card chart-card-wide weekly-quest" role="button" tabindex="0" data-detail="weekly-target" aria-haspopup="dialog" aria-controls="detailModal">
       <div class="quest-head">
@@ -4737,25 +4861,8 @@ function render(data) {
         </div>
       </div>
       <div class="chart-wrap"><div id="weeklyGoalCard" class="daily-target-panel"></div></div>
-    </div>
+      <button class="run-summary" type="button" data-detail="production-run" aria-haspopup="dialog" aria-controls="detailModal">Run: Day ${run.current_days || 0} · Today ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)} <span aria-hidden="true">›</span></button>
 
-    <div class="card card--streak production-run-card${runAdvanced ? ' is-advancing' : ''}" role="button" tabindex="0" data-detail="production-run" aria-haspopup="dialog" aria-controls="detailModal">
-      <div class="production-run-head">
-        <div>
-          <div class="card-label" style="padding-top:0;margin-bottom:4px">Production Run</div>
-          <div class="card-value">Day ${run.current_days || 0}</div>
-          <div class="production-run-rule">Today · ${fmt.dur(run.today_seconds || 0)} / ${fmt.dur(run.qualifying_seconds || 900)}</div>
-        </div>
-      </div>
-      <div class="run-nodes" aria-label="Recent Production Run days">
-        ${recentRunDays.map(day => {
-          const cls = ['run-node', day.state ? `is-${day.state}` : '', day.is_today ? 'is-today' : '', runAdvanced && day.is_today ? 'is-newly-qualified' : ''].filter(Boolean).join(' ');
-          const ratio = clamp((Number(day.seconds) || 0) / (run.qualifying_seconds || 900), 0, 1);
-          const dayDate = day.day ? dateFromKey(day.day) : new Date();
-          const dayLabel = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
-          return `<div class="${cls}" style="--run-progress:${Math.round(ratio * 100)}%" title="${escapeHtml(`${day.day || ''} · ${fmt.dur(day.seconds || 0)}`)}"><i class="run-node-dot" aria-hidden="true"></i><span>${dayLabel}</span></div>`;
-        }).join('')}
-      </div>
     </div>
 
     <div class="table-card monthly-campaign">
@@ -4770,18 +4877,19 @@ function render(data) {
     </div>
 
     <div class="table-card history-card">
-      <details class="overview-disclosure">
-        <summary>View session history <span>${todaySessionCount} session${todaySessionCount !== 1 ? 's' : ''} today</span></summary>
+      <details class="overview-disclosure" ${historyOpen ? 'open' : ''}>
+        <summary>Recent sessions <span>${recent.length ? `Last session ${fmt.datetime(recent[0].start_time)}` : 'No sessions yet'}</span></summary>
         <div class="history-content">
+          <label class="short-session-toggle"><input id="showShortSessions" type="checkbox" ${showShortSessions ? 'checked' : ''}> Show entries under 1 minute</label>
           <div class="section-head"><span class="recent-stats-inline">${fmt.dur(summary.today_average_session_seconds || 0)} average · ${todayProjectCount} project${todayProjectCount !== 1 ? 's' : ''} today</span></div>
-      ${recent.length === 0
-        ? '<div class="empty"><p>No sessions logged</p><small>start Ableton to begin</small></div>'
+      ${visibleRecent.length === 0
+        ? '<div class="empty"><p>No sessions to show</p><small>Enable short entries above or open Ableton to begin.</small></div>'
         : `<div class="table-scroll"><table>
             <thead><tr>
               <th>Project</th><th>Started</th><th>Ended</th><th style="text-align:right">Duration</th><th aria-label="Delete"></th>
             </tr></thead>
             <tbody>
-              ${recent.map(s => {
+              ${visibleRecent.map(s => {
                 const ids = (s.session_ids || []).join(',');
                 const isLive = !s.end_time;
                 const delTitle = isLive
@@ -4818,12 +4926,12 @@ function render(data) {
                         data-session-last-seen-times="${encodeURIComponent(lastSeenData)}"
                         data-session-active-seconds="${encodeURIComponent(activeSecondsData)}"
                         data-project-name="${encodeURIComponent(s.project_name || '')}"
-                        title="${hasNotes ? 'Edit notes' : 'Add notes'}">✎</button>`;
+                        title="${hasNotes ? 'Edit notes' : 'Add notes'}">Notes</button>`;
                     })()}
                     <button class="row-del" type="button"
                       data-session-ids="${ids}"
                       data-project-name="${encodeURIComponent(s.project_name || '')}"
-                      title="${delTitle}"
+                      aria-label="${delTitle}" title="${delTitle}"
                       ${isLive || !ids ? 'disabled' : ''}>×</button>
                   </td>
                 </tr>`;
@@ -4857,6 +4965,7 @@ function render(data) {
 
   const monthNavSlot = document.getElementById('projectsMonthNavSlot');
   if (monthNavSlot && monthNav) monthNavSlot.appendChild(monthNav);
+  document.getElementById('showShortSessions')?.addEventListener('change', event => { showShortSessions = event.target.checked; render(latestDashboardData); });
   const br = document.getElementById('btnClearRecent');
   const bp = document.getElementById('btnClearPhantoms');
   const bu = document.getElementById('btnClearUnsaved');
@@ -4880,17 +4989,21 @@ function updateSessionStatus(summary) {
   if (!status || !label || !indicator) return;
 
   let state = 'off';
-  let text = 'Off';
+  let text = 'Ableton not running';
   let indicatorHtml = '<span class="session-status__dot"></span>';
 
-  if (summary?.ableton_has_project) {
+  if (summary?.tracking_paused) {
+    state = 'off';
+    text = 'Paused';
+    indicator.className = 'session-status__indicator session-status__indicator--off';
+  } else if (summary?.tracking_active ?? summary?.ableton_has_project) {
     state = 'live';
-    text = 'Live';
+    text = summary.live_project ? `Working on: ${summary.live_project}` : 'Tracking';
     indicator.className = 'session-status__indicator session-status__indicator--live';
     indicatorHtml = '<span class="session-status__dot"></span>';
   } else if (summary?.ableton_running) {
     state = 'booting';
-    text = 'Booting up';
+    text = summary?.ableton_has_project ? 'Idle' : 'Ableton open (no project)';
     indicator.className = 'session-status__indicator session-status__indicator--booting';
     indicatorHtml = `
       <span class="session-status__dot"></span>
@@ -4899,7 +5012,7 @@ function updateSessionStatus(summary) {
     `;
   } else {
     state = 'off';
-    text = 'Off';
+    text = 'Ableton not running';
     indicator.className = 'session-status__indicator session-status__indicator--off';
     indicatorHtml = '<span class="session-status__dot"></span>';
   }
@@ -5292,7 +5405,7 @@ function renderWeeklyTargetCard(target) {
       <div class="quest-edit-row"><button class="btn small" id="weeklyGoalEditBtn" type="button" aria-expanded="false" aria-controls="weeklyGoalEdit">${model.hasGoal ? `Goal ${formatHoursNumber(model.goalHours)}h` : 'Set goal'}</button></div>
       <div class="quest-edit" id="weeklyGoalEdit" hidden>
         <label class="goal-label" for="weeklyGoalCardInput"><strong>Weekly goal</strong></label>
-        <div class="quest-edit-actions"><div class="goal-input-wrap"><input class="goal-input" id="weeklyGoalCardInput" type="number" min="1" max="100" step="0.5" value="${editGoalHours}"><span class="goal-unit">hours</span></div><div class="goal-presets">${[10,20,30,40].map(hours => `<button class="goal-chip ${Math.abs(editGoalHours-hours)<.01?'is-active':''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>`).join('')}</div><button class="btn small" id="weeklyGoalCancelBtn" type="button">Cancel</button></div>
+        <div class="quest-edit-actions"><div class="goal-input-wrap"><input class="goal-input" id="weeklyGoalCardInput" type="number" min="0.5" max="168" step="0.5" value="${editGoalHours}"><span class="goal-unit">hours</span></div><div class="goal-presets">${[10,20,30,40].map(hours => `<button class="goal-chip ${Math.abs(editGoalHours-hours)<.01?'is-active':''}" type="button" data-weekly-goal-hours="${hours}">${hours}h</button>`).join('')}</div><button class="btn small" id="weeklyGoalSaveBtn" type="button">Save</button><button class="btn small" id="weeklyGoalCancelBtn" type="button">Cancel</button></div>
       </div>
     </div>
   `;
@@ -5303,22 +5416,30 @@ function renderWeeklyTargetCard(target) {
   const cancelBtn = mount.querySelector('#weeklyGoalCancelBtn');
   const setEditing = editing => { editPanel.hidden = !editing; editBtn.setAttribute('aria-expanded', String(editing)); if (editing) input.focus(); };
   editBtn?.addEventListener('click', event => { event.stopPropagation(); setEditing(true); });
-  cancelBtn?.addEventListener('click', event => { event.stopPropagation(); setEditing(false); });
+  cancelBtn?.addEventListener('click', event => { event.stopPropagation(); input.value = editGoalHours; setEditing(false); });
   const repaint = async nextValue => {
-    const normalized = clamp(Math.round((Number(nextValue) || editGoalHours) * 10) / 10, 1, 100);
+    const hours = Number(nextValue);
+    if (!Number.isFinite(hours) || hours < 0.5 || hours > 168) {
+      toast('Enter a weekly goal between 0.5 and 168 hours.');
+      input.focus();
+      return;
+    }
+    const normalized = Math.round(hours * 10) / 10;
     mount.classList.add('is-loading');
     try {
       await postJson('/api/weekly-target', { goal_hours: normalized });
       const res = await fetch(`/api/weekly-target?date=${encodeURIComponent(weeklyTargetState.currentWeekStartDate || currentWeekStartKey())}`);
       const fresh = await res.json();
       renderWeeklyTargetCard(fresh);
+      mount.classList.remove('is-loading');
+      toast(`Weekly goal saved: ${formatHoursNumber(normalized)}h`);
     } catch (e) {
       toast(e.message || 'Failed to save weekly target');
       mount.classList.remove('is-loading');
     }
   };
   if (input) {
-    input.addEventListener('change', () => repaint(input.value));
+    mount.querySelector('#weeklyGoalSaveBtn').addEventListener('click', () => repaint(input.value));
     input.addEventListener('keydown', event => {
       if (event.key === 'Enter') repaint(input.value);
     });

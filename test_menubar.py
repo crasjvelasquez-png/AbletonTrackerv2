@@ -406,7 +406,7 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         self.app.tracker_thread.tracker._consecutive_failures = 3
         self.app.tracker_thread.tracker._last_error = "Something broke badly"
         with patch.object(menubar, "day_seconds", return_value=1800), \
-             patch.object(menubar, "streak_days", return_value=0), \
+             patch.object(menubar, "production_run_days", return_value=0), \
              patch.object(menubar, "_get_default_goals", return_value=(None, None)):
             self.app._refresh(None)
         self.assertEqual(self.app.title, "\u26a0 \u00bd")
@@ -432,17 +432,18 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
         with patch.object(menubar, "day_seconds", return_value=5400), \
-             patch.object(menubar, "streak_days", return_value=7):
+             patch.object(menubar, "production_run_days", return_value=7):
             self.app._refresh(None)
         self.assertIn("💿7", self.app.title)
 
-    def test_refresh_title_marks_daily_goal_complete(self):
+    def test_refresh_title_omits_daily_goal(self):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
         with patch.object(menubar, "day_seconds", return_value=7200), \
              patch.object(menubar, "_get_default_goals", return_value=(2.0, None)):
             self.app._refresh(None)
-        self.assertIn("✓", self.app.title)
+        self.assertNotIn("✓", self.app.title)
+        self.assertNotIn("/2h", self.app.title)
 
     def test_refresh_title_no_quarter_when_zero(self):
         self.app.tracker_thread.status.return_value = self._make_status(

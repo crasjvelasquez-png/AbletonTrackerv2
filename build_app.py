@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import struct
+import plistlib
 from io import BytesIO
 from pathlib import Path
 
@@ -142,15 +143,41 @@ exec "$PYTHON" {entry} >> "$LOG_DIR/{app_name.lower()}.log" 2>&1
     return bundle
 
 
+def build_notification_sender(bundle: Path, icns: Path) -> None:
+    """Bundle a signed native UserNotifications sender under Tracker's own icon."""
+    helper = bundle / "Contents" / "Resources" / "Tracker Notifications.app"
+    contents = helper / "Contents"
+    (contents / "MacOS").mkdir(parents=True)
+    (contents / "Resources").mkdir()
+    shutil.copy2(icns, contents / "Resources" / "icon.icns")
+    with (contents / "Info.plist").open("wb") as handle:
+        plistlib.dump({
+            "CFBundleName": "Tracker", "CFBundleDisplayName": "Tracker",
+            "CFBundleIdentifier": "com.abletontracker.notifications",
+            "CFBundleExecutable": "tracker-notify", "CFBundlePackageType": "APPL",
+            "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0",
+            "CFBundleIconFile": "icon.icns", "LSUIElement": True,
+            "LSMinimumSystemVersion": "10.14",
+        }, handle)
+    subprocess.run(["xcrun", "swiftc", "-O", str(APP_DIR / "notification_sender.swift"),
+                    "-o", str(contents / "MacOS" / "tracker-notify")], check=True)
+    subprocess.run(["codesign", "--force", "--sign", "-", str(helper)], check=True)
+
+
 def main() -> None:
     DIST_DIR.mkdir(exist_ok=True)
     for app_name, config in APPS.items():
         icns = build_icon(app_name, str(config["accent"]))
         bundle = build_bundle(app_name, config, icns)
+        build_notification_sender(bundle, icns)
         subprocess.run(
             ["codesign", "--force", "--deep", "--sign", "-", str(bundle)],
             check=True,
         )
+        # Register the embedded sender so macOS can resolve its bundle and artwork.
+        registrar = Path("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+        if registrar.exists():
+            subprocess.run([str(registrar), "-f", str(bundle / "Contents" / "Resources" / "Tracker Notifications.app")], check=True)
         print(f"Built and signed {bundle}")
 
 

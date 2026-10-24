@@ -779,6 +779,12 @@ def streak_days(today: date | None = None) -> int:
     return compute_streak_days(_all_daily_totals(), today)
 
 
+def production_run_days(today: date | None = None) -> int:
+    """Use the dashboard's 15-minute qualifying-day rule for menu and reminders."""
+    totals = {day: seconds for day, seconds in _all_daily_totals().items() if seconds >= 900}
+    return compute_streak_days(totals, today)
+
+
 def yesterday_seconds() -> float:
     """Tracked seconds for yesterday."""
     return day_seconds((date.today() - timedelta(days=1)))

@@ -55,25 +55,20 @@ class NotificationCoordinatorTests(unittest.TestCase):
             **values,
         )
 
-    def test_late_streak_and_weekly_pace_banners(self):
-        now = datetime(2026, 7, 23, 18, 0)
+    def test_one_supportive_reminder_per_day(self):
+        sent = self.check(datetime(2026, 7, 23, 18), today_seconds=0,
+                          week_seconds=0, weekly_goal_hours=7, streak_days=12)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].title, "Make a little music today")
+        self.assertIn("15m", sent[0].message)
+        self.assertEqual(self.check(datetime(2026, 7, 23, 19), today_seconds=0,
+                         week_seconds=0, weekly_goal_hours=7, streak_days=12), [])
 
-        sent = self.check(
-            now,
-            today_seconds=0,
-            week_seconds=0,
-            weekly_goal_hours=7,
-            streak_days=12,
-        )
-
-        self.assertEqual(
-            [message.title for message in sent],
-            [
-                "Your 12-day streak is at risk 🔥",
-                "Weekly goal check-in",
-            ],
-        )
-        self.assertIn("behind pace", sent[1].subtitle)
+    def test_active_tracking_defers_non_operational_notifications(self):
+        now = datetime(2026, 7, 23, 18)
+        self.assertEqual(self.check(now, daily_goal_hours=1, tracker_status=TrackerStatus(
+            state="tracking", checked_at=now.timestamp())), [])
+        self.assertEqual(len(self.check(now, daily_goal_hours=1)), 1)
 
     def test_notifications_are_deduplicated_across_coordinator_instances(self):
         now = datetime(2026, 7, 23, 18, 0)
@@ -96,7 +91,7 @@ class NotificationCoordinatorTests(unittest.TestCase):
             deliver=self.delivered.append,
         )
 
-        self.assertEqual(len(first), 2)
+        self.assertEqual(len(first), 1)
         self.assertEqual(second, [])
 
     def test_no_notifications_before_morning_window(self):
@@ -110,15 +105,12 @@ class NotificationCoordinatorTests(unittest.TestCase):
 
         self.assertEqual(sent, [])
 
-    def test_streak_only_scheduled_hours_and_stops_after_activity(self):
-        for hour in (11, 13, 17, 19, 22):
+    def test_run_reminder_window_and_qualifying_threshold(self):
+        for hour in (8, 12, 17, 21, 23):
             self.assertEqual(self.check(datetime(2026, 7, 22, hour), today_seconds=0, weekly_goal_hours=None), [])
-        for hour in (12, 18, 23):
-            now = datetime(2026, 7, 22, hour)
-            self.assertEqual(len(self.check(now, today_seconds=0, weekly_goal_hours=None)), 1)
-            self.assertEqual(self.check(now, today_seconds=0, weekly_goal_hours=None), [])
-        self.assertEqual(self.check(datetime(2026, 7, 23, 12), today_seconds=1, weekly_goal_hours=None), [])
-        self.assertEqual(self.check(datetime(2026, 7, 23, 12), today_seconds=0, streak_days=0, weekly_goal_hours=None), [])
+        self.assertEqual(len(self.check(datetime(2026, 7, 22, 18), today_seconds=899, weekly_goal_hours=None)), 1)
+        self.assertEqual(self.check(datetime(2026, 7, 23, 18), today_seconds=900, weekly_goal_hours=None), [])
+        self.assertEqual(self.check(datetime(2026, 7, 23, 18), today_seconds=0, streak_days=0, weekly_goal_hours=None), [])
 
     def test_daily_goal_threshold_and_persistence(self):
         now = datetime(2026, 7, 22, 8)
@@ -148,7 +140,7 @@ class NotificationCoordinatorTests(unittest.TestCase):
         self.assertEqual(len(check(23, "two")), 1)
 
     def test_failed_delivery_retries(self):
-        now = datetime(2026, 7, 22, 12)
+        now = datetime(2026, 7, 22, 18)
         def fail(message):
             raise RuntimeError("test delivery failure")
         self.assertEqual(self.coordinator.check(now=now, today_seconds=0, week_seconds=0,
