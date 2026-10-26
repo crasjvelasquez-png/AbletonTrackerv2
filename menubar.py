@@ -388,15 +388,12 @@ class AbletonTrackerApp(rumps.App):
         self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
     ) -> str:
         time_str = fmt_goal_time(seconds, None)
-        parts = [icon, time_str]
-        if streak > 0:
-            parts.append(f"💿{streak}")
-        return " ".join(parts)
+        return f"{icon} {time_str}"
 
     def _update_streak(self, streak: int):
         if streak > 0:
             day_word = "day" if streak == 1 else "days"
-            self.streak_item.title = f"💿 Run: {streak} {day_word}"
+            self.streak_item.title = f"Run: {streak} {day_word}"
         else:
             self.streak_item.title = "Run: —"
 

@@ -178,10 +178,11 @@ window.DashboardExtras = (() => {
     for (let day = new Date(padded); day <= today; day = addDays(day,1)) {
       const key = localDateKey(day); const seconds = daily.get(key) || 0;
       if (day < start) { cells += '<span aria-hidden="true"></span>'; continue; }
-      cells += `<button class="year-cell" type="button" data-year-date="${key}" title="${key} · ${fmt.dur(seconds)}" aria-label="${key}, ${fmt.dur(seconds)} recorded" style="background:${heatmapColor(seconds,max)}"></button>`;
+      const label = day.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+      cells += `<button class="year-cell" type="button" data-year-date="${key}" title="${escape(label)} · ${fmt.dur(seconds)}" aria-label="${escape(label)}, ${fmt.dur(seconds)} recorded" style="background:${heatmapColor(seconds,max)}"></button>`;
     }
     const dateLabel = day => day.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    return `<p class="project-hint">${escape(dateLabel(start))} – ${escape(dateLabel(today))} · rolling year</p><div class="year-legend"><span>${[...daily.values()].filter(v=>v>0).length} active days</span><span>Daily time · stronger accent means more · peak ${fmt.dur(max === 1 ? 0 : max)}</span></div><div class="year-scroll" tabindex="0" aria-label="Year activity, scroll horizontally"><div class="year-grid">${cells}</div></div><p class="project-hint" id="yearSelection" role="status">Select a day to see its recorded time. Arrow keys move between days.</p><button class="btn small year-detail" id="hourlyActivity">Activity by hour</button>`;
+    return `<p class="project-hint">${escape(dateLabel(start))} – ${escape(dateLabel(today))} · rolling year</p><div class="year-legend"><span>${[...daily.values()].filter(v=>v>0).length} active days</span><span>Daily time · stronger accent means more · peak ${fmt.dur(max === 1 ? 0 : max)}</span></div><div class="year-scroll" tabindex="0" aria-label="Year activity, scroll horizontally"><div class="year-grid">${cells}</div></div><p class="project-hint" id="yearSelection" role="status">Hover or select a day to see its date and recorded time. Arrow keys move between days.</p><button class="btn small year-detail" id="hourlyActivity">Activity by hour</button>`;
   }
   function activityDetail(dateKey = '') {
     showActivity();
@@ -238,7 +239,9 @@ window.DashboardExtras = (() => {
     const yearButtons = [...container.querySelectorAll('[data-year-date]')];
     yearButtons.forEach((button,index) => {
       button.tabIndex = index === yearButtons.length-1 ? 0 : -1;
-      button.onclick = () => { $('yearSelection').textContent = `${button.dataset.yearDate} · ${fmt.dur(dailySecondsByKey(data.year_daily).get(button.dataset.yearDate) || 0)} recorded`; };
+      button.onclick = () => { $('yearSelection').textContent = button.getAttribute('aria-label'); };
+      button.onpointerenter = button.onclick;
+      button.onfocus = button.onclick;
       button.onkeydown = event => {
         const direction = {ArrowLeft:-7,ArrowRight:7,ArrowUp:-1,ArrowDown:1,Home:-index,End:yearButtons.length-1-index}[event.key];
         if (direction === undefined) return;

@@ -438,13 +438,14 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             self.app._refresh(None)
         self.assertIn("1\u00bd", self.app.title)
 
-    def test_refresh_title_includes_streak_while_tracking(self):
+    def test_refresh_title_omits_streak_while_tracking(self):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
         with patch.object(menubar, "day_seconds", return_value=5400), \
              patch.object(menubar, "production_run_days", return_value=7):
             self.app._refresh(None)
-        self.assertIn("💿7", self.app.title)
+        self.assertEqual(self.app.title, "● 1½")
+        self.assertEqual(self.app.streak_item.title, "Run: 7 days")
 
     def test_refresh_title_omits_daily_goal(self):
         self.app.tracker_thread.status.return_value = self._make_status(

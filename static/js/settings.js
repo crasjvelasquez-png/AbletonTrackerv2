@@ -128,7 +128,7 @@
     if (!grid) return;
 
     if (options.length === 0) {
-      grid.innerHTML = `<div class="empty-mini">No categories yet — create one above.</div>`;
+      grid.innerHTML = `<div class="empty-mini">No categories yet. Create one above.</div>`;
       return;
     }
 

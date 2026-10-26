@@ -1,20 +1,20 @@
-/* Solid, warm surfaces shared by the dashboard, Settings, and dialogs. */
+/* Neutral gray surfaces and blue accents shared by the dashboard, Settings, and dialogs. */
 :root {
   color-scheme:light;
-  --bg:#f5f2ec; --bg-elev:#fffdf9; --surface:#f9f6f0; --surface-2:#fffdf9;
-  --surface-hover:#eee9e0; --bg-card:#fffdf9; --bg-card-strong:#fffdf9;
-  --text-primary:#302c27; --text-secondary:#6b635a;
-  --ink:#302c27; --ink-2:#514a42; --ink-3:#6b635a; --ink-4:#71685e;
-  --accent:#a44f38; --accent-soft:#f3e6de; --accent-line:#d8b4a4; --accent-contrast:#fffdf9;
+  --bg:#f3f4f6; --bg-elev:#ffffff; --surface:#f7f8fa; --surface-2:#ffffff;
+  --surface-hover:#e9ecf0; --bg-card:#ffffff; --bg-card-strong:#ffffff;
+  --text-primary:#25282d; --text-secondary:#606874;
+  --ink:#25282d; --ink-2:#454c57; --ink-3:#606874; --ink-4:#606975;
+  --accent:#2563b8; --accent-soft:#e5eefb; --accent-line:#a7c3e8; --accent-contrast:#ffffff;
   --live:#357644; --danger:#b63530; --danger-soft:#fae7e3;
-  --border:#e0d9cf; --border-strong:#c9beb0; --row-border:#e8e2d9;
-  --target-track:#e8e2d9; --bar-bg:#e8e2d9; --heatmap-base:#e8e2d9;
+  --border:#dce0e6; --border-strong:#bbc2cd; --row-border:#e5e8ed;
+  --target-track:#e5e8ed; --bar-bg:#e5e8ed; --heatmap-base:#e5e8ed;
   --target-shadow:none; --target-inner-shadow:none;
   --page-wash:none; --page-glow-a:none; --page-glow-b:none;
-  --header-bg:#f5f2ec; --logo-bg:#fffdf9; --logo-border:#e0d9cf; --logo-shadow:none;
-  --glass-highlight:none; --control-bg:#f9f6f0; --control-bg-strong:#fffdf9; --control-inner:#fffdf9;
-  --shadow-1:none; --shadow-card-hover:none; --toast-shadow:0 4px 16px #302c2714;
-  --modal-backdrop:#231e1980; --modal-backdrop-shadow:none;
+  --header-bg:#f3f4f6; --logo-bg:#ffffff; --logo-border:#dce0e6; --logo-shadow:none;
+  --glass-highlight:none; --control-bg:#f7f8fa; --control-bg-strong:#ffffff; --control-inner:#ffffff;
+  --shadow-1:none; --shadow-card-hover:none; --toast-shadow:0 4px 16px #25282d14;
+  --modal-backdrop:#14171c80; --modal-backdrop-shadow:none;
   --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",sans-serif;
   --font-display:var(--font-body);
   --font-mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace;
@@ -26,30 +26,30 @@
 @media(prefers-color-scheme:dark) {
   :root:not([data-theme="light"]) {
     color-scheme:dark;
-    --bg:#24221f; --bg-elev:#2c2925; --surface:#302d29; --surface-2:#35312c;
-    --surface-hover:#3c3731; --bg-card:#2c2925; --bg-card-strong:#302d29;
-    --text-primary:#eee8df; --text-secondary:#bdb3a6;
-    --ink:#eee8df; --ink-2:#d3c9bb; --ink-3:#bdb3a6; --ink-4:#b4a99c;
-    --accent:#e3a58c; --accent-soft:#47342b; --accent-line:#7a5543; --accent-contrast:#24221f;
+    --bg:#202225; --bg-elev:#292c30; --surface:#2e3136; --surface-2:#33373d;
+    --surface-hover:#3b4048; --bg-card:#292c30; --bg-card-strong:#2e3136;
+    --text-primary:#eff1f4; --text-secondary:#b6beca;
+    --ink:#eff1f4; --ink-2:#d0d6df; --ink-3:#b6beca; --ink-4:#aeb7c4;
+    --accent:#82b4ff; --accent-soft:#283b56; --accent-line:#4a6c98; --accent-contrast:#202225;
     --live:#91c79c; --danger:#f09487; --danger-soft:#4b2b27;
-    --border:#494239; --border-strong:#6b6053; --row-border:#403a32;
-    --target-track:#494239; --bar-bg:#494239; --heatmap-base:#39352f;
-    --header-bg:#24221f; --logo-bg:#302d29; --logo-border:#494239;
-    --control-bg:#35312c; --control-bg-strong:#3c3731; --control-inner:#2c2925;
+    --border:#424852; --border-strong:#616c7c; --row-border:#393f48;
+    --target-track:#424852; --bar-bg:#424852; --heatmap-base:#353a42;
+    --header-bg:#202225; --logo-bg:#2e3136; --logo-border:#424852;
+    --control-bg:#33373d; --control-bg-strong:#3b4048; --control-inner:#292c30;
   }
 }
 :root[data-theme="dark"] {
   color-scheme:dark;
-  --bg:#24221f; --bg-elev:#2c2925; --surface:#302d29; --surface-2:#35312c;
-  --surface-hover:#3c3731; --bg-card:#2c2925; --bg-card-strong:#302d29;
-  --text-primary:#eee8df; --text-secondary:#bdb3a6;
-  --ink:#eee8df; --ink-2:#d3c9bb; --ink-3:#bdb3a6; --ink-4:#b4a99c;
-  --accent:#e3a58c; --accent-soft:#47342b; --accent-line:#7a5543; --accent-contrast:#24221f;
+  --bg:#202225; --bg-elev:#292c30; --surface:#2e3136; --surface-2:#33373d;
+  --surface-hover:#3b4048; --bg-card:#292c30; --bg-card-strong:#2e3136;
+  --text-primary:#eff1f4; --text-secondary:#b6beca;
+  --ink:#eff1f4; --ink-2:#d0d6df; --ink-3:#b6beca; --ink-4:#aeb7c4;
+  --accent:#82b4ff; --accent-soft:#283b56; --accent-line:#4a6c98; --accent-contrast:#202225;
   --live:#91c79c; --danger:#f09487; --danger-soft:#4b2b27;
-  --border:#494239; --border-strong:#6b6053; --row-border:#403a32;
-  --target-track:#494239; --bar-bg:#494239; --heatmap-base:#39352f;
-  --header-bg:#24221f; --logo-bg:#302d29; --logo-border:#494239;
-  --control-bg:#35312c; --control-bg-strong:#3c3731; --control-inner:#2c2925;
+  --border:#424852; --border-strong:#616c7c; --row-border:#393f48;
+  --target-track:#424852; --bar-bg:#424852; --heatmap-base:#353a42;
+  --header-bg:#202225; --logo-bg:#2e3136; --logo-border:#424852;
+  --control-bg:#33373d; --control-bg-strong:#3b4048; --control-inner:#292c30;
 }
 html {scrollbar-color:var(--border-strong) var(--bg);scroll-padding-top:90px}
 body {line-height:1.5;letter-spacing:0}
@@ -67,6 +67,9 @@ header,.nav-tab.is-active {box-shadow:none}
 .section-title em {color:var(--ink);font-weight:600}
 .section-meta,.campaign-share,.campaign-meta,.field-label,.goal-label,.detail-modal-subtitle {font-size:13px}
 .chart-card,.table-card,.card,.modal {background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:none}
+.chart-card,.table-card {padding:var(--ui-card-pad-y) var(--ui-card-pad-x)}
+#appDashboard>.weekly-quest,#appDashboard>.table-card {box-shadow:none}
+.weekly-quest,.chart-card-wide,.table-card {margin-bottom:var(--ui-section-gap)}
 .chart-card:hover,.table-card:hover,.card:hover {box-shadow:none;transform:none}
 .btn,.daily-target-nav-btn,.heatmap-nav-btn,.text-input,.goal-input-wrap,.notes-textarea,.tracker-date-input,.tracker-calendar-nav button {border-radius:var(--radius-control);box-shadow:none}
 .btn,.daily-target-nav-btn,.heatmap-nav-btn {min-height:36px}
@@ -75,10 +78,28 @@ header,.nav-tab.is-active {box-shadow:none}
 .goal-form,.scale-control-panel,.category-library-card {border-radius:var(--radius-sm)}
 .theme-option.is-active,.report-form .theme-option.is-active {box-shadow:none}
 .theme-option.is-active::after {box-shadow:none}
-.theme-option.is-active::before {background:var(--accent-contrast);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E") center/10px 10px no-repeat}
-.theme-option-swatch--light {background:#f5f2ec}
-.theme-option-swatch--dark {background:#24221f}
-.theme-option-swatch--system {background:linear-gradient(135deg,#f5f2ec 50%,#24221f 50%)}
+.weekday-option.is-active,.weekday-option.is-active::after {box-shadow:none}
+.theme-picker,.weekday-picker {display:flex;flex-wrap:wrap;gap:8px}
+.theme-picker .theme-option,.weekday-picker .weekday-option {flex-direction:row;min-height:44px;gap:8px;padding:10px 38px 10px 12px}
+.theme-picker .theme-option-swatch {width:20px;height:20px;border-radius:4px}
+.theme-picker .theme-option.is-active::before,.theme-picker .theme-option.is-active::after,
+.weekday-option.is-active::before,.weekday-option.is-active::after {top:50%;transform:translateY(-50%)}
+.weekday-option-abbrev {display:none}
+.weekday-option-day {font-size:13px;font-weight:600;text-transform:none;letter-spacing:0;color:inherit}
+.settings-pane.is-active {gap:var(--ui-section-gap)}
+.settings-content .chart-card,.settings-content .table-card {margin-bottom:0}
+.settings-content .category-form {display:grid;gap:16px}
+.category-form .field-grid {display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.75fr);gap:24px;align-items:start}
+.category-form .field-note {font-size:13px;line-height:1.6;color:var(--ink-3)}
+.category-form .settings-actions {display:flex;flex-wrap:wrap;gap:8px}
+.settings-content .scale-control {margin-top:var(--ui-section-gap)}
+.theme-option.is-active::before,.weekday-option.is-active::before {background:var(--accent-contrast);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E") center/10px 10px no-repeat}
+.tracker-calendar-day.is-selected,.today-clear-mark {color:var(--accent-contrast)}
+.tracker-calendar-day.is-selected::after,.notes-todo-item input[type="checkbox"]:checked::after {background:var(--accent-contrast)}
+.today-task-check::after {border-color:var(--accent-contrast)}
+.theme-option-swatch--light {background:#f3f4f6}
+.theme-option-swatch--dark {background:#202225}
+.theme-option-swatch--system {background:linear-gradient(135deg,#f3f4f6 50%,#202225 50%)}
 .modal-backdrop,.detail-modal-backdrop {background:var(--modal-backdrop);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
 .modal-backdrop.show .modal,.detail-modal-backdrop.is-open .detail-modal {animation:warm-reveal 150ms ease-out}
 .modal-backdrop.show,.detail-modal-backdrop.is-open {animation:none}
@@ -171,6 +192,9 @@ button,summary,a,input,select,textarea {transition-duration:150ms}
   #weeklyGoalCard .quest-edit-row {grid-row:3}
   #weeklyGoalCard .quest-edit {grid-row:5}
   .review-metrics,.project-metrics {gap:14px}
+}
+@media(max-width:700px) {
+  .category-form .field-grid {grid-template-columns:minmax(0,1fr);gap:16px}
 }
 @media(max-width:520px) {
   header {padding:0 16px;gap:8px}
