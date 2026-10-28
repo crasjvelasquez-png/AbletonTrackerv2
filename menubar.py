@@ -8,6 +8,9 @@ import threading
 import subprocess
 import os
 import fcntl
+import math
+import struct
+import zlib
 from datetime import date, datetime
 from pathlib import Path
 
@@ -42,6 +45,47 @@ TRACKER_WAKE_INTERVAL = 5
 NOTIFICATION_CHECK_INTERVAL = 30
 NOTIFICATION_STATE_PATH = Path.home() / ".ableton_tracker" / "notification_state.json"
 INSTANCE_LOCK_PATH = Path.home() / ".ableton_tracker" / "tracker-app.lock"
+BADGE_DIR = Path.home() / ".ableton_tracker" / "menubar-badges"
+BADGE_PX = 40  # rumps sizes status icons to 20pt; draw at 2x.
+BADGE_STEPS = 24
+BADGE_ACCENT = (217, 119, 87)
+BADGE_GLYPHS = {"tracking": "●", "open": "◐", "idle": "○"}
+
+
+def render_badge_png(state: str, progress: float) -> bytes:
+    """Draw the minimal status badge: a thin goal ring, filled clockwise from 12."""
+    progress = min(max(progress or 0.0, 0.0), 1.0)
+    color = BADGE_ACCENT if state == "tracking" else (0, 0, 0)
+    arc_alpha = 0.55 if state == "idle" else 1.0
+    center, radius, half_stroke, dot = BADGE_PX / 2, 12.0, 1.5, 3.0
+    sub = 4
+
+    def alpha_at(x: float, y: float) -> float:
+        dx, dy = x - center, y - center
+        dist = math.hypot(dx, dy)
+        if abs(dist - radius) <= half_stroke:
+            angle = math.atan2(dx, -dy) % math.tau
+            return arc_alpha if angle < progress * math.tau else 0.28
+        if state == "tracking" and dist <= dot:
+            return 1.0
+        return 0.0
+
+    rows = bytearray()
+    for py in range(BADGE_PX):
+        rows.append(0)
+        for px in range(BADGE_PX):
+            total = sum(
+                alpha_at(px + (i + 0.5) / sub, py + (j + 0.5) / sub)
+                for i in range(sub) for j in range(sub)
+            )
+            rows += bytes((*color, round(255 * total / (sub * sub))))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", BADGE_PX, BADGE_PX, 8, 6, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b""))
 
 
 def acquire_instance_lock(path: Path = INSTANCE_LOCK_PATH):
@@ -307,7 +351,8 @@ class AbletonTrackerApp(rumps.App):
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error
         if failures > 0:
-            self.title = self._build_title("⚠", today, daily_goal, streak, active=False)
+            self.icon, self._badge_key = None, None
+            self.title = f"⚠ {fmt_goal_time(today, None)}"
             trunc = (last_error or "unknown")[:60]
             self.status_item.title = f"Error ({failures}): {trunc}"
             self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
@@ -321,10 +366,10 @@ class AbletonTrackerApp(rumps.App):
         ableton_up = status.state not in (STATE_ABLETON_CLOSED,)
 
         if status.state == STATE_PAUSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Paused"
         elif status.state == STATE_IDLE_PAUSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             idle_seconds = int(status.hid_idle_seconds)
             if idle_seconds < 60:
                 idle_label = f"{idle_seconds}s"
@@ -333,16 +378,16 @@ class AbletonTrackerApp(rumps.App):
             project = status.resume_hint_project or "last project"
             self.status_item.title = f"Idle {idle_label} — {project}"
         elif status.state == STATE_TRACKING and status.project_name:
-            self.title = self._build_title("●", today, daily_goal, streak, active=True)
+            self.title = self._build_title("tracking", today, daily_goal, streak, active=True)
             self.status_item.title = f"Working on: {status.project_name}"
         elif status.state == STATE_ABLETON_OPEN:
-            self.title = self._build_title("◐", today, daily_goal, streak, active=False)
+            self.title = self._build_title("open", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton open (no project)"
         elif status.state == STATE_ABLETON_CLOSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton not running"
         else:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Idle"
         if status.checked_at and status.message:
             self.status_item.title = status.message
@@ -403,10 +448,35 @@ class AbletonTrackerApp(rumps.App):
             raise RuntimeError(result.stderr.strip() or f"Tracker notification sender exited {result.returncode}")
 
     def _build_title(
-        self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
+        self, state: str, seconds: float, goal: float | None, streak: int, active: bool
     ) -> str:
         time_str = fmt_goal_time(seconds, None)
-        return f"{icon} {time_str}"
+        progress = seconds / (goal * 3600) if goal and goal > 0 else 1.0
+        if self._set_badge(state, progress):
+            return time_str
+        return f"{BADGE_GLYPHS[state]} {time_str}"
+
+    def _set_badge(self, state: str, progress: float) -> bool:
+        """Swap the status icon only when the drawn badge changes; False means use glyphs."""
+        key = (state, round(min(max(progress, 0.0), 1.0) * BADGE_STEPS))
+        if getattr(self, "_badge_key", None) == key:
+            return True
+        path = BADGE_DIR / f"{key[0]}-{key[1]}.png"
+        try:
+            if not path.exists():
+                BADGE_DIR.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_bytes(render_badge_png(key[0], key[1] / BADGE_STEPS))
+                tmp.replace(path)
+            self.template = state != "tracking"
+            self.icon = str(path)
+        except Exception as exc:
+            print(f"[badge] falling back to glyph title: {exc}", file=sys.stderr)
+            self._badge_key = None
+            self.icon = None
+            return False
+        self._badge_key = key
+        return True
 
     def _update_streak(self, streak: int):
         if streak > 0:

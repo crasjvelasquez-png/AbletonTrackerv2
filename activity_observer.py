@@ -205,36 +205,8 @@ class NativeObserver:
             self.wake.set()
         for name in names:
             self.tokens.append(center.addObserverForName_object_queue_usingBlock_(name,None,None,changed))
-        # Global monitor only stores type/time/ownership. Never read characters.
-        mask=0
-        kinds={10:'key',1:'click',3:'click',25:'click',6:'drag',7:'drag',27:'drag',22:'scroll'}
-        for event_type in kinds: mask|=1<<event_type
-        def event(e):
-            now=time.monotonic()
-            with self.lock:
-                # Most global events belong to other apps. Avoid LaunchServices/XPC
-                # work per keystroke while Live does not own focus.
-                live_pid=self.input.pid
-                if live_pid is None or self.sleeping:
-                    return
-                front=self.workspace.frontmostApplication()
-                pid=int(front.processIdentifier()) if front else None
-                if pid==live_pid:
-                    kind=kinds.get(int(e.type()),'')
-                    if kind=='scroll' and e.scrollingDeltaX()==0 and e.scrollingDeltaY()==0:
-                        return
-                    before=self.input.last_input
-                    self.input.event(kind,now,pid)
-                    if self.input.last_input!=before:
-                        self.input_source='native_events'
-            # Coalesce events; the tracker flush remains limited to five seconds.
-        try:
-            trusted=bool(self.ax.lib.AXIsProcessTrusted())
-            if trusted:
-                self.monitor=A.NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(mask,event)
-                self.native_events=self.monitor is not None
-        except Exception:
-            self.native_events=False
+        # No NSEvent global monitor: registering one stops the status item from
+        # receiving clicks. snapshot() reads input from CGEventSource counters.
         with self.lock: self._sync_focus(time.monotonic())
 
     def _live_app(self):

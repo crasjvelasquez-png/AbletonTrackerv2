@@ -446,8 +446,51 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         with patch.object(menubar, "day_seconds", return_value=5400), \
              patch.object(menubar, "production_run_days", return_value=7):
             self.app._refresh(None)
-        self.assertEqual(self.app.title, "● 1½")
+        self.assertEqual(self.app.title, "1½")
+        self.assertEqual(self.app._badge_key[0], "tracking")
         self.assertEqual(self.app.streak_item.title, "Run: 7 days")
+
+    def test_badge_progress_follows_daily_goal_and_icon_is_reused(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(menubar, "BADGE_DIR", Path(tmp)), \
+             patch.object(menubar, "day_seconds", return_value=3600), \
+             patch.object(menubar, "_get_default_goals", return_value=(2.0, None)):
+            self.app._refresh(None)
+            first_icon = self.app.icon
+            self.app._refresh(None)
+            self.assertEqual(self.app._badge_key, ("tracking", 12))
+            self.assertIs(self.app.icon, first_icon)
+            self.assertFalse(self.app.template)
+
+    def test_badge_idle_states_use_template_icon(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_ABLETON_CLOSED)
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(menubar, "BADGE_DIR", Path(tmp)), \
+             patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app._badge_key[0], "idle")
+        self.assertTrue(self.app.template)
+
+    def test_badge_write_failure_falls_back_to_glyph(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with patch.object(menubar, "BADGE_DIR", Path("/dev/null/nope")), \
+             patch.object(menubar, "day_seconds", return_value=5400):
+            self.app._refresh(None)
+        self.assertEqual(self.app.title, "● 1½")
+
+    def test_badge_png_is_valid(self):
+        import struct, zlib
+        for state in ("tracking", "open", "idle"):
+            for progress in (-1, 0, 0.5, 3):
+                data = menubar.render_badge_png(state, progress)
+                self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(struct.unpack(">II", data[16:24]), (40, 40))
+                idat = data[data.index(b"IDAT") + 4:data.index(b"IEND") - 8]
+                self.assertEqual(len(zlib.decompress(idat)), 40 * (1 + 40 * 4))
 
     def test_refresh_title_omits_daily_goal(self):
         self.app.tracker_thread.status.return_value = self._make_status(
