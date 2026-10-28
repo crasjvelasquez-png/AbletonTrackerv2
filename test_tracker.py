@@ -8,7 +8,19 @@ from unittest.mock import patch
 import tracker
 
 
+def fixture_poll(t, paused=False):
+    now,mono=tracker.time.time(),tracker.time.monotonic()
+    running=tracker.is_ableton_running()
+    project=tracker.get_project_name(t.project_name) if running else None
+    hid=tracker.get_idle_seconds() if running else 0
+    return t.poll_once(paused=paused,observation=tracker.Observation(
+        wall=now,mono=mono,pid=42 if running else None,foreground=running,
+        project=project,project_at=mono,input_at=mono-hid,
+        audio=False,audio_at=mono,source='fixture'))
+
+
 class TrackerPauseResumeTests(unittest.TestCase):
+    # Strict pause/resume scenarios live in test_tracker_policy.py, written first.
     def setUp(self):
         fd, path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
@@ -18,6 +30,7 @@ class TrackerPauseResumeTests(unittest.TestCase):
         tracker.DB_PATH = self.db_path
         tracker.setup_db()
 
+
     def _cleanup_db(self):
         for suffix in ("", "-shm", "-wal"):
             try:
@@ -25,47 +38,9 @@ class TrackerPauseResumeTests(unittest.TestCase):
             except FileNotFoundError:
                 pass
 
-    def test_resume_uses_last_known_project_when_titles_are_transient(self):
-        title_state = {"mode": "project"}
-
-        def fake_get_project_name(current_project=None):
-            if title_state["mode"] == "project":
-                return "Real Project"
-            return None
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", side_effect=fake_get_project_name):
-            t = tracker.Tracker()
-
-            t.poll_once(paused=False)
-            first_session = t.session_id
-            self.assertEqual(t.project_name, "Real Project")
-
-            title_state["mode"] = "transient"
-            t.poll_once(paused=True)
-
-            self.assertIsNone(t.session_id)
-            self.assertEqual(t.resume_hint_project, "Real Project")
-
-            t.poll_once(paused=False)
-
-            self.assertNotEqual(t.session_id, first_session)
-            self.assertEqual(t.project_name, "Real Project")
-            self.assertIsNone(t.resume_hint_project)
-            self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_stops_tracking_cleanly_when_live_is_not_running(self):
-        with patch.object(tracker, "is_ableton_running", return_value=False):
-            t = tracker.Tracker()
-            t.resume_hint_project = "Real Project"
-            t.poll_once(paused=False)
-            self.assertIsNone(t.resume_hint_project)
-            self.assertEqual(t.status().state, tracker.STATE_ABLETON_CLOSED)
 
     def test_tick_uses_monotonic_elapsed_instead_of_wall_clock_gap(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
 
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
@@ -82,59 +57,9 @@ class TrackerPauseResumeTests(unittest.TestCase):
 
         self.assertEqual(active, 10.0)
 
-    def test_idle_pause_requires_audio_to_be_quiet(self):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker, "get_project_name", return_value="Real Project"):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
-
-        self.assertIsNotNone(t.session_id)
-        self.assertFalse(t.status().idle_paused)
-        self.assertTrue(t.status().audio_active)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_idle_pause_closes_when_mouse_and_audio_are_idle(self):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1000.0):
-            t = tracker.Tracker()
-            t._start("Real Project")
-            t.last_audio_active = 900.0
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Real Project")
-        self.assertTrue(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
-        self.assertEqual(t.status().idle_pause_started_at, 1000.0)
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=61), \
-             patch.object(tracker.time, "time", return_value=1030.0):
-            t.poll_once()
-            self.assertEqual(t.status().idle_pause_started_at, 1000.0)
-            t.poll_once(paused=True)
-            self.assertIsNone(t.status().idle_pause_started_at)
-
-    def test_unavailable_audio_probe_does_not_idle_pause_open_session(self):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=None), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker, "get_project_name", return_value="Real Project"):
-            t = tracker.Tracker()
-            t._start("Real Project")
-            t.poll_once(paused=False)
-
-        self.assertIsNotNone(t.session_id)
-        self.assertFalse(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
 
     def test_close_adds_final_elapsed_since_last_tick(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Real Project")
@@ -152,8 +77,9 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertEqual(row[0], 15.0)
         self.assertIsNotNone(row[1])
 
+
     def test_tick_does_not_update_externally_closed_session(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Real Project")
@@ -179,215 +105,7 @@ class TrackerPauseResumeTests(unittest.TestCase):
         self.assertIsNotNone(row[0])
         self.assertEqual(row[1], 0.0)
 
-    def test_wake_from_sleep_grace_suppresses_idle_pause_one_cycle(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
 
-        t.last_checked_at = 1000.0
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1200.0):
-            t.last_audio_active = 900.0
-            t.poll_once(paused=False)
-
-        self.assertIsNotNone(t.session_id)
-        self.assertFalse(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_mouse_movement_resumes_after_idle_pause(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1100.0):
-            t.last_audio_active = 1000.0
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", return_value=None), \
-             patch.object(tracker.time, "time", return_value=1110.0):
-            t.poll_once(paused=False)
-
-        self.assertIsNotNone(t.session_id)
-        self.assertEqual(t.project_name, "Real Project")
-        self.assertFalse(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_idle_resume_on_mouse_activity_does_not_discard_short_row(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1100.0):
-            t.last_audio_active = 1000.0
-            t.poll_once(paused=False)
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", return_value="Real Project") as get_project_name, \
-             patch.object(tracker.time, "time", return_value=1110.0):
-            t.poll_once(paused=False)
-
-        get_project_name.assert_not_called()
-        self.assertIsNotNone(t.session_id)
-        self.assertEqual(t.project_name, "Real Project")
-        self.assertIsNone(t.resume_hint_project)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
-            row = conn.execute(
-                """
-                SELECT end_time IS NULL, active_seconds
-                FROM sessions
-                WHERE id=?
-                """,
-                (t.session_id,),
-            ).fetchone()
-        self.assertEqual(row[0], 1)
-        self.assertGreater(row[1], 0)
-
-    def test_audio_resumes_after_idle_pause_without_mouse_activity(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1100.0):
-            t.last_audio_active = 1000.0
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=60), \
-             patch.object(tracker, "get_project_name", return_value=None), \
-             patch.object(tracker.time, "time", return_value=1110.0):
-            t.poll_once(paused=False)
-
-        self.assertIsNotNone(t.session_id)
-        self.assertEqual(t.project_name, "Real Project")
-        self.assertTrue(t.status().audio_active)
-        self.assertFalse(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_repeated_idle_paused_polls_preserve_resume_hint(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1100.0):
-            t.last_audio_active = 1000.0
-            t.poll_once(paused=False)
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=45), \
-             patch.object(tracker.time, "time", return_value=1115.0):
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Real Project")
-        self.assertTrue(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_IDLE_PAUSED)
-
-    def test_manual_pause_preserves_resume_hint_and_resume_clears_it(self):
-        t = tracker.Tracker()
-        with patch.object(tracker.time, "time", return_value=1000.0):
-            t._start("Real Project")
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker.time, "time", return_value=1010.0):
-            t.poll_once(paused=True)
-
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Real Project")
-        self.assertTrue(t.status().paused)
-        self.assertEqual(t.status().state, tracker.STATE_PAUSED)
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active") as audio_active, \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", return_value=None), \
-             patch.object(tracker.time, "time", return_value=1020.0):
-            t.poll_once(paused=False)
-
-        audio_active.assert_not_called()
-        self.assertIsNotNone(t.session_id)
-        self.assertEqual(t.project_name, "Real Project")
-        self.assertIsNone(t.resume_hint_project)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
-
-    def test_resume_hint_is_cleared_even_without_open_session_when_live_quits(self):
-        t = tracker.Tracker()
-        t.resume_hint_project = "Real Project"
-
-        with patch.object(tracker, "is_ableton_running", return_value=False):
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.resume_hint_project)
-        self.assertEqual(t.status().state, tracker.STATE_ABLETON_CLOSED)
-
-    def test_idle_with_no_known_project_reports_ableton_open(self):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
-             patch.object(tracker, "get_idle_seconds", return_value=31), \
-             patch.object(tracker.time, "time", return_value=1000.0):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
-
-        self.assertIsNone(t.session_id)
-        self.assertIsNone(t.resume_hint_project)
-        self.assertFalse(t.status().idle_paused)
-        self.assertEqual(t.status().state, tracker.STATE_ABLETON_OPEN)
-
-    def test_project_switch_closes_old_session_and_tracks_new_state(self):
-        project_state = {"name": "First Project"}
-
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active") as first_audio_active, \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", side_effect=lambda current_project=None: project_state["name"]), \
-             patch.object(tracker.time, "time", return_value=1000.0):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
-            first_session = t.session_id
-        first_audio_active.assert_not_called()
-
-        project_state["name"] = "Second Project"
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active") as second_audio_active, \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "get_project_name", side_effect=lambda current_project=None: project_state["name"]), \
-             patch.object(tracker.time, "time", return_value=1040.0):
-            t.poll_once(paused=False)
-        second_audio_active.assert_not_called()
-
-        self.assertNotEqual(t.session_id, first_session)
-        self.assertEqual(t.project_name, "Second Project")
-        self.assertIsNone(t.resume_hint_project)
-        self.assertEqual(t.status().state, tracker.STATE_TRACKING)
 
 
 class AudioQuietSignalTests(unittest.TestCase):
@@ -642,7 +360,7 @@ class StartResumeTests(unittest.TestCase):
             except FileNotFoundError:
                 pass
 
-    def test_start_resumes_recent_same_project_session(self):
+    def test_start_keeps_legacy_row_separate_for_precise_evidence(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             cur = conn.execute(
                 """
@@ -654,11 +372,11 @@ class StartResumeTests(unittest.TestCase):
             session_id = cur.lastrowid
             conn.commit()
 
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=400.0):
             t._start("Real Song")
 
-        self.assertEqual(t.session_id, session_id)
+        self.assertNotEqual(t.session_id, session_id)
 
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
             rows = conn.execute(
@@ -669,8 +387,9 @@ class StartResumeTests(unittest.TestCase):
                 """
             ).fetchall()
 
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0], (session_id, "Real Song", 100.0, 400.0, None, 120.0))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0], (session_id, "Real Song", 100.0, 220.0, 220.0, 120.0))
+        self.assertEqual(rows[1][1:], ("Real Song",400.0,400.0,None,0.0))
 
     def test_start_creates_new_row_when_gap_is_fifteen_minutes_or_more(self):
         with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
@@ -683,7 +402,7 @@ class StartResumeTests(unittest.TestCase):
             )
             conn.commit()
 
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0):
             t._start("Real Song")
 
@@ -783,7 +502,7 @@ class UntitledSessionTests(unittest.TestCase):
         self.assertEqual(names, ["Untitled", "Untitled Project"])
 
     def test_untitled_to_saved_renames_session(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Untitled")
@@ -812,8 +531,8 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
+            t = tracker.Tracker(writer_lock=False)
+            fixture_poll(t)
         untitled_id = t.session_id
         self.assertEqual(t.project_name, "Untitled")
 
@@ -823,7 +542,7 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1010.0), \
              patch.object(tracker.time, "monotonic", return_value=20.0):
-            t.poll_once(paused=False)
+            fixture_poll(t)
 
         self.assertEqual(t.session_id, untitled_id)
         self.assertEqual(t.project_name, "Real Song")
@@ -837,7 +556,7 @@ class UntitledSessionTests(unittest.TestCase):
         self.assertEqual(row[0], "Real Song")
 
     def test_close_deletes_untitled_when_not_preserving_hint(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Untitled")
@@ -860,7 +579,7 @@ class UntitledSessionTests(unittest.TestCase):
         self.assertIsNone(row)
 
     def test_close_preserves_untitled_with_resume_hint(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Untitled")
@@ -919,8 +638,8 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
+            t = tracker.Tracker(writer_lock=False)
+            fixture_poll(t)
         untitled_id = t.session_id
 
         project_state["name"] = None
@@ -930,10 +649,11 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1010.0), \
              patch.object(tracker.time, "monotonic", return_value=20.0):
-            t.poll_once(paused=False)
+            fixture_poll(t)
 
-        self.assertEqual(t.session_id, untitled_id)
-        self.assertEqual(t.project_name, "Untitled")
+        self.assertIsNone(t.session_id)
+        self.assertEqual(t.resume_hint_project, "Untitled")
+        self.assertEqual(t.status().reason,"unverified")
 
     def test_ableton_closed_deletes_untitled_through_poll(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
@@ -941,8 +661,8 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker, "get_project_name", return_value="Untitled"), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
-            t = tracker.Tracker()
-            t.poll_once(paused=False)
+            t = tracker.Tracker(writer_lock=False)
+            fixture_poll(t)
         sid = t.session_id
 
         self.assertEqual(t.project_name, "Untitled")
@@ -950,7 +670,7 @@ class UntitledSessionTests(unittest.TestCase):
         with patch.object(tracker, "is_ableton_running", return_value=False), \
              patch.object(tracker.time, "time", return_value=1100.0), \
              patch.object(tracker.time, "monotonic", return_value=110.0):
-            t.poll_once(paused=False)
+            fixture_poll(t)
 
         self.assertIsNone(t.session_id)
         self.assertEqual(t.status().state, tracker.STATE_ABLETON_CLOSED)
@@ -991,7 +711,7 @@ class PauseTrackingTests(unittest.TestCase):
         self.assertEqual(len(tracker.get_pauses()), 1)
 
     def test_idle_close_then_start_records_pause_with_reason(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Song A")
@@ -1005,13 +725,13 @@ class PauseTrackingTests(unittest.TestCase):
         pauses = tracker.get_pauses()
         self.assertEqual(len(pauses), 1)
         self.assertEqual(pauses[0]["reason"], "idle")
-        self.assertEqual(pauses[0]["pause_start"], 1100.0)
+        self.assertEqual(pauses[0]["pause_start"], 1030.0)
         self.assertEqual(pauses[0]["pause_end"], 1500.0)
         self.assertEqual(pauses[0]["prev_project"], "Song A")
         self.assertEqual(pauses[0]["next_project"], "Song A")
 
     def test_project_switch_jitter_is_not_a_pause(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=2000.0), \
              patch.object(tracker.time, "monotonic", return_value=100.0):
             t._start("Song B")
@@ -1107,20 +827,16 @@ class WithinSessionPauseTests(unittest.TestCase):
                 pass
 
     def _open_session(self, name="Song A", at=1000.0):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=at), \
              patch.object(tracker.time, "monotonic", return_value=at):
             t._start(name)
         return t
 
     def _poll(self, t, hid, audio, now):
-        with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "is_audio_active", return_value=audio), \
-             patch.object(tracker, "get_idle_seconds", return_value=hid), \
-             patch.object(tracker, "get_project_name", return_value="Song A"), \
-             patch.object(tracker.time, "time", return_value=now), \
-             patch.object(tracker.time, "monotonic", return_value=now):
-            t.poll_once(paused=False)
+        t.poll_once(observation=tracker.Observation(wall=now,mono=now,pid=42,
+            foreground=True,project="Song A",project_at=now,input_at=now-hid,
+            audio=audio,audio_at=now,source="fixture"))
 
     def test_idle_below_threshold_never_opens_span(self):
         t = self._open_session()
@@ -1158,14 +874,18 @@ class WithinSessionPauseTests(unittest.TestCase):
         self.assertEqual(pauses[0]["reason"], "no_input")
 
     def test_full_poll_cycle_records_within_while_session_stays_open(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         self._poll(t, 0, False, 1000.0)
-        self._poll(t, 35, True, 1060.0)
+        for at in range(1005,1061,5):
+            self._poll(t,max(0,at-1025),True,float(at))
         self.assertIsNone(t._within_pause_start)
-        self._poll(t, 65, True, 1090.0)
+        for at in range(1065,1091,5):
+            self._poll(t,at-1025,True,float(at))
         self.assertIsNotNone(t._within_pause_start)
         self.assertIsNotNone(t.session_id)
-        self._poll(t, 4, False, 1150.0)
+        for at in range(1095,1141,5):
+            self._poll(t,at-1025,True,float(at))
+        self._poll(t,4,False,1145.0)
 
         within = tracker.get_pauses(kind="within")
         self.assertEqual(len(within), 1)
@@ -1173,7 +893,11 @@ class WithinSessionPauseTests(unittest.TestCase):
 
     def test_close_finalizes_within_and_next_start_is_adjacent(self):
         t = self._open_session(at=1000.0)
-        t._within_pause_update(1090.0, 65.0)
+        # Direct helper callers must explicitly settle bounded observations.
+        for at in range(1020,1121,20):
+            with patch.object(tracker.time,"time",return_value=float(at)), patch.object(tracker.time,"monotonic",return_value=float(at)):
+                t._tick()
+        t._within_pause_update(1090.0,65.0)
         with patch.object(tracker.time, "time", return_value=1120.0), \
              patch.object(tracker.time, "monotonic", return_value=1120.0):
             t._close(reason=tracker.PAUSE_REASON_IDLE)
@@ -1198,7 +922,7 @@ class WithinSessionPauseTests(unittest.TestCase):
         self.assertEqual(tracker.get_pauses(), [])
 
     def test_discarded_session_drops_its_within_span(self):
-        t = tracker.Tracker()
+        t = tracker.Tracker(writer_lock=False)
         with patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
             t._start("Song A")

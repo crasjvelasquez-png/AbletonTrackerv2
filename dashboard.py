@@ -16,6 +16,8 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 from projects import PINNED_FOLDERS_KEY, normalize_pinned_folders
+from activity_store import ensure_activity_schema, load_activity_rows, read_tracking_status
+from tracking_policy import POLICY_TEXT
 
 from tracker import (
     allocate_session_activity,
@@ -194,7 +196,7 @@ def consolidate_sessions() -> dict:
         rows = conn.execute(
             """
             SELECT id, project_name, start_time, last_seen_time, end_time,
-                   active_seconds, notes, todos_json
+                   active_seconds, notes, todos_json, policy_version
             FROM sessions
             WHERE end_time IS NOT NULL
             ORDER BY start_time ASC, id ASC
@@ -225,6 +227,9 @@ def consolidate_sessions() -> dict:
                 continue
 
             prev_idx = last_idx_by_project[project]
+            if row['policy_version'] != rows[prev_idx]['policy_version']:
+                last_idx_by_project[project] = i
+                continue
 
             # Resolve survivor chain to find the true survivor
             survivor_id = int(rows[prev_idx]["id"])
@@ -348,6 +353,11 @@ def consolidate_sessions() -> dict:
                 ),
             )
 
+        for absorbed_id, survivor_id in absorb.items():
+            while survivor_id in absorb:
+                survivor_id = absorb[survivor_id]
+            conn.execute('UPDATE activity_intervals SET session_id=? WHERE session_id=?',
+                         (survivor_id,absorbed_id))
         deleted_ids = list(absorb.keys())
         placeholders = ",".join("?" * len(deleted_ids))
         conn.execute(
@@ -759,6 +769,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_app_settings_table(conn)
     ensure_pauses_table(conn)
     ensure_sessions_notes_column(conn)
+    ensure_activity_schema(conn)
     ensure_indexes(conn)
     purge_legacy_categories(conn)
 
@@ -1095,16 +1106,7 @@ def get_week_range(target_date: date, week_start_weekday: int | None = None) -> 
 def get_daily_progress_seconds(conn: sqlite3.Connection, target_date: date) -> int:
     day_start = datetime.combine(target_date, datetime.min.time()).timestamp()
     day_end = datetime.combine(target_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT start_time, last_seen_time, end_time, active_seconds
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time < ?
-          AND COALESCE(end_time, last_seen_time, start_time) >= ?
-        """,
-        (day_end, day_start),
-    ).fetchall()
+    rows = load_activity_rows(conn)
     target_key = target_date.isoformat()
     total_seconds = 0.0
     for row in rows:
@@ -1122,16 +1124,7 @@ def get_daily_progress_seconds(conn: sqlite3.Connection, target_date: date) -> i
 def get_range_progress_seconds(conn: sqlite3.Connection, start_date: date, end_date: date) -> int:
     range_start = datetime.combine(start_date, datetime.min.time()).timestamp()
     range_end = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).timestamp()
-    rows = conn.execute(
-        """
-        SELECT start_time, last_seen_time, end_time, active_seconds
-        FROM sessions
-        WHERE active_seconds > 0
-          AND start_time < ?
-          AND COALESCE(end_time, last_seen_time, start_time) >= ?
-        """,
-        (range_end, range_start),
-    ).fetchall()
+    rows = load_activity_rows(conn)
     total_seconds = 0.0
     for row in rows:
         end_time = row["end_time"] or row["last_seen_time"] or row["start_time"]
@@ -1295,7 +1288,8 @@ def _compute_data_etag(month_value: str = "") -> str:
             "SELECT GROUP_CONCAT(key || ':' || value, '|') FROM "
             "(SELECT key, value FROM app_settings ORDER BY key)"
         ).fetchone()
-        raw = f"{sessions}|{notes}|{categories}|{assignments}|{daily_metrics}|{settings}|{month_value}|{(DB_PATH.parent / 'paused').exists()}|{int(time.time() // 30)}"
+        decision = read_tracking_status(conn,time.time())
+        raw = f"{decision}|{sessions}|{notes}|{categories}|{assignments}|{daily_metrics}|{settings}|{month_value}|{(DB_PATH.parent / 'paused').exists()}|{int(time.time() // 30)}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -1559,11 +1553,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             category_options, _ = get_category_maps(conn)
             project_categories = get_project_categories(conn)
 
-            activity_rows = conn.execute("""
-                SELECT project_name, start_time, last_seen_time, end_time, active_seconds
-                FROM sessions
-                WHERE active_seconds > 0
-            """).fetchall()
+            activity_rows = load_activity_rows(conn)
             daily_totals, hourly_totals = build_activity_rollups(activity_rows)
 
             projects = conn.execute("""
@@ -1646,7 +1636,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
             previous_month_start_key = previous_month_start.isoformat()
             previous_month_end_key = previous_month_end.isoformat()
 
-            today_session_seconds = []
+            today_by_session = {}
             today_project_names = set()
             month_per_project = {}
             previous_month_per_project = {}
@@ -1671,7 +1661,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     if previous_month_start_key <= day_key <= previous_month_end_key:
                         row_previous_month_seconds += seconds
                 if row_today_seconds > 0:
-                    today_session_seconds.append(row_today_seconds)
+                    today_by_session[row["id"]] = today_by_session.get(row["id"],0) + row_today_seconds
                     today_project_names.add(row["project_name"])
                 if row_month_seconds > 0:
                     project_name = row["project_name"]
@@ -1682,6 +1672,7 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                         previous_month_per_project.get(project_name, 0.0) + row_previous_month_seconds
                     )
 
+            today_session_seconds = list(today_by_session.values())
             today_session_count = len(today_session_seconds)
             today_avg_session_seconds = (
                 sum(today_session_seconds) / today_session_count
@@ -1775,13 +1766,15 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                 live_last_seen = float(live["last_seen_time"] or live_start_time or now_ts)
                 live_active_seconds = float(live["active_seconds"] or 0)
                 live_duration_seconds = max(
-                    live_active_seconds + max(0.0, now_ts - live_last_seen),
+                    live_active_seconds,
                     0.0,
                 )
                 ableton_has_project = bool((live["project_name"] or "").strip())
-            ableton_running = True if ableton_has_project else is_ableton_running()
+            policy_status = read_tracking_status(conn,now_ts)
+            ableton_running = bool(policy_status.get('running')) if policy_status else (True if ableton_has_project else is_ableton_running())
             tracking_paused = (DB_PATH.parent / "paused").exists()
-            tracking_active = bool(live and not tracking_paused and 0 <= now_ts - live_last_seen <= 90)
+            tracking_active = bool(live and not tracking_paused and
+                (policy_status.get('state')=='tracking' if policy_status else 0<=now_ts-live_last_seen<=10))
 
             campaign_names = sorted(month_per_project, key=lambda name: (-month_per_project[name], name.casefold()))
             previous_campaign_names = sorted(previous_month_per_project, key=lambda name: (-previous_month_per_project[name], name.casefold()))
@@ -1891,6 +1884,9 @@ def get_stats(month_value: str = "", recent_before: float | None = None) -> dict
                     "weekly_review": weekly_review,
                     "tracking_paused": tracking_paused,
                     "tracking_active": tracking_active,
+                    "tracking_status": policy_status,
+                    "tracking_policy": POLICY_TEXT,
+                    "historical_precision": "Older sessions use estimated hour/day allocation.",
                     "ableton_running": ableton_running,
                     "ableton_has_project": ableton_has_project,
                     "generated_at": now_ts,

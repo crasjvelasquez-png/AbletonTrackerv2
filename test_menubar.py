@@ -163,6 +163,7 @@ class TodaySecondsTests(unittest.TestCase):
 class TrackerThreadRunTests(unittest.TestCase):
     def setUp(self):
         for p in [
+            patch.object(tracker, "acquire_writer_lock", return_value=MagicMock()),
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
@@ -176,7 +177,7 @@ class TrackerThreadRunTests(unittest.TestCase):
     def test_run_delegates_to_tracker_run(self):
         self.thread.run()
         self.thread.tracker.run.assert_called_once_with(
-            stop_event=self.thread._stop,
+            stop_event=self.thread._stop_event,
             wake_interval=TRACKER_WAKE_INTERVAL,
             _lock=self.thread._lock,
         )
@@ -241,6 +242,7 @@ class _AppTestBase(unittest.TestCase):
         self._patchers = [
             patch.object(menubar.AbletonTrackerApp, "_refresh_projects"),
             patch.object(menubar, "yesterday_seconds", return_value=0),
+            patch.object(tracker, "acquire_writer_lock", return_value=MagicMock()),
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),

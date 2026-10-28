@@ -126,38 +126,42 @@ class TrackerThread(threading.Thread):
         super().__init__(daemon=True)
         self.tracker = Tracker()
         self._lock = threading.Lock()
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
+        if sys.platform == 'darwin' and 'unittest' not in sys.modules:
+            from activity_observer import NativeObserver
+            self.tracker.observer = NativeObserver()
+            self.tracker.observer.start()
 
     @property
     def consecutive_failures(self) -> int:
-        with self._lock:
-            return self.tracker._consecutive_failures
+        return self.tracker._consecutive_failures
 
     @property
     def last_error(self) -> str | None:
-        with self._lock:
-            return self.tracker._last_error
+        return self.tracker._last_error
 
     def stop(self):
-        self._stop.set()
-        with self._lock:
-            self.tracker._close()
+        self._stop_event.set()
+        if self.tracker.observer is not None:
+            self.tracker.observer.wake.set()
+        if self.is_alive():
+            self.join(timeout=5)
+        if not self.is_alive():
+            self.tracker.shutdown()
 
     def poll_now(self, paused: bool):
         with self._lock:
             self.tracker.poll_once(paused=paused)
 
     def current_project(self) -> str | None:
-        with self._lock:
-            return self.tracker.project_name
+        return self.tracker.status().project_name
 
     def status(self):
-        with self._lock:
-            return self.tracker.status()
+        return self.tracker.status()
 
     def run(self):
         self.tracker.run(
-            stop_event=self._stop,
+            stop_event=self._stop_event,
             wake_interval=TRACKER_WAKE_INTERVAL,
             _lock=self._lock,
         )
@@ -270,15 +274,27 @@ class AbletonTrackerApp(rumps.App):
         self._refresh_projects()
 
         daily_goal, weekly_goal = _get_default_goals()
-        today = today_seconds()
-        yesterday = yesterday_seconds()
-        streak = 0
-        week = 0.0
-        try:
-            streak = production_run_days()
-            week = week_seconds()
-        except Exception as e:
-            print(f"[refresh] streak/week error: {e}", file=sys.stderr)
+        from tracker import DB_PATH
+        revision = []
+        for path in (DB_PATH, Path(str(DB_PATH)+'-wal')):
+            try:
+                stat = path.stat()
+                revision.append((stat.st_mtime_ns,stat.st_size))
+            except FileNotFoundError:
+                revision.append(None)
+        key = (tuple(revision),date.today(),time.tzname)
+        if getattr(self,'_totals_key',None) != key or 'unittest' in sys.modules:
+            today = today_seconds()
+            yesterday = yesterday_seconds()
+            streak,week = 0,0.0
+            try:
+                streak = production_run_days()
+                week = week_seconds()
+            except Exception as e:
+                print(f"[refresh] streak/week error: {e}",file=sys.stderr)
+            self._totals = today,yesterday,streak,week
+            self._totals_key = key
+        today,yesterday,streak,week = self._totals
 
         self._check_notifications(
             today=today,
@@ -328,6 +344,8 @@ class AbletonTrackerApp(rumps.App):
         else:
             self.title = self._build_title("○", today, daily_goal, streak, active=False)
             self.status_item.title = "Idle"
+        if status.checked_at and status.message:
+            self.status_item.title = status.message
 
         self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
         self.yesterday_item.title = f"Yesterday: {fmt_dur(yesterday)}"
@@ -494,9 +512,14 @@ class AbletonTrackerApp(rumps.App):
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
     instance_lock = acquire_instance_lock()
     if instance_lock is None:
         print("Tracker is already running; ignoring duplicate launch.")
         sys.exit(0)
-    AbletonTrackerApp().run()
+    app = AbletonTrackerApp()
+    signal.signal(signal.SIGTERM, lambda *args: app.quit_app(None))
+    try:
+        app.run()
+    finally:
+        app.tracker_thread.stop()
+        app.dashboard.stop()

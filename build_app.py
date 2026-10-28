@@ -23,6 +23,10 @@ SOURCE_FILES = (
     "notifications.py",
     "projects.py",
     "tracker.py",
+    "tracking_policy.py",
+    "activity_store.py",
+    "activity_observer.py",
+    "audio_probe.swift",
 )
 SOURCE_DIRS = ("templates", "static")
 
@@ -89,6 +93,9 @@ def copy_app_source(resources: Path) -> Path:
         shutil.copy2(APP_DIR / filename, embedded / filename)
     for dirname in SOURCE_DIRS:
         shutil.copytree(APP_DIR / dirname, embedded / dirname)
+    subprocess.run(["xcrun","swiftc","-O",str(APP_DIR / "audio_probe.swift"),
+                    "-o",str(embedded / "audio_probe")],check=True)
+    subprocess.run(["codesign","--force","--sign","-",str(embedded / "audio_probe")],check=True)
     return embedded
 
 

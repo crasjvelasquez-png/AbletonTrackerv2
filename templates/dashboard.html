@@ -4835,6 +4835,15 @@ function updateSessionStatus(summary) {
     indicatorHtml = '<span class="session-status__dot"></span>';
   }
 
+  const policyStatus = summary?.tracking_status;
+  if (policyStatus?.message) {
+    text = policyStatus.message;
+    state = policyStatus.state === 'tracking' && summary.tracking_active ? 'live' : 'off';
+    indicator.className = `session-status__indicator session-status__indicator--${state === 'live' ? 'live' : 'off'}`;
+    indicatorHtml = '<span class="session-status__dot"></span>';
+  }
+  status.title = [summary?.tracking_policy, policyStatus?.source_error, summary?.historical_precision].filter(Boolean).join(' ');
+  status.setAttribute('aria-description', status.title);
   status.dataset.state = state;
   label.textContent = text;
   indicator.innerHTML = indicatorHtml;

@@ -1,0 +1,32 @@
+MOCKUP 1
+Use case: ui-mockup. Create ONE high-fidelity realistic retina macOS screenshot mockup of Ableton Tracker, variant 1: refined native NSMenu, LIGHT MODE. Landscape composition with a macOS menu bar strip across the very top and its open menu hanging directly below the active status item; backdrop is a softly blurred warm cream, peach and slate desktop wallpaper. UI fills enough of the image to make every label legible. No device frame, no presentation title, no extra annotations.
+Style: seamless Apple-native macOS Sequoia/Tahoe, accurate SF Pro typography, authentic SF Symbols, light ivory vibrancy, subtle separators, restrained shadow, softly rounded native menu corners, generous but realistic menu spacing. Warm terracotta accent #D97757. This is a real menu, not a dashboard.
+Menu bar active item exact text: "● 1h 20m / 3h · 4 days", a small terracotta activity dot.
+Open dropdown must show the following EXACT labels, crisp and correctly spelled:
+"Working on: Evening Sketch"
+"Today: 1h 20m / 3h"
+"Yesterday: 45m"
+"This week: 6h / 15h"
+"Run: 4 days"
+"Open Project" with right-facing submenu arrow
+"Open Ableton"
+"Pause tracking"
+"Open Tracker" with right-aligned "⌘D"
+"Quit" with right-aligned "⌘Q"
+Add tasteful tiny SF Symbols at the left of each row, a small terracotta 44-percent progress ring next to Today, grouped sections with subtle small headers "Activity" and "Projects". Show Open Project submenu to the right containing exact labels "Recent", "Pinned Folders", "Customize…". Full menu and submenu visible. Maintain macOS hierarchy and native alignment. No gibberish, no extra content.
+
+MOCKUP 2
+Use case: ui-mockup. Create ONE crisp retina realistic macOS screenshot of Ableton Tracker, variant 2: DARK MODE native NSPopover / SwiftUI card. Landscape, menu bar strip across very top with active status item "● 1h 20m / 3h · 4 days", and ONE open popover attached immediately below it. A softly blurred charcoal, plum and burnt-peach desktop wallpaper. No device frame, no presentation heading, no extra commentary.
+Visual direction: macOS Sequoia/Tahoe native, SF Pro type and SF Symbols, warm charcoal translucent vibrancy with subtle ivory text, refined corner radii and authentic macOS shadow. Claude-like warmth with restrained terracotta #D97757, calm generous spacing, hierarchy, immaculate alignment.
+Popover header small app label "Ableton Tracker", current project line EXACT "Working on: Evening Sketch", and active live session timer "00:24:18" with a tiny terracotta live dot. Prominent thin circular daily-goal ring filled 44 percent around "1h 20m"; readable exact accompanying label "Today: 1h 20m / 3h". Below, EXACT "Yesterday: 45m". A compact weekly section labeled EXACT "This week: 6h / 15h", seven slim vertical rounded bars (exactly seven) with quiet weekday initials M T W T F S S. Small flame streak chip EXACT "Run: 4 days".
+Bottom two pill buttons, equal visual clarity: exact "Pause tracking" with pause SF Symbol, exact "Open Tracker" with right-aligned "⌘D"; terracotta primary Open Tracker. Then compact native footer rows exact "Open Project" with submenu chevron, "Open Ableton", and "Quit" with right-aligned "⌘Q". No other windows. All labels exactly spelled, sharp, no gibberish. Enough space around panel but interface large enough to read.
+
+MOCKUP 3
+Use case: ui-mockup. Create ONE retina-crisp realistic macOS menu bar status-item exploration image for Ableton Tracker, variant 3. A close-up design study showing FOUR vertically stacked desktop menu bar crops, each depicting a different state of the SAME app. The full-width native menu bar at the top of EACH crop, blurred warm desktop wallpaper visible below. Four equal-height horizontal bands, calm ivory background and subtle separation. No dropdown in this variant: focus tightly on compact status-item capsules. Do not make a web dashboard or device mockup.
+Design: Apple-native macOS Sequoia/Tahoe SF Pro and SF Symbols, pale warm ivory translucent material, tiny progress rings, immaculate crisp type. Each capsule should be compact, naturally sized within the menu bar beside familiar Wi-Fi, search, and control center symbols. The capsule includes state glyph, tiny 44-percent progress ring, exact time "1h 20m / 3h". Show same placement and scale in each row so differences compare clearly.
+FOUR states, order top to bottom:
+1. Label below menu bar crop EXACT "Working". Capsule glyph "●", subtle warm terracotta tint #D97757 and terracotta progress ring, time "1h 20m / 3h".
+2. Label below menu bar crop EXACT "Open — no project". Capsule glyph "◐", neutral muted gray progress ring, time "1h 20m / 3h".
+3. Label below menu bar crop EXACT "Paused". Capsule glyph "○", quiet gray ring and time "1h 20m / 3h", tiny pause SF Symbol.
+4. Label below menu bar crop EXACT "Error". Capsule glyph "⚠", restrained amber warning, gray progress ring and time "1h 20m / 3h".
+One small heading "Ableton Tracker" in negative space only if useful. Four distinct rows only; exact readable labels; no explanations, fake words, numerical callouts, or extra metrics. Active terracotta state should be warm and subtle. Strong zoomed-in legibility, finely polished rounded capsules, believable native screenshot styling.

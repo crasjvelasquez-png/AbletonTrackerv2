@@ -1,0 +1,27 @@
+{
+  "name": "project freshness expires between delayed polls",
+  "expected_seconds": 20,
+  "ticks": [
+    {
+      "at": 0,
+      "project_at": 0
+    },
+    {
+      "at": 5,
+      "project_at": 5
+    },
+    {
+      "at": 10,
+      "project_at": 10
+    },
+    {
+      "at": 15,
+      "project_at": 10
+    },
+    {
+      "at": 23,
+      "project": null,
+      "project_at": 10
+    }
+  ]
+}

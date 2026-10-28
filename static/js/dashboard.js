@@ -212,6 +212,14 @@ window.DashboardExtras = (() => {
     } else if (summary.ableton_has_project || summary.ableton_running) {
       status.dataset.state = 'idle'; label.textContent = summary.ableton_has_project ? 'Idle' : 'Ableton open (no project)';
     } else { status.dataset.state = 'off'; label.textContent = 'Ableton not running'; }
+    const decision = summary.tracking_status;
+    if (decision?.message) {
+      const fresh = decision.state !== 'tracking' || Date.now()/1000 <= decision.verified_until;
+      label.textContent = fresh ? decision.message : 'Paused: cannot verify activity';
+      status.dataset.state = fresh && summary.tracking_active ? 'live' : 'paused';
+      status.title = [summary.tracking_policy, decision.source_error, summary.historical_precision].filter(Boolean).join(' ');
+      status.setAttribute('aria-description',status.title);
+    }
     timer.hidden = !summary.live_project || !Number.isFinite(summary.live_session_recorded_seconds);
     timer.textContent = `${clock(summary.live_session_recorded_seconds)} recorded`;
     timer.title = 'Recorded active time in the current session. Updates when the tracker records activity; pauses and idle time are excluded.';

@@ -1,0 +1,56 @@
+{
+  "name": "audio freshness expires between delayed polls",
+  "expected_seconds": 45,
+  "ticks": [
+    {
+      "at": 0,
+      "audio": true,
+      "audio_at": 0
+    },
+    {
+      "at": 5,
+      "audio": true,
+      "audio_at": 5
+    },
+    {
+      "at": 10,
+      "audio": true,
+      "audio_at": 10
+    },
+    {
+      "at": 15,
+      "audio": true,
+      "audio_at": 15
+    },
+    {
+      "at": 20,
+      "audio": true,
+      "audio_at": 20
+    },
+    {
+      "at": 25,
+      "audio": true,
+      "audio_at": 25
+    },
+    {
+      "at": 30,
+      "audio": true,
+      "audio_at": 30
+    },
+    {
+      "at": 35,
+      "audio": true,
+      "audio_at": 35
+    },
+    {
+      "at": 40,
+      "audio": true,
+      "audio_at": 35
+    },
+    {
+      "at": 48,
+      "audio": null,
+      "audio_at": 35
+    }
+  ]
+}
