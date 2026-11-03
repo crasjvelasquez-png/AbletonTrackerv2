@@ -20,6 +20,7 @@ SOURCE_FILES = (
     "dashboard.py",
     "dashboard_window.py",
     "menubar.py",
+    "menubar_panel.py",
     "notifications.py",
     "projects.py",
     "tracker.py",

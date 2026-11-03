@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
-from projects import PINNED_FOLDERS_KEY, normalize_pinned_folders
+from projects import PINNED_FOLDERS_KEY, TEMPLATES_KEY, list_templates, normalize_pinned_folders, normalize_templates
 from activity_store import ensure_activity_schema, load_activity_rows, read_tracking_status
 from tracking_policy import POLICY_TEXT
 
@@ -701,6 +701,8 @@ def _cache_clear(key: str | None = None) -> None:
 def set_app_setting(key: str, value: str) -> None:
     if key == PINNED_FOLDERS_KEY:
         value = json.dumps(normalize_pinned_folders(value), ensure_ascii=False)
+    elif key == TEMPLATES_KEY:
+        value = json.dumps(normalize_templates(value), ensure_ascii=False)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -2032,6 +2034,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
+        elif parsed.path == "/api/project-templates":
+            self._json({"available": list_templates()})
         elif parsed.path == "/api/project-list":
             sort_value = parse_qs(parsed.query).get("sort", [""])[0]
             self._json(get_project_list_recent() if sort_value == "recent" else get_project_list())

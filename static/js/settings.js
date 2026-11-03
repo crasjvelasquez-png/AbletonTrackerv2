@@ -858,6 +858,76 @@
     });
   }
 
+  // Template choices are a draft until Save; missing selected files stay listed so they can be cleared.
+  function bindProjectTemplates(root) {
+    const form = $('[data-project-templates-form]', root);
+    const list = $('[data-project-templates-list]', root);
+    const feedback = $('[data-project-templates-feedback]', root);
+    const save = $('[data-project-templates-save]', root);
+    if (!form) return;
+    let selected = new Set();
+    let available = [];
+    let busy = false;
+    function render() {
+      list.replaceChildren();
+      const names = [...new Set([...available, ...selected])].sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'}));
+      if (!names.length) {
+        const empty = document.createElement('p');
+        empty.className = 'settings-copy';
+        empty.textContent = 'No templates found. Save a Live set as a template in Live, then reopen Settings.';
+        list.append(empty);
+      }
+      names.forEach(name => {
+        const row = document.createElement('label');
+        row.className = 'action-row short-session-toggle';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = selected.has(name);
+        box.disabled = busy;
+        box.addEventListener('change', () => {
+          box.checked ? selected.add(name) : selected.delete(name);
+          save.disabled = busy;
+          setFeedback(feedback, 'Unsaved template changes.');
+        });
+        const text = document.createElement('span');
+        text.textContent = name.replace(/\.als$/i, '') + (available.includes(name) ? '' : ' (missing)');
+        row.append(box, text);
+        list.append(row);
+      });
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = save.disabled = true;
+      render();
+      setFeedback(feedback, 'Saving templates…');
+      try {
+        const ordered = [...selected].sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'}));
+        await window.postJson('/api/app-settings', {key: 'project_templates', value: JSON.stringify(ordered)});
+        setFeedback(feedback, 'Templates saved. The menu updates within 30 seconds.');
+      } catch (error) {
+        save.disabled = false;
+        setFeedback(feedback, error.message || 'Could not save templates. Try again.', 'error');
+      } finally {
+        busy = false;
+        render();
+      }
+    });
+    Promise.all([fetch('/api/project-templates'), fetch('/api/app-settings')]).then(async ([templatesResponse, settingsResponse]) => {
+      if (!templatesResponse.ok || !settingsResponse.ok) throw new Error('Could not load templates. Reopen Settings to try again.');
+      available = (await templatesResponse.json()).available || [];
+      try {
+        const parsed = JSON.parse((await settingsResponse.json()).project_templates || '[]');
+        if (!Array.isArray(parsed) || parsed.some(name => typeof name !== 'string')) throw new Error();
+        selected = new Set(parsed);
+      } catch (_) {
+        save.disabled = false;
+        setFeedback(feedback, 'Saved template settings are invalid. Choose templates and save to replace them.', 'error');
+      }
+      render();
+    }).catch(error => setFeedback(feedback, error.message, 'error'));
+  }
+
   // ── lifecycle ──────────────────────────────────────────────────────
 
   function bindTabNavigation(root) {
@@ -944,6 +1014,7 @@
     });
     bindTabNavigation(root);
     bindProjectFolders(root);
+    bindProjectTemplates(root);
     bindAppearanceControls(root);
     bindWidgetControls(root);
     bindCategoryDelegation(root);

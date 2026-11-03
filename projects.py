@@ -8,6 +8,8 @@ import threading
 import time
 
 PINNED_FOLDERS_KEY = "pinned_project_folders"
+TEMPLATES_KEY = "project_templates"
+TEMPLATES_DIR = Path.home() / "Music" / "Ableton" / "User Library" / "Templates"
 RECENT_LIMIT = 10
 FOLDER_LIMIT = 25
 SCAN_ENTRY_LIMIT = 20000
@@ -46,6 +48,41 @@ def normalize_pinned_folders(value):
         seen.add(str(path))
         result.append({"path": str(path), "label": label})
     return result
+
+
+def list_templates():
+    """Top-level .als files in Live's Templates folder; subfolders are not templates."""
+    try:
+        entries = list(TEMPLATES_DIR.iterdir())
+    except OSError:
+        return []
+    return sorted((p.name for p in entries if p.suffix.lower() == '.als' and not p.name.startswith('.') and p.is_file()), key=str.casefold)
+
+
+def normalize_templates(value):
+    """Selected template filenames, in menu order; missing files stay valid selections."""
+    try:
+        names = json.loads(value) if isinstance(value, str) else value
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Templates must be a JSON list") from exc
+    if not isinstance(names, list) or len(names) > 50:
+        raise ValueError("Choose up to 50 templates")
+    result = []
+    for name in names:
+        if (not isinstance(name, str) or name != name.strip() or not name.lower().endswith('.als')
+                or name.startswith('.') or '/' in name or any(ord(c) < 32 for c in name)):
+            raise ValueError("Each template must be a Live set file name")
+        if name in result:
+            raise ValueError("That template is already selected")
+        result.append(name)
+    return result
+
+
+def load_templates(db_path):
+    with sqlite3.connect(Path(db_path).as_uri() + "?mode=ro", uri=True, timeout=2) as conn:
+        row = conn.execute("SELECT value FROM app_settings WHERE key=?", (TEMPLATES_KEY,)).fetchone()
+    selected = normalize_templates(row[0]) if row else []
+    return [{"name": Path(n).stem, "path": str(TEMPLATES_DIR / n)} for n in selected if (TEMPLATES_DIR / n).is_file()]
 
 
 def load_pinned_folders(db_path):
@@ -125,6 +162,11 @@ def build_catalog(db_path):
     except ValueError:
         pins = []
         warning = "Folder settings could not be read. Open Customize… to save them again."
+    try:
+        templates = load_templates(db_path)
+    except ValueError:
+        templates = []
+        warning = "Template settings could not be read. Open Customize… to save them again."
     folders, candidates = [], []
     for pin in pins:
         path = Path(pin["path"])
@@ -138,7 +180,7 @@ def build_catalog(db_path):
     unresolved = [name for name in names if name.casefold() not in matches]
     for candidate in _spotlight_matches(unresolved):
         matches.setdefault(candidate["name"].casefold(), candidate["path"])
-    return {"recent": [{"name": name, "path": matches.get(name.casefold())} for name in names], "folders": folders, "warning": warning}
+    return {"recent": [{"name": name, "path": matches.get(name.casefold())} for name in names], "templates": templates, "folders": folders, "warning": warning}
 
 
 def open_project(path, app_path):
@@ -172,7 +214,7 @@ class ProjectCatalog:
         try:
             snapshot = build_catalog(self.db_path)
         except Exception as exc:
-            snapshot = {"recent": [], "folders": [], "warning": f"Projects unavailable: {exc}"}
+            snapshot = {"recent": [], "templates": [], "folders": [], "warning": f"Projects unavailable: {exc}"}
         with self._lock:
             self._pending = snapshot
             self._busy = False

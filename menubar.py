@@ -48,7 +48,7 @@ INSTANCE_LOCK_PATH = Path.home() / ".ableton_tracker" / "tracker-app.lock"
 BADGE_DIR = Path.home() / ".ableton_tracker" / "menubar-badges"
 BADGE_PX = 40  # rumps sizes status icons to 20pt; draw at 2x.
 BADGE_STEPS = 24
-BADGE_ACCENT = (217, 119, 87)
+BADGE_ACCENT = (164, 178, 246)
 BADGE_GLYPHS = {"tracking": "●", "open": "◐", "idle": "○"}
 
 
@@ -291,7 +291,7 @@ class AbletonTrackerApp(rumps.App):
         self.yesterday_item.set_callback(None)
         self.week_item = rumps.MenuItem("This week: 0m")
         self.week_item.set_callback(None)
-        self.streak_item = rumps.MenuItem("Run: —")
+        self.streak_item = rumps.MenuItem("Streak: —")
         self.streak_item.set_callback(None)
         self.menu = [
             self.open_ableton_item,
@@ -301,10 +301,15 @@ class AbletonTrackerApp(rumps.App):
             self.streak_item,
             None,
             self.open_project_item,
-            rumps.MenuItem("Open Tracker", callback=self.open_dashboard, key="d"),
+            rumps.MenuItem("Open Tracker", callback=self.open_dashboard),
             None,
-            rumps.MenuItem("Quit", callback=self.quit_app, key="q"),
+            rumps.MenuItem("Quit", callback=self.quit_app),
         ]
+        self.panel = None
+        self._show_open_ableton = False
+        # rumps creates its native status item immediately before this event.
+        if hasattr(rumps, "events"):
+            rumps.events.before_start.register(self._install_panel)
 
         self.tracker_thread.start()
         self.dashboard.prewarm()
@@ -360,6 +365,7 @@ class AbletonTrackerApp(rumps.App):
             self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
             self._update_streak(streak)
             self._update_open_ableton(False)
+            self._sync_panel("error")
             return
 
         status = self.tracker_thread.status()
@@ -397,6 +403,45 @@ class AbletonTrackerApp(rumps.App):
         self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
         self._update_streak(streak)
         self._update_open_ableton(not ableton_up)
+        self._sync_panel("tracking" if status.state == STATE_TRACKING else "idle")
+
+    def _install_panel(self):
+        """Attach presentation only after rumps has initialized the native menu."""
+        try:
+            from menubar_panel import MenuBarPanel
+            self.panel = MenuBarPanel.attach(
+                self._nsapp.nsstatusitem,
+                self.open_project_item._menu,
+                lambda: self._refresh(None),
+                {
+                    "tracker": lambda: self.open_dashboard(None),
+                    "ableton": lambda: self.open_ableton(None),
+                    "quit": lambda: self.quit_app(None),
+                },
+            )
+            self._refresh(None)
+        except Exception as exc:
+            if self.panel is not None:
+                self.panel.dispose()
+                self.panel = None
+            print(f"[panel] using native menu fallback: {exc}", file=sys.stderr)
+
+    def _sync_panel(self, state):
+        if self.panel is None:
+            return
+        try:
+            self.panel.update(
+                status=self.status_item.title,
+                today=self.today_item.title,
+                week=self.week_item.title,
+                run=self.streak_item.title,
+                show_open_ableton=self._show_open_ableton,
+                state=state,
+            )
+        except Exception as exc:
+            self.panel.dispose()
+            self.panel = None
+            print(f"[panel] using native menu fallback: {exc}", file=sys.stderr)
 
     def _check_notifications(
         self,
@@ -461,7 +506,7 @@ class AbletonTrackerApp(rumps.App):
         key = (state, round(min(max(progress, 0.0), 1.0) * BADGE_STEPS))
         if getattr(self, "_badge_key", None) == key:
             return True
-        path = BADGE_DIR / f"{key[0]}-{key[1]}.png"
+        path = BADGE_DIR / f"{key[0]}-{key[1]}-{bytes(BADGE_ACCENT).hex()}.png"
         try:
             if not path.exists():
                 BADGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -481,11 +526,12 @@ class AbletonTrackerApp(rumps.App):
     def _update_streak(self, streak: int):
         if streak > 0:
             day_word = "day" if streak == 1 else "days"
-            self.streak_item.title = f"Run: {streak} {day_word}"
+            self.streak_item.title = f"Streak: {streak} {day_word}"
         else:
-            self.streak_item.title = "Run: —"
+            self.streak_item.title = "Streak: —"
 
     def _update_open_ableton(self, show: bool):
+        self._show_open_ableton = show
         native_item = getattr(self.open_ableton_item, "_menuitem", None)
         if native_item is not None:
             native_item.setHidden_(not show)
@@ -525,11 +571,17 @@ class AbletonTrackerApp(rumps.App):
         self._project_snapshot = snapshot
         menu = self.open_project_item
         menu.clear()
-        menu.add(rumps.MenuItem("Recent"))
         # Explicit keys avoid collisions with headings or identically named sets.
         def add(parent, key, title, path=None):
             item = rumps.MenuItem(title, callback=(lambda _: self._open_project(path)) if path else None)
             parent[key] = item
+        menu.add(rumps.MenuItem("New from Template"))
+        for index, template in enumerate(snapshot.get("templates", [])):
+            add(menu, f"template-{index}", template["name"], template["path"])
+        if not snapshot.get("templates"):
+            menu["template-hint"] = rumps.MenuItem("Choose templates in Customize…", callback=self.customize_projects)
+        menu.add(None)
+        menu.add(rumps.MenuItem("Recent"))
         for index, project in enumerate(snapshot["recent"]):
             add(menu, f"recent-{index}", project["name"] if project["path"] else project["name"] + " (not found)", project["path"])
         if not snapshot["recent"]:
@@ -576,6 +628,8 @@ class AbletonTrackerApp(rumps.App):
         self._refresh(None)
 
     def quit_app(self, _):
+        if self.panel is not None:
+            self.panel.dispose()
         self.tracker_thread.stop()
         self.dashboard.stop()
         rumps.quit_application()

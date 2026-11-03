@@ -448,7 +448,7 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             self.app._refresh(None)
         self.assertEqual(self.app.title, "1½")
         self.assertEqual(self.app._badge_key[0], "tracking")
-        self.assertEqual(self.app.streak_item.title, "Run: 7 days")
+        self.assertEqual(self.app.streak_item.title, "Streak: 7 days")
 
     def test_badge_progress_follows_daily_goal_and_icon_is_reused(self):
         self.app.tracker_thread.status.return_value = self._make_status(
@@ -559,12 +559,10 @@ class AbletonTrackerAppInitTests(_AppTestBase):
         app = AbletonTrackerApp()
         self.assertNotIn("Pause tracking", [item.title for item in app.menu if item])
 
-    def test_init_sets_menu_shortcuts(self):
+    def test_init_has_no_menu_shortcuts(self):
         app = AbletonTrackerApp()
         self.assertIn("Open Project", [item.title for item in app.menu if item])
-        keyed_items = {item.title: item.key for item in app.menu if item and item.key}
-        self.assertEqual(keyed_items["Open Tracker"], "d")
-        self.assertEqual(keyed_items["Quit"], "q")
+        self.assertEqual({item.title: item.key for item in app.menu if item and item.key}, {})
 
 
 if __name__ == "__main__":

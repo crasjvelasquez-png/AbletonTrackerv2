@@ -130,6 +130,68 @@ def verify(output):
             save('[]')
             assert projects.load_pinned_folders(db) == []
             checks.append("rename/reorder/remove persistence and missing folders")
+            templates = root / "Templates"
+            with patch.object(projects, "TEMPLATES_DIR", templates):
+                assert projects.list_templates() == []
+                with urlopen(base + "/api/project-templates") as response:
+                    assert json.load(response)["available"] == []
+                (templates / "Renders").mkdir(parents=True)
+                (templates / "Renders" / "Nested.als").touch()
+                (templates / "notes.txt").touch()
+                (templates / ".hidden.als").touch()
+                for name in ("c4milo SONG.als", "Mastering Template.als", "Gone.als"):
+                    (templates / name).touch()
+                assert projects.list_templates() == ["c4milo SONG.als", "Gone.als", "Mastering Template.als"]
+                with urlopen(base + "/api/project-templates") as response:
+                    assert json.load(response)["available"] == projects.list_templates()
+
+                def save_templates(value):
+                    req = Request(base + "/api/app-settings", data=json.dumps({"key": projects.TEMPLATES_KEY, "value": value}).encode(), headers={"Content-Type": "application/json"})
+                    with urlopen(req) as response:
+                        return json.load(response)
+                for bad in ('nope', '{}', '["../x.als"]', '["a/b.als"]', '["song.txt"]', '[".x.als"]', '["A.als","A.als"]', '[1]'):
+                    try:
+                        save_templates(bad)
+                        raise AssertionError(f"accepted invalid templates: {bad}")
+                    except HTTPError as exc:
+                        assert exc.code == 400
+                save_templates(json.dumps(["Mastering Template.als", "Gone.als", "c4milo SONG.als"]))
+                (templates / "Gone.als").unlink()
+                with patch.object(projects.subprocess, "run", side_effect=FileNotFoundError):
+                    tsnap = projects.build_catalog(db)
+                assert [t["name"] for t in tsnap["templates"]] == ["Mastering Template", "c4milo SONG"]
+                assert tsnap["templates"][0]["path"] == str(templates / "Mastering Template.als")
+                checks.append("template discovery, selection validation, saved order, deleted template skipped")
+                with sqlite3.connect(db) as conn:
+                    conn.execute("UPDATE app_settings SET value='broken' WHERE key=?", (projects.TEMPLATES_KEY,))
+                with patch.object(projects.subprocess, "run", side_effect=FileNotFoundError):
+                    broken = projects.build_catalog(db)
+                assert broken["templates"] == [] and "Template" in broken["warning"]
+                checks.append("corrupt template setting degrades to warning")
+                if sys.platform == 'darwin':
+                    import rumps
+                    import menubar
+                    from unittest.mock import Mock
+                    for snap, expect in ((tsnap, 2), ({**tsnap, "templates": []}, 0)):
+                        menu = rumps.MenuItem('Open Project')
+                        menu.add('Loading projects…')
+                        app = SimpleNamespace(
+                            _next_project_refresh=float('inf'),
+                            project_catalog=SimpleNamespace(take_snapshot=lambda snap=snap: snap),
+                            _project_snapshot=None, open_project_item=menu,
+                            _open_project=Mock(), customize_projects=Mock(),
+                        )
+                        menubar.AbletonTrackerApp._refresh_projects(app)
+                        assert list(menu.keys())[0] == 'New from Template'
+                        if expect:
+                            assert menu['template-0'].title == 'Mastering Template'
+                            menu['template-1'].callback(menu['template-1'])
+                            app._open_project.assert_called_once_with(str(templates / "c4milo SONG.als"))
+                        else:
+                            hint = menu['template-hint']
+                            hint.callback(hint)
+                            app.customize_projects.assert_called_once()
+                    checks.append("menu New from Template section, template click opens file, empty-state hint")
         finally:
             server.shutdown()
             server.server_close()
