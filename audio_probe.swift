@@ -51,13 +51,46 @@ final class AudioProbe: NSObject, SCStreamOutput {
             }
         }
     }
+
+    /// One status line for the samples since the last report, then reset.
+    func report(threshold: Double) -> String {
+        defer { peak = 0; sumSquares = 0; sampleCount = 0; invalidFormat = false }
+        if invalidFormat || sampleCount == 0 { return "unavailable samples=\(sampleCount)" }
+        let rms = sqrt(sumSquares / Double(sampleCount))
+        let active = rms >= threshold || Double(peak) >= threshold
+        return "\(active ? "active" : "quiet") rms=\(rms) peak=\(peak) samples=\(sampleCount)"
+    }
+}
+
+final class StopWatcher: NSObject, SCStreamDelegate {
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        print("unavailable stream_stopped \(error.localizedDescription)")
+        exit(1)
+    }
 }
 
 let args = CommandLine.arguments
 let duration = args.count > 1 ? (Double(args[1]) ?? 1) : 1
 let threshold = args.count > 2 ? (Double(args[2]) ?? 0.000316) : 0.000316
 let pid = args.count > 3 ? (Int32(args[3]) ?? 0) : 0
-let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+// "stream" keeps one capture open and reports every `duration` seconds, so the
+// tracker does not set up and tear down a capture on Live every few seconds.
+let streaming = args.count > 4 && args[4] == "stream"
+setvbuf(stdout, nil, _IOLBF, 0)
+if streaming {
+    // The tracker holds stdin open; EOF means it exited, so stop capturing.
+    Thread.detachNewThread {
+        _ = FileHandle.standardInput.readDataToEndOfFile()
+        exit(0)
+    }
+}
+// Only applications and displays are needed; skipping off-screen and desktop
+// windows keeps the WindowServer enumeration small.
+var content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+if pid > 0, !content.applications.contains(where: { $0.processID == pid }) {
+    // Live can be frontmost with its window minimized; look once more widely.
+    content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+}
 guard pid > 0, let app = content.applications.first(where: { $0.processID == pid }),
       let display = content.displays.first else {
     print("unavailable live_or_display_missing")
@@ -70,9 +103,11 @@ config.excludesCurrentProcessAudio = true
 config.width = 2
 config.height = 2
 config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+config.queueDepth = 3
 let probe = AudioProbe()
+let watcher = StopWatcher()
 let queue = DispatchQueue(label: "tracker.live-audio")
-let stream = SCStream(filter: filter, configuration: config, delegate: nil)
+let stream = SCStream(filter: filter, configuration: config, delegate: watcher)
 try stream.addStreamOutput(probe, type: .audio, sampleHandlerQueue: queue)
 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
     stream.startCapture(completionHandler: { error in
@@ -80,19 +115,18 @@ try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<V
         else { continuation.resume() }
     })
 }
-try await Task.sleep(nanoseconds: UInt64(max(0.1, min(duration, 2)) * 1_000_000_000))
+let window = UInt64(max(0.1, min(duration, 2)) * 1_000_000_000)
+if streaming {
+    while true {
+        try await Task.sleep(nanoseconds: window)
+        print(queue.sync { probe.report(threshold: threshold) })
+    }
+}
+try await Task.sleep(nanoseconds: window)
 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
     stream.stopCapture(completionHandler: { error in
         if let error = error { continuation.resume(throwing: error) }
         else { continuation.resume() }
     })
 }
-queue.sync {
-    if probe.invalidFormat || probe.sampleCount == 0 {
-        print("unavailable samples=\(probe.sampleCount)")
-    } else {
-        let rms = sqrt(probe.sumSquares / Double(probe.sampleCount))
-        let active = rms >= threshold || Double(probe.peak) >= threshold
-        print("\(active ? "active" : "quiet") rms=\(rms) peak=\(probe.peak) samples=\(probe.sampleCount)")
-    }
-}
+print(queue.sync { probe.report(threshold: threshold) })

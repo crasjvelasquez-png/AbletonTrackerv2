@@ -1000,10 +1000,89 @@ def _ensure_audio_probe_binary() -> Path | None:
     return binary
 
 
+class _AudioLevelStream:
+    """One long-lived capture of Live's audio, reporting a level line per window.
+
+    Starting a ScreenCaptureKit capture attaches to Live's audio and display
+    output; doing that every poll caused needless churn while Live was playing.
+    """
+
+    def __init__(self, binary, pid):
+        self.pid = pid
+        self.cond = threading.Condition()
+        self.seq = 0
+        self.line = None
+        self.closed = False
+        self.last_text = ''
+        # stdin stays open: the helper exits on EOF if this process dies.
+        self.process = subprocess.Popen(
+            [str(binary), str(AUDIO_LEVEL_POLL_SECONDS), str(AUDIO_LEVEL_ACTIVE_THRESHOLD), str(pid), 'stream'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        threading.Thread(target=self._read, name='tracker-audio-stream', daemon=True).start()
+
+    def _read(self):
+        try:
+            for line in self.process.stdout:
+                with self.cond:
+                    self.line = line.strip()
+                    if self.line and _parse_audio_level_probe(self.line) is None:
+                        self.last_text = self.line  # diagnostics explain an exit
+                    self.seq += 1
+                    self.cond.notify_all()
+        except (OSError, ValueError):
+            pass
+        finally:
+            with suppress(OSError, ValueError):
+                self.process.stdout.close()
+        with suppress(OSError, subprocess.SubprocessError):
+            self.process.wait(timeout=2)  # reap promptly; no zombie between polls
+        with self.cond:
+            self.closed = True
+            self.cond.notify_all()
+
+    def next_line(self, timeout, cancel_event=None):
+        """The first line produced after this call, or None if cancelled.
+
+        Raises TimeoutExpired when no line arrives and EOFError when the helper exits.
+        """
+        deadline = time.monotonic() + timeout
+        with self.cond:
+            seq = self.seq
+            while self.seq == seq:
+                if cancel_event is not None and cancel_event.is_set():
+                    return None
+                if self.closed:
+                    raise EOFError
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(self.process.args, timeout)
+                self.cond.wait(min(remaining, 0.1))
+            return self.line
+
+    def alive(self):
+        return self.process.poll() is None and not self.closed
+
+    def stop(self):
+        process = self.process
+        with suppress(OSError, ValueError):
+            process.stdin.close()
+        if process.poll() is None:
+            with suppress(OSError):
+                process.terminate()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                with suppress(OSError):
+                    process.kill()
+                process.wait()
+
+
 def cancel_audio_probe():
+    global _AUDIO_PROBE_PROCESS
     with _AUDIO_PROBE_PROCESS_LOCK:
-        if _AUDIO_PROBE_PROCESS is not None and _AUDIO_PROBE_PROCESS.poll() is None:
-            _AUDIO_PROBE_PROCESS.terminate()
+        stream, _AUDIO_PROBE_PROCESS = _AUDIO_PROBE_PROCESS, None
+    if stream is not None:
+        stream.stop()
 
 
 def _system_audio_level_active(pid=None, cancel_event=None) -> bool | None:
@@ -1012,28 +1091,43 @@ def _system_audio_level_active(pid=None, cancel_event=None) -> bool | None:
         return None  # never capture unrelated output or a cancelled generation
     binary=_ensure_audio_probe_binary()
     if binary is None: return None
-    process=None
+    stale=stream=None
     try:
         with _AUDIO_PROBE_PROCESS_LOCK:
             if cancel_event is not None and cancel_event.is_set(): return None
-            process=subprocess.Popen([str(binary),str(AUDIO_LEVEL_POLL_SECONDS),str(AUDIO_LEVEL_ACTIVE_THRESHOLD),str(pid)],
-                                     stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-            _AUDIO_PROBE_PROCESS=process
-        stdout,stderr=process.communicate(timeout=3)
-        if process.returncode:
-            _set_audio_probe_error((stderr or f'capture exited {process.returncode}').strip()[-300:])
-            return None
-        result=_parse_audio_level_probe(stdout)
-        _set_audio_probe_error(None if result is not None else stdout.strip()[:200])
+            stream=_AUDIO_PROBE_PROCESS
+            if stream is not None and (stream.pid!=pid or not stream.alive()):
+                stale,stream,_AUDIO_PROBE_PROCESS=stream,None,None
+            if stale is not None: stale.stop()
+            if stream is None:
+                stream=_AUDIO_PROBE_PROCESS=_AudioLevelStream(binary,pid)
+        line=stream.next_line(AUDIO_POLL_TIMEOUT,cancel_event)
+        if line is None: return None
+        result=_parse_audio_level_probe(line)
+        if result is None and not stream.alive():
+            _drop_audio_stream(stream)  # helper reported why it stopped
+        _set_audio_probe_error(None if result is not None else line[:200])
         return result
-    except (OSError,subprocess.SubprocessError) as e:
-        if process is not None:
-            process.kill(); process.communicate()
-        _set_audio_probe_error(str(e))
+    except (OSError,subprocess.SubprocessError,EOFError) as e:
+        if cancel_event is not None and cancel_event.is_set():
+            _drop_audio_stream(stream)
+            return None
+        if isinstance(e,EOFError):
+            stream.process.wait()
+            message=stream.last_text or f'capture exited {stream.process.returncode}'
+        else:
+            message=str(e)
+        _drop_audio_stream(stream)
+        _set_audio_probe_error(message.strip()[-300:])
         return None
-    finally:
-        with _AUDIO_PROBE_PROCESS_LOCK:
-            if _AUDIO_PROBE_PROCESS is process: _AUDIO_PROBE_PROCESS=None
+
+
+def _drop_audio_stream(stream):
+    global _AUDIO_PROBE_PROCESS
+    if stream is None: return
+    with _AUDIO_PROBE_PROCESS_LOCK:
+        if _AUDIO_PROBE_PROCESS is stream: _AUDIO_PROBE_PROCESS=None
+    stream.stop()
 
 
 def parse_osc_playing(data: bytes) -> bool | None:

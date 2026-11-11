@@ -78,6 +78,22 @@ class PolicyReplayTests(unittest.TestCase):
         self.assertEqual(self.total(), 600)
         self.assertEqual(self.t.status().reason, 'listening_limit')
 
+    def test_delayed_audio_probe_start_still_extends_at_input_allowance(self):
+        from activity_observer import AUDIO_PROBE_AFTER
+        first = None
+        for sec in range(0, 661, 5):
+            if sec - 1000.0 + self.last_input < AUDIO_PROBE_AFTER:
+                self.poll(sec, audio=None, audio_at=None)
+                continue
+            if first is None:
+                first = sec  # requested now; the result arrives next poll
+                self.poll(sec, audio=None, audio_at=None)
+                continue
+            # Reported one poll late, measured 1.5s after the previous request.
+            self.poll(sec, audio=True, audio_at=1000.0 + sec - 3.5)
+        self.assertEqual(self.total(), 600)
+        self.assertEqual(self.t.status().reason, 'listening_limit')
+
     def test_listening_reason_is_visible(self):
         self.run_until(185, audio=True)
         self.assertEqual(self.t.status().reason, 'listening')

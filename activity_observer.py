@@ -4,7 +4,11 @@ import ctypes.util
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from tracking_policy import Observation, LISTENING_ALLOWANCE, EVIDENCE_TTL
+from tracking_policy import Observation, INPUT_ALLOWANCE, LISTENING_ALLOWANCE, EVIDENCE_TTL
+
+# Audio only extends credit once hands-off time passes INPUT_ALLOWANCE, so the
+# capture starts two evidence windows before that instead of while editing.
+AUDIO_PROBE_AFTER=INPUT_ALLOWANCE-2*EVIDENCE_TTL
 
 
 class InputEvidence:
@@ -51,6 +55,8 @@ class ProbeWorker:
     def invalidate(self,generation):
         with self.lock:
             self.cancel.set()
+            if generation!=self.generation:
+                self.failures=0; self.next_at=0.0  # old backoff must not delay a new listen
             self.generation=generation
             self.value=self.at=None
 
@@ -62,7 +68,9 @@ class ProbeWorker:
                 self.value,self.at=value,at
                 self.failures=self.failures+1 if value is None else 0
                 delay=(5,15,30,60)[min(max(self.failures-1,0),3)] if value is None else 5
-                self.next_at=at+delay
+                # Success is paced from the request: pacing from completion skipped
+                # every other 5s poll and let evidence age to EVIDENCE_TTL.
+                self.next_at=at+delay if value is None else (self.started_at or at)+delay
 
     def result(self,generation,now):
         with self.lock:
@@ -81,7 +89,8 @@ class ProbeWorker:
                 try:
                     value=self.probe(pid,cancel) if self.cancellable else self.probe(pid)
                     known=value[0] if isinstance(value,tuple) else value
-                    self.error=None if known is not None else 'Live playback/audio unavailable'
+                    if not cancel.is_set():
+                        self.error=None if known is not None else 'Live playback/audio unavailable'
                 except Exception as e:
                     value=None; self.error=str(e)[:200]
                 if not cancel.is_set():
@@ -206,6 +215,10 @@ class NativeObserver:
             self.wake.set()
         for name in names:
             self.tokens.append(center.addObserverForName_object_queue_usingBlock_(name,None,None,changed))
+        # Developer runs compile the audio helper lazily; do it now, not at the
+        # listening boundary, where a cold swiftc run could miss the cutoff.
+        from tracker import _ensure_audio_probe_binary
+        threading.Thread(target=_ensure_audio_probe_binary,name='tracker-probe-build',daemon=True).start()
         # No NSEvent global monitor: registering one stops the status item from
         # receiving clicks. snapshot() reads input from CGEventSource counters.
         with self.lock: self._sync_focus(time.monotonic())
@@ -293,7 +306,7 @@ class NativeObserver:
                     self.project_error=str(e); self.project_failures+=1
                 self.next_project_at=now+(5 if not self.project_failures else (5,5,10,15)[min(self.project_failures-1,3)])
             eligible=(pid and focused and not locked and not paused and self.input.last_input is not None
-                      and now-self.input.last_input<LISTENING_ALLOWANCE and now-self.input.last_input>=20)
+                      and now-self.input.last_input<LISTENING_ALLOWANCE and now-self.input.last_input>=AUDIO_PROBE_AFTER)
             if eligible: self.probe.request(pid,generation,now)
             else:
                 self.probe.invalidate(generation)
