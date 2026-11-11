@@ -1993,6 +1993,112 @@ def on_deck_action(payload: dict) -> dict:
     return get_on_deck()
 
 
+def get_song_planner_list(query: str = "", now: float | None = None) -> dict:
+    now = time.time() if now is None else now
+    today = datetime.fromtimestamp(now).date()
+    q = (query or "").strip()
+    needle = q.casefold()
+    all_songs = songs.load_songs(DB_PATH, now=now)
+    counts = songs.open_task_counts(DB_PATH, now=now)
+    items = []
+    for song in all_songs:
+        if needle and needle not in song["title"].casefold() and needle not in song["key"].casefold():
+            continue
+        due = songs._effective_due(song)
+        disp = songs.deck_display(song, today)
+        items.append(
+            {
+                "key": song["key"],
+                "title": songs.display_title(song["title"]),
+                "full_title": song["title"],
+                "stage": song["stage"],
+                "stage_label": disp["stage_label"],
+                "due_value": due.isoformat() if due else "",
+                "due": disp["due"],
+                "overdue": disp["overdue"],
+                "on_deck": bool(song["on_deck"]),
+                "settled": bool(song["settled"]),
+                "open_tasks": counts.get(song["key"], 0),
+            }
+        )
+        if len(items) >= 50:
+            break
+    return {"query": q, "songs": items}
+
+
+def get_song_planner_song(key: str, now: float | None = None) -> dict:
+    now = time.time() if now is None else now
+    today = datetime.fromtimestamp(now).date()
+    all_songs = songs.load_songs(DB_PATH, now=now)
+    song = next((s for s in all_songs if s["key"] == key), None)
+    if song is None:
+        raise LookupError("That song is no longer in the tracker")
+    due = songs._effective_due(song)
+    own_due = songs._parse_date(song["due_date"])
+    disp = songs.deck_display(song, today)
+    return {
+        "song": {
+            "key": song["key"],
+            "title": song["title"],
+            "display_title": disp["display_title"],
+            "stage": song["stage"],
+            "stage_label": disp["stage_label"],
+            "inferred_stage": song["inferred_stage"],
+            "due_value": due.isoformat() if due else "",
+            "due_source": "song" if own_due else "legacy" if due else "",
+            "due": disp["due"],
+            "overdue": disp["overdue"],
+            "on_deck": bool(song["on_deck"]),
+            "settled": bool(song["settled"]),
+            "seconds": song["seconds"],
+        },
+        "tasks": songs.list_song_tasks(DB_PATH, key, now=now),
+    }
+
+
+def _parse_task_id(raw_id) -> int:
+    if isinstance(raw_id, bool) or raw_id is None:
+        raise ValueError("Task id is required")
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        raise ValueError("Task id must be an integer")
+
+
+def song_planner_action(payload: dict, now: float | None = None) -> dict:
+    action = payload.get("action")
+    if action not in ("due", "stage", "task_add", "task_update", "task_delete"):
+        raise ValueError("Unknown song planner action")
+    key = str(payload.get("key") or "")
+    songs._find(songs.load_songs(DB_PATH, now=now), key)
+    if action == "due":
+        songs.set_due_date(DB_PATH, key, str(payload.get("date") or ""), now=now)
+    elif action == "stage":
+        songs.set_stage(DB_PATH, key, str(payload.get("stage") or ""), now=now)
+    elif action == "task_add":
+        songs.add_song_task(
+            DB_PATH,
+            key,
+            str(payload.get("text") or ""),
+            due_date=str(payload.get("due_date") or ""),
+            now=now,
+        )
+    elif action == "task_update":
+        task_id = _parse_task_id(payload.get("id"))
+        text = str(payload["text"] or "") if "text" in payload and payload["text"] is not None else None
+        due_date = str(payload["due_date"] or "") if "due_date" in payload and payload["due_date"] is not None else None
+        done = None
+        if "done" in payload and payload["done"] is not None:
+            if not isinstance(payload["done"], bool):
+                raise ValueError("done must be a boolean")
+            done = payload["done"]
+        songs.update_song_task(DB_PATH, key, task_id, text=text, due_date=due_date, done=done, now=now)
+    elif action == "task_delete":
+        task_id = _parse_task_id(payload.get("id"))
+        songs.delete_song_task(DB_PATH, key, task_id, now=now)
+    return get_song_planner_song(key, now=now)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # silence access logs
@@ -2097,6 +2203,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/on-deck":
             self._json(get_on_deck())
+        elif parsed.path == "/api/song-planner":
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            if "key" in query:
+                key = query.get("key", [""])[0]
+                try:
+                    self._json(get_song_planner_song(key))
+                except LookupError as exc:
+                    self._json({"error": str(exc)}, status=404)
+            else:
+                q = query.get("q", [""])[0]
+                self._json(get_song_planner_list(q))
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-templates":
@@ -2356,6 +2473,19 @@ class Handler(BaseHTTPRequestHandler):
             except OnDeckConflict as exc:
                 self._json({"error": str(exc), "deck": get_on_deck()}, status=409)
             except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+                self._json({"error": str(exc)}, status=400)
+        elif self.path == "/api/song-planner":
+            try:
+                payload = self._request_json()
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if not isinstance(payload, dict):
+                self._json({"error": "request body is required"}, status=400)
+                return
+            try:
+                self._json({"ok": True, **song_planner_action(payload)})
+            except (ValueError, LookupError) as exc:
                 self._json({"error": str(exc)}, status=400)
         elif self.path == "/api/app-settings":
             try:

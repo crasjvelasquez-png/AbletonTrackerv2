@@ -4782,6 +4782,7 @@ function render(data) {
   `;
   if (onDeckSection) document.getElementById('appDashboard').prepend(onDeckSection);
   else window.OnDeck?.mount();
+  window.SongPlanner?.mount();
 
   const monthNavSlot = document.getElementById('projectsMonthNavSlot');
   if (monthNavSlot && monthNav) monthNavSlot.appendChild(monthNav);
@@ -5560,6 +5561,7 @@ const dashboardRefreshTimer = setInterval(() => {
 }, 15_000);
 </script>
 <script src="/static/js/dashboard.js?v=on-deck-4"></script>
-<script src="/static/js/on_deck.js?v=on-deck-4"></script>
+<script src="/static/js/on_deck.js?v=on-deck-5"></script>
+<script src="/static/js/song_planner.js?v=song-planner-1"></script>
 </body>
 </html>

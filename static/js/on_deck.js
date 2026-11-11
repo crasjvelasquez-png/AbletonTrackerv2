@@ -57,6 +57,7 @@ window.OnDeck = (() => {
       const data = await res.json().catch(() => ({}));
       if (data.deck) state.model = data.deck;
       if (!res.ok) { toast(data.error || 'That change did not save. Try again.'); return null; }
+      window.SongPlanner?.refresh();
       return data.deck;
     } catch (error) {
       console.error(error);

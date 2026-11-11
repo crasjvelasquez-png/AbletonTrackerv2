@@ -61,6 +61,16 @@ SCHEMA = (
         at       REAL NOT NULL
     )""",
     "CREATE INDEX IF NOT EXISTS idx_song_events_key ON song_events(song_key, at)",
+    """CREATE TABLE IF NOT EXISTS song_tasks (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        song_key   TEXT NOT NULL,
+        text       TEXT NOT NULL,
+        due_date   TEXT NOT NULL DEFAULT '',
+        done_at    REAL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_song_tasks_key ON song_tasks(song_key, done_at)",
 )
 
 
@@ -356,6 +366,139 @@ def complete_next_task(db_path, key, now: float | None = None) -> str:
             _upsert(conn, key, now, next_task="")
             _event(conn, key, "task_done", task, now)
     return task
+
+
+def list_song_tasks(db_path, key, now: float | None = None) -> list[dict]:
+    path = Path(db_path)
+    if not path.exists():
+        return []
+    try:
+        conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=3)
+    except sqlite3.OperationalError:
+        return []
+    with conn:
+        open_rows = _optional_rows(
+            conn,
+            """SELECT id, text, due_date, done_at, created_at
+               FROM song_tasks
+               WHERE song_key = ? AND done_at IS NULL
+               ORDER BY CASE WHEN due_date = '' THEN 1 ELSE 0 END ASC,
+                        due_date ASC,
+                        created_at ASC,
+                        id ASC""",
+            (key,),
+        )
+        done_rows = _optional_rows(
+            conn,
+            """SELECT id, text, due_date, done_at, created_at
+               FROM song_tasks
+               WHERE song_key = ? AND done_at IS NOT NULL
+               ORDER BY done_at DESC, id DESC
+               LIMIT 20""",
+            (key,),
+        )
+    conn.close()
+    return [
+        {
+            "id": int(row[0]),
+            "text": row[1],
+            "due_date": row[2] or "",
+            "done": row[3] is not None,
+            "done_at": row[3],
+            "created_at": float(row[4]),
+        }
+        for row in (*open_rows, *done_rows)
+    ]
+
+
+def open_task_counts(db_path, now: float | None = None) -> dict[str, int]:
+    path = Path(db_path)
+    if not path.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=3)
+    except sqlite3.OperationalError:
+        return {}
+    with conn:
+        rows = _optional_rows(
+            conn,
+            "SELECT song_key, COUNT(*) FROM song_tasks WHERE done_at IS NULL GROUP BY song_key",
+        )
+    conn.close()
+    return {row[0]: int(row[1]) for row in rows}
+
+
+def _normalize_task_text(text: str) -> str:
+    normalized = " ".join((text or "").split())[:MAX_TASK_LENGTH]
+    if not normalized:
+        raise ValueError("Write the task first")
+    return normalized
+
+
+def _normalize_task_due(due_date: str) -> str:
+    due = (due_date or "").strip()
+    if due and not _parse_date(due):
+        raise ValueError("Use a YYYY-MM-DD date")
+    return due
+
+
+def add_song_task(db_path, key, text: str, due_date: str = "", now: float | None = None) -> int:
+    clean_text = _normalize_task_text(text)
+    clean_due = _normalize_task_due(due_date)
+    now = time.time() if now is None else now
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO song_tasks(song_key, text, due_date, done_at, created_at, updated_at)
+               VALUES(?, ?, ?, NULL, ?, ?)""",
+            (key, clean_text, clean_due, now, now),
+        )
+        _event(conn, key, "song_task_added", clean_text, now)
+        return int(cur.lastrowid)
+
+
+def update_song_task(
+    db_path,
+    key,
+    task_id: int,
+    text: str | None = None,
+    due_date: str | None = None,
+    done: bool | None = None,
+    now: float | None = None,
+) -> None:
+    clean_text = _normalize_task_text(text) if text is not None else None
+    clean_due = _normalize_task_due(due_date) if due_date is not None else None
+    now = time.time() if now is None else now
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT text, due_date, done_at FROM song_tasks WHERE id = ? AND song_key = ?",
+            (task_id, key),
+        ).fetchone()
+        if row is None:
+            raise ValueError("That task is no longer there")
+        new_text = row[0] if clean_text is None else clean_text
+        new_due = row[1] if clean_due is None else clean_due
+        new_done_at = (float(now) if done else None) if done is not None else row[2]
+        conn.execute(
+            "UPDATE song_tasks SET text = ?, due_date = ?, done_at = ?, updated_at = ? WHERE id = ? AND song_key = ?",
+            (new_text, new_due, new_done_at, now, task_id, key),
+        )
+        if text is not None or due_date is not None:
+            _event(conn, key, "song_task_updated", new_text, now)
+        if done is not None:
+            _event(conn, key, "song_task_done" if done else "song_task_reopened", new_text, now)
+
+
+def delete_song_task(db_path, key, task_id: int, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT text FROM song_tasks WHERE id = ? AND song_key = ?",
+            (task_id, key),
+        ).fetchone()
+        if row is None:
+            raise ValueError("That task is no longer there")
+        conn.execute("DELETE FROM song_tasks WHERE id = ? AND song_key = ?", (task_id, key))
+        _event(conn, key, "song_task_deleted", row[0], now)
 
 
 def deck_display(song, today: date) -> dict:

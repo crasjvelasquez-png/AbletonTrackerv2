@@ -291,8 +291,147 @@ class PanelModelTests(unittest.TestCase):
         self.assertEqual(songs.display_title("May 11 - Gas - 90 bpm Bbmin"), "May 11 - Gas - 90 bpm Bbmin")
 
     def test_next_task_strings(self):
-        self.assertEqual(songs.deck_display(self.song(), today=TODAY)["next"], "Add a next task…")
+        self.assertEqual(songs.deck_display(self.song(), today=TODAY)["next"], "Add a next task\u2026")
         self.assertEqual(songs.deck_display(self.song(next_task="verse 2 lyrics"), today=TODAY)["next"], "Next: verse 2 lyrics")
+
+
+class SongTaskTests(SongTestCase):
+    """Per-song task list tests, written before song_tasks implementation.
+
+    Failure modes this class guards against:
+    1. Missing database or missing song_tasks table crashes list_song_tasks or
+       open_task_counts instead of returning [] / {}.
+    2. Open tasks are not ordered before done tasks, empty due dates sort before
+       dated tasks, ties ignore created_at, or done tasks are not ordered most
+       recently done first and capped at 20.
+    3. Task text is not normalized/capped at MAX_TASK_LENGTH, or empty/blank
+       text does not raise ValueError("Write the task first").
+    4. Invalid due_date strings do not raise ValueError("Use a YYYY-MM-DD date").
+    5. update_song_task clobbers fields that were not passed, or update/delete
+       succeeds on a missing task ID or a task owned by another song_key instead
+       of raising ValueError("That task is no longer there").
+    6. Adding, updating, completing, reopening, or deleting tasks fails to emit
+       the expected song_events or leaves open_task_counts out of sync.
+    7. Task writes alter the source-of-truth sessions rows.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.add("April 2026 - Prince - 130 bpm Emaj", 3, 4)
+        self.add("August 2026 - DANCE - 118 bpm", 4, 4)
+        loaded = {s["title"]: s["key"] for s in songs.load_songs(self.db, now=NOW)}
+        self.prince = loaded["April 2026 - Prince - 130 bpm Emaj"]
+        self.dance = loaded["August 2026 - DANCE - 118 bpm"]
+
+    def test_missing_db_and_missing_table_return_empty(self):
+        missing = Path(self.tmp.name) / "missing.db"
+        self.assertEqual(songs.list_song_tasks(missing, self.prince), [])
+        self.assertEqual(songs.open_task_counts(missing), {})
+        self.assertEqual(songs.list_song_tasks(self.db, self.prince), [])
+        self.assertEqual(songs.open_task_counts(self.db), {})
+
+    def test_add_normalizes_validates_and_orders_tasks(self):
+        with self.assertRaisesRegex(ValueError, "Write the task first"):
+            songs.add_song_task(self.db, self.prince, "   \t  ", now=NOW)
+        with self.assertRaisesRegex(ValueError, "Use a YYYY-MM-DD date"):
+            songs.add_song_task(self.db, self.prince, "bad due", due_date="2026-02-30", now=NOW)
+
+        long_text = "  comp   lead\tvocal " + "x" * 300
+        t_nodue_1 = songs.add_song_task(self.db, self.prince, long_text, due_date="", now=NOW + 10)
+        t_later = songs.add_song_task(self.db, self.prince, "bounce stems", due_date="2026-11-20", now=NOW + 20)
+        t_sooner = songs.add_song_task(self.db, self.prince, "tune chorus", due_date="2026-11-12", now=NOW + 30)
+        t_nodue_2 = songs.add_song_task(self.db, self.prince, "check mono", due_date="", now=NOW + 40)
+        songs.add_song_task(self.db, self.dance, "other song task", due_date="2026-11-11", now=NOW + 50)
+
+        self.assertEqual(songs.open_task_counts(self.db), {self.prince: 4, self.dance: 1})
+        tasks = songs.list_song_tasks(self.db, self.prince)
+        self.assertEqual([t["id"] for t in tasks], [t_sooner, t_later, t_nodue_1, t_nodue_2])
+        self.assertEqual(len(tasks[2]["text"]), songs.MAX_TASK_LENGTH)
+        self.assertTrue(tasks[2]["text"].startswith("comp lead vocal "))
+        self.assertTrue(all(t["done"] is False and t["done_at"] is None for t in tasks))
+
+    def test_update_complete_reopen_delete_ownership_and_events(self):
+        t1 = songs.add_song_task(self.db, self.prince, "write bridge", due_date="2026-11-15", now=NOW + 1)
+        t2 = songs.add_song_task(self.db, self.prince, "cut muddy lows", due_date="", now=NOW + 2)
+
+        # Partial update: only text changes, due_date stays intact.
+        songs.update_song_task(self.db, self.prince, t1, text="  write   bridge lyrics ", now=NOW + 10)
+        tasks = {t["id"]: t for t in songs.list_song_tasks(self.db, self.prince)}
+        self.assertEqual(tasks[t1]["text"], "write bridge lyrics")
+        self.assertEqual(tasks[t1]["due_date"], "2026-11-15")
+
+        # Partial update: only due_date changes, text stays intact.
+        songs.update_song_task(self.db, self.prince, t1, due_date="2026-11-18", now=NOW + 15)
+        tasks = {t["id"]: t for t in songs.list_song_tasks(self.db, self.prince)}
+        self.assertEqual(tasks[t1]["text"], "write bridge lyrics")
+        self.assertEqual(tasks[t1]["due_date"], "2026-11-18")
+
+        # Complete t1 and t2 at different times; most recently done comes first among done tasks.
+        songs.update_song_task(self.db, self.prince, t1, done=True, now=NOW + 20)
+        songs.update_song_task(self.db, self.prince, t2, done=True, now=NOW + 30)
+        self.assertEqual(songs.open_task_counts(self.db).get(self.prince, 0), 0)
+        listed = songs.list_song_tasks(self.db, self.prince)
+        self.assertEqual([t["id"] for t in listed], [t2, t1])
+        self.assertTrue(all(t["done"] is True for t in listed))
+        self.assertEqual([t["done_at"] for t in listed], [NOW + 30, NOW + 20])
+
+        # Reopen t1: it moves back ahead of done task t2.
+        songs.update_song_task(self.db, self.prince, t1, done=False, now=NOW + 40)
+        self.assertEqual(songs.open_task_counts(self.db), {self.prince: 1})
+        listed = songs.list_song_tasks(self.db, self.prince)
+        self.assertEqual([t["id"] for t in listed], [t1, t2])
+        self.assertFalse(listed[0]["done"])
+        self.assertIsNone(listed[0]["done_at"])
+
+        # Ownership & existence checks.
+        with self.assertRaisesRegex(ValueError, "That task is no longer there"):
+            songs.update_song_task(self.db, self.dance, t1, text="hijack", now=NOW + 50)
+        with self.assertRaisesRegex(ValueError, "That task is no longer there"):
+            songs.update_song_task(self.db, self.prince, 99999, text="ghost", now=NOW + 50)
+        with self.assertRaisesRegex(ValueError, "That task is no longer there"):
+            songs.delete_song_task(self.db, self.dance, t1, now=NOW + 50)
+        with self.assertRaisesRegex(ValueError, "Write the task first"):
+            songs.update_song_task(self.db, self.prince, t1, text="   ", now=NOW + 50)
+        with self.assertRaisesRegex(ValueError, "Use a YYYY-MM-DD date"):
+            songs.update_song_task(self.db, self.prince, t1, due_date="not-a-date", now=NOW + 50)
+
+        # Delete t2.
+        songs.delete_song_task(self.db, self.prince, t2, now=NOW + 60)
+        self.assertEqual([t["id"] for t in songs.list_song_tasks(self.db, self.prince)], [t1])
+
+        with sqlite3.connect(self.db) as conn:
+            events = conn.execute(
+                "SELECT kind, value FROM song_events WHERE song_key = ? ORDER BY id",
+                (self.prince,),
+            ).fetchall()
+            session_summary = conn.execute("SELECT count(*), sum(active_seconds) FROM sessions").fetchone()
+        self.assertEqual(
+            events,
+            [
+                ("song_task_added", "write bridge"),
+                ("song_task_added", "cut muddy lows"),
+                ("song_task_updated", "write bridge lyrics"),
+                ("song_task_updated", "write bridge lyrics"),
+                ("song_task_done", "write bridge lyrics"),
+                ("song_task_done", "cut muddy lows"),
+                ("song_task_reopened", "write bridge lyrics"),
+                ("song_task_deleted", "cut muddy lows"),
+            ],
+        )
+        self.assertEqual(session_summary, (2, 8 * 3600))
+
+    def test_done_tasks_capped_at_twenty_most_recent(self):
+        open_id = songs.add_song_task(self.db, self.prince, "still open", now=NOW)
+        done_ids = []
+        for idx in range(25):
+            tid = songs.add_song_task(self.db, self.prince, f"done {idx}", now=NOW + idx + 1)
+            songs.update_song_task(self.db, self.prince, tid, done=True, now=NOW + 100 + idx)
+            done_ids.append(tid)
+        listed = songs.list_song_tasks(self.db, self.prince)
+        self.assertEqual(listed[0]["id"], open_id)
+        done_listed = [t["id"] for t in listed if t["done"]]
+        self.assertEqual(len(done_listed), 20)
+        self.assertEqual(done_listed, list(reversed(done_ids[-20:])))
 
 
 if __name__ == "__main__":
