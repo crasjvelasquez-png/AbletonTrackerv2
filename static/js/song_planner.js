@@ -1,5 +1,6 @@
 /* Songs planner: search songs, set due date and stage, and manage per-song tasks.
-   Lives inside #appDashboard right after #onDeck and survives dashboard re-renders. */
+   The search list lives inside #appDashboard right after #onDeck and survives dashboard
+   re-renders; the selected song opens in a popup appended to <body>. */
 window.SongPlanner = (() => {
   const esc = value => escapeHtml(String(value ?? ''));
   const STAGES = [
@@ -26,6 +27,8 @@ window.SongPlanner = (() => {
     newTaskDate: '',
   };
   let root = null;
+  let popup = null;
+  let panel = null;
   let menuTrigger = null;
   let searchTimer = null;
   let listSeq = 0;
@@ -35,6 +38,8 @@ window.SongPlanner = (() => {
   const daysFromToday = days => { const d = new Date(); d.setDate(d.getDate() + days); return localIso(d); };
   const stageLabel = stage => (STAGES.find(([key]) => key === stage) || [])[1] || (stage ? stage.charAt(0).toUpperCase() + stage.slice(1) : '');
   const isTaskOverdue = task => !task?.done && Boolean(task?.due_date) && task.due_date < localIso(new Date());
+  const owns = el => Boolean(el) && (!!root?.contains(el) || !!popup?.contains(el));
+  const q = selector => root?.querySelector(selector) || panel?.querySelector(selector) || null;
 
   function mount() {
     const host = document.getElementById('appDashboard');
@@ -49,6 +54,18 @@ window.SongPlanner = (() => {
       root.addEventListener('keydown', onKeydown);
       root.addEventListener('input', onInput);
       root.addEventListener('change', onChange);
+      popup = document.createElement('div');
+      popup.className = 'song-planner-popup';
+      popup.id = 'songPlannerPopup';
+      popup.hidden = true;
+      popup.innerHTML = '<div class="modal song-planner-panel" role="dialog" aria-modal="true" aria-label="Song details" tabindex="-1"></div>';
+      panel = popup.firstElementChild;
+      popup.addEventListener('click', onClick);
+      popup.addEventListener('submit', onSubmit);
+      popup.addEventListener('keydown', onKeydown);
+      popup.addEventListener('input', onInput);
+      popup.addEventListener('change', onChange);
+      document.body.append(popup);
       draw();
       refresh();
     }
@@ -61,7 +78,7 @@ window.SongPlanner = (() => {
   }
 
   function isBusy() {
-    return state.busy || !!state.menu || (!!root?.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+    return state.busy || !!state.menu || (owns(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
   }
 
   async function loadList(query = state.query, { force = false } = {}) {
@@ -188,15 +205,23 @@ window.SongPlanner = (() => {
 
   function draw() {
     if (!root) return;
-    const active = root.contains(document.activeElement) ? document.activeElement : null;
+    const active = owns(document.activeElement) ? document.activeElement : null;
     const restoreFocus = active ? focusKey(active) : null;
     const selStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
     const selEnd = active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
 
-    root.innerHTML = `${headView()}${listView()}${detailView()}${state.menu && state.song ? menuView(state.song) : ''}`;
+    root.innerHTML = `${headView()}${listView()}`;
+    const open = Boolean(state.selectedKey);
+    const scrollTop = panel.scrollTop;
+    popup.hidden = !open;
+    document.documentElement.classList.toggle('song-planner-open', open);
+    panel.innerHTML = open
+      ? `<button class="detail-modal-close song-planner-close" type="button" data-planner="close" aria-label="Close song details">×</button>${detailView()}${state.menu && state.song ? menuView(state.song) : ''}`
+      : '';
+    panel.scrollTop = scrollTop;
     if (state.menu) positionMenu();
     if (restoreFocus) {
-      const target = root.querySelector(restoreFocus);
+      const target = q(restoreFocus);
       if (target) {
         target.focus({ preventScroll: true });
         if (selStart !== null && selEnd !== null && target.tagName === 'INPUT' && target.type !== 'date') {
@@ -289,7 +314,7 @@ window.SongPlanner = (() => {
     return `<div class="song-planner-detail" aria-label="Song details">
       <div class="song-planner-detail-head">
         <div class="song-planner-detail-titles">
-          <p class="deck-title" title="${esc(s.title)}">${esc(s.display_title || s.title)}</p>
+          <p class="deck-title" id="songPlannerDetailTitle" title="${esc(s.title)}">${esc(s.display_title || s.title)}</p>
           <p class="deck-meta">${tracked}${s.on_deck ? ' · On deck' : ''}</p>
         </div>
         <div class="deck-actions">
@@ -366,13 +391,13 @@ window.SongPlanner = (() => {
   }
 
   function positionMenu() {
-    const menu = root.querySelector('.deck-menu');
-    const trigger = root.querySelector(`[data-planner="${state.menu}"]`);
+    const menu = panel.querySelector('.deck-menu');
+    const trigger = panel.querySelector(`[data-planner="${state.menu}"]`);
     if (!menu || !trigger) return;
-    const box = root.getBoundingClientRect(), t = trigger.getBoundingClientRect();
+    const box = panel.getBoundingClientRect(), t = trigger.getBoundingClientRect();
     const width = Math.min(menu.offsetWidth, box.width - 16), height = menu.offsetHeight;
-    const above = t.bottom + 6 + height > window.innerHeight && t.top - 6 - height >= 0;
-    menu.style.top = `${above ? t.top - box.top - 6 - height : t.bottom - box.top + 6}px`;
+    const above = t.bottom + 6 + height > box.bottom && t.top - 6 - height >= box.top;
+    menu.style.top = `${(above ? t.top - box.top - 6 - height : t.bottom - box.top + 6) + panel.scrollTop}px`;
     menu.style.left = `${Math.max(8, Math.min(t.right - box.left - width, box.width - width - 8))}px`;
   }
 
@@ -380,7 +405,7 @@ window.SongPlanner = (() => {
     menuTrigger = trigger;
     state.menu = name;
     draw();
-    const menu = root.querySelector('.deck-menu');
+    const menu = panel.querySelector('.deck-menu');
     menu?.querySelector('button,input')?.focus({ preventScroll: true });
   }
 
@@ -389,14 +414,35 @@ window.SongPlanner = (() => {
     const name = state.menu;
     state.menu = null;
     draw();
-    if (focus) (root.querySelector(`[data-planner="${name}"]`) || menuTrigger)?.focus();
+    if (focus) (q(`[data-planner="${name}"]`) || menuTrigger)?.focus();
   }
 
+  function closePopup() {
+    if (!state.selectedKey) return;
+    const key = state.selectedKey;
+    detailSeq++;
+    state.selectedKey = '';
+    state.song = null;
+    state.tasks = [];
+    state.detailLoading = false;
+    state.detailError = '';
+    state.menu = null;
+    state.editingTaskId = null;
+    draw();
+    root.querySelector(`[data-planner="select"][data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  }
+
+  let backdropPress = false;
   document.addEventListener('pointerdown', event => {
     const target = event.target instanceof Element ? event.target : null;
-    if (state.menu && !target?.closest('#songPlanner .deck-menu') && !target?.closest('#songPlanner [data-planner="due"]')) {
+    backdropPress = Boolean(popup) && target === popup;
+    if (state.menu && !target?.closest('#songPlannerPopup .deck-menu') && !target?.closest('#songPlannerPopup [data-planner="due"]')) {
       closeMenu({ focus: false });
     }
+  });
+  document.addEventListener('click', event => {
+    if (popup && backdropPress && event.target === popup && !state.busy) closePopup();
+    backdropPress = false;
   });
   window.addEventListener('resize', () => { if (state.menu) positionMenu(); });
 
@@ -428,9 +474,12 @@ window.SongPlanner = (() => {
       draw();
       await selectSong(state.selectedKey, { force: true });
     } else if (kind === 'select') {
-      const key = button.dataset.key;
-      await selectSong(key, { force: true });
-      root.querySelector(`[data-planner="select"][data-key="${CSS.escape(key)}"]`)?.focus();
+      const opening = !state.selectedKey;
+      const pendingSelect = selectSong(button.dataset.key, { force: true });
+      if (opening) panel.focus({ preventScroll: true });
+      await pendingSelect;
+    } else if (kind === 'close') {
+      closePopup();
     } else if (kind === 'due') {
       state.menu === 'due' ? closeMenu() : openMenu('due', button);
     } else if (kind === 'due-set') {
@@ -438,7 +487,7 @@ window.SongPlanner = (() => {
     } else if (kind === 'stage') {
       if (!s.key || button.dataset.stage === s.stage) return;
       await act({ action: 'stage', key: s.key, stage: button.dataset.stage }, { pending: button });
-      root.querySelector(`[data-planner="stage"][data-stage="${CSS.escape(button.dataset.stage)}"]`)?.focus();
+      q(`[data-planner="stage"][data-stage="${CSS.escape(button.dataset.stage)}"]`)?.focus();
     } else if (kind === 'release') {
       if (!s.key) return;
       closeMenu({ focus: false });
@@ -451,26 +500,26 @@ window.SongPlanner = (() => {
       if (ok && await act({ action: 'stage', key: s.key, stage: 'released' })) {
         toast(`${title} is released`);
       } else {
-        root.querySelector('[data-planner="release"]')?.focus();
+        q('[data-planner="release"]')?.focus();
       }
     } else if (kind === 'task-toggle') {
       const task = findTask(button.dataset.taskId);
       if (!task || !s.key) return;
       await act({ action: 'task_update', key: s.key, id: task.id, done: !task.done }, { pending: button });
-      root.querySelector(`[data-planner="task-toggle"][data-task-id="${CSS.escape(String(task.id))}"]`)?.focus();
+      q(`[data-planner="task-toggle"][data-task-id="${CSS.escape(String(task.id))}"]`)?.focus();
     } else if (kind === 'task-edit') {
       const task = findTask(button.dataset.taskId);
       if (!task) return;
       state.editingTaskId = task.id;
       draw();
-      const input = root.querySelector('#songTaskEditInput');
+      const input = q('#songTaskEditInput');
       input?.focus();
       input?.select();
     } else if (kind === 'task-cancel') {
       const rawId = button.dataset.taskId;
       state.editingTaskId = null;
       draw();
-      if (rawId) root.querySelector(`[data-planner="task-edit"][data-task-id="${CSS.escape(rawId)}"]`)?.focus();
+      if (rawId) q(`[data-planner="task-edit"][data-task-id="${CSS.escape(rawId)}"]`)?.focus();
     } else if (kind === 'task-delete') {
       const task = findTask(button.dataset.taskId);
       if (!task || !s.key) return;
@@ -493,7 +542,7 @@ window.SongPlanner = (() => {
     if (!s?.key) return;
     state.menu = null;
     const res = await act({ action: 'due', key: s.key, date });
-    root.querySelector('[data-planner="due"]')?.focus();
+    q('[data-planner="due"]')?.focus();
     if (res) toast(date ? (state.song?.due || `Due ${date}`) : 'Due date cleared');
   }
 
@@ -520,7 +569,7 @@ window.SongPlanner = (() => {
         state.newTaskDate = due_date;
         draw();
       }
-      root.querySelector('#songTaskAddInput')?.focus();
+      q('#songTaskAddInput')?.focus();
     } else if (kind === 'task-edit') {
       const rawId = form.dataset.taskId;
       const task = findTask(rawId);
@@ -530,11 +579,11 @@ window.SongPlanner = (() => {
       state.editingTaskId = null;
       if (!text || (task && text === task.text && due_date === (task.due_date || ''))) {
         draw();
-        root.querySelector(`[data-planner="task-edit"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
+        q(`[data-planner="task-edit"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
         return;
       }
       await act({ action: 'task_update', key: s.key, id, text, due_date });
-      root.querySelector(`[data-planner="task-edit"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
+      q(`[data-planner="task-edit"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
     }
   }
 
@@ -557,7 +606,7 @@ window.SongPlanner = (() => {
     } else if (target.dataset.planner === 'task-date' && state.song?.key) {
       const id = taskIdValue(target.dataset.taskId);
       await act({ action: 'task_update', key: state.song.key, id, due_date: target.value || '' });
-      root.querySelector(`[data-planner="task-date"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
+      q(`[data-planner="task-date"][data-task-id="${CSS.escape(String(id))}"]`)?.focus();
     }
   }
 
@@ -572,7 +621,20 @@ window.SongPlanner = (() => {
         event.preventDefault();
         state.editingTaskId = null;
         draw();
-        root.querySelector(`[data-planner="task-edit"][data-task-id="${CSS.escape(rawId)}"]`)?.focus();
+        q(`[data-planner="task-edit"][data-task-id="${CSS.escape(rawId)}"]`)?.focus();
+      } else if (popup.contains(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        closePopup();
+      }
+      return;
+    }
+    if (event.key === 'Tab' && !state.menu && popup.contains(event.target)) {
+      const items = [...panel.querySelectorAll('button:not(:disabled),input:not(:disabled)')];
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey ? (document.activeElement === first || document.activeElement === panel) : document.activeElement === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
       }
       return;
     }
@@ -613,7 +675,7 @@ window.SongPlanner = (() => {
       return;
     }
     if (event.target.closest('.deck-stages') && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
-      const items = [...root.querySelectorAll('.deck-stage:not(:disabled)')];
+      const items = [...panel.querySelectorAll('.deck-stage:not(:disabled)')];
       const index = items.indexOf(document.activeElement);
       if (index < 0) return;
       event.preventDefault();

@@ -315,7 +315,14 @@ button,summary,a,input,select,textarea {transition-duration:150ms}
 .song-planner-tag {display:inline-flex;align-items:center;padding:2px 7px;border:1px solid var(--border-strong);border-radius:var(--radius-control);background:var(--control-bg);color:var(--ink-3);font-size:11px;font-weight:600;line-height:1.4;white-space:nowrap}
 .song-planner-row-meta {display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .song-planner-due.is-overdue {color:var(--danger);font-weight:600}
-.song-planner-detail {margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}
+.song-planner-popup {position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--modal-backdrop)}
+.song-planner-popup[hidden] {display:none}
+.modal.song-planner-panel {position:relative;width:min(760px,100%);max-width:760px;max-height:calc(100dvh - 48px);overflow:auto;padding:26px 28px 24px;animation:warm-reveal 150ms ease-out}
+.song-planner-panel:focus {outline:none}
+.song-planner-close {position:absolute;top:18px;right:18px}
+html.song-planner-open {overflow:hidden}
+.song-planner-detail-head {padding-right:46px}
+.song-planner-detail>.deck-hint {margin-top:0;padding-right:46px}
 .song-planner-detail-head {display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .song-planner-detail-titles {min-width:0;flex:1 1 200px}
 .song-planner-detail-titles .deck-title {margin-top:0}
@@ -332,6 +339,9 @@ button,summary,a,input,select,textarea {transition-duration:150ms}
 .song-task-edit-form,.song-task-add-form {width:100%;gap:8px}
 @media(max-width:640px) {
   .song-planner-search {max-width:100%;flex-basis:100%}
+  .song-planner-popup {padding:12px}
+  .modal.song-planner-panel {max-height:calc(100dvh - 24px);padding:20px 16px}
+  .song-planner-close {top:14px;right:14px}
   .song-planner-detail-head {flex-direction:column;align-items:stretch}
   .song-task-row {align-items:flex-start}
   .song-task-controls {width:100%;justify-content:space-between}
@@ -339,4 +349,5 @@ button,summary,a,input,select,textarea {transition-duration:150ms}
 }
 @media(prefers-reduced-motion:reduce) {
   .song-planner-row,.song-task-date {transition:none}
+  .modal.song-planner-panel {animation:none}
 }
