@@ -651,9 +651,10 @@ class UntitledSessionTests(unittest.TestCase):
              patch.object(tracker.time, "monotonic", return_value=20.0):
             fixture_poll(t)
 
-        self.assertIsNone(t.session_id)
-        self.assertEqual(t.resume_hint_project, "Untitled")
-        self.assertEqual(t.status().reason,"unverified")
+        # Ambiguous titles keep the current set instead of renaming or ending it.
+        self.assertEqual(t.session_id, untitled_id)
+        self.assertEqual(t.project_name, "Untitled")
+        self.assertEqual(t.status().reason,"working")
 
     def test_ableton_closed_deletes_untitled_through_poll(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
@@ -725,7 +726,7 @@ class PauseTrackingTests(unittest.TestCase):
         pauses = tracker.get_pauses()
         self.assertEqual(len(pauses), 1)
         self.assertEqual(pauses[0]["reason"], "idle")
-        self.assertEqual(pauses[0]["pause_start"], 1030.0)
+        self.assertEqual(pauses[0]["pause_start"], 1000.0 + min(100.0, tracker.INPUT_ALLOWANCE))
         self.assertEqual(pauses[0]["pause_end"], 1500.0)
         self.assertEqual(pauses[0]["prev_project"], "Song A")
         self.assertEqual(pauses[0]["next_project"], "Song A")

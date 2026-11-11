@@ -54,7 +54,7 @@ def main():
     with patch.object(tracker,'DB_PATH',db),contextlib.redirect_stdout(io.StringIO()):
         t=tracker.Tracker()
         try:
-            for sec in range(0,181,5):
+            for sec in range(0,661,5):
                 o=tracker.Observation(wall=1800000000+sec,mono=1000+sec,pid=42,
                     foreground=True,project='Verification set',project_at=1000+sec,
                     input_at=1000,observable=True,locked=False,audio=True,
@@ -67,7 +67,7 @@ def main():
         actual={'active_seconds':c.execute('SELECT COALESCE(SUM(active_seconds),0) FROM sessions').fetchone()[0],
                 'evidence_seconds':c.execute('SELECT COALESCE(SUM(credited_seconds),0) FROM activity_intervals').fetchone()[0],
                 'open_sessions':c.execute('SELECT COUNT(*) FROM sessions WHERE end_time IS NULL').fetchone()[0]}
-    expected={'active_seconds':120.0,'evidence_seconds':120.0,'open_sessions':0}
+    expected={'active_seconds':tracker.LISTENING_ALLOWANCE,'evidence_seconds':tracker.LISTENING_ALLOWANCE,'open_sessions':0}
     lock=tracker.acquire_writer_lock(db)
     try:
         child=subprocess.run([sys.executable,'-c',
@@ -75,7 +75,7 @@ def main():
             capture_output=True,text=True)
         assert child.returncode!=0 and 'Another tracker already owns' in child.stderr
         with contextlib.closing(sqlite3.connect(db)) as c:
-            assert c.execute('SELECT SUM(active_seconds) FROM sessions').fetchone()[0]==120
+            assert c.execute('SELECT SUM(active_seconds) FROM sessions').fetchone()[0]==tracker.LISTENING_ALLOWANCE
         (out/'writer-contention.json').write_text(json.dumps({'second_writer_rejected':True,'totals_unchanged':True},indent=2)+'\n')
     finally:
         if lock is not None: lock.close()
@@ -87,7 +87,7 @@ def main():
     hashes={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in
         ['tracker.py','tracking_policy.py','activity_store.py','activity_observer.py','dashboard.py','menubar.py','audio_probe.swift']}
     manifest={'source_sha256':hashes,'revision':revision,'python':platform.python_version(),'platform':platform.platform(),
-              'policy_version':1,'type':'simulated adapters, real tracker and SQLite',
+              'policy_version':tracker.POLICY_VERSION,'type':'simulated adapters, real tracker and SQLite',
               'tests':result.testsRun,'failures':len(result.failures),'errors':len(result.errors)}
     for name,data in [('manifest',manifest),('expected',expected),('actual',actual)]:
         (out/f'{name}.json').write_text(json.dumps(data,indent=2)+'\n')

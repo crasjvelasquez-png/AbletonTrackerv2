@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Build the self-contained-source Tracker.app macOS bundle."""
 
+import plistlib
 import shutil
+import struct
 import subprocess
 import sys
-import struct
-import plistlib
+import sysconfig
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -23,6 +25,7 @@ SOURCE_FILES = (
     "menubar_panel.py",
     "notifications.py",
     "projects.py",
+    "songs.py",
     "tracker.py",
     "tracking_policy.py",
     "activity_store.py",
@@ -35,10 +38,142 @@ APPS = {
     "Tracker": {
         "bundle_id": "com.abletontracker.tracker",
         "accent": "#3B82F6",
-        "ui_element": True,
-        "entry": "menubar.py",
+        "ui_element": False,
+        "entry": "dashboard_window.py",
     },
 }
+
+
+def resolve_python_dylib() -> str:
+    """Resolve the shared CPython library path for in-process bundle execution."""
+    libdir = sysconfig.get_config_var("LIBDIR") or ""
+    ldlib = sysconfig.get_config_var("LDLIBRARY") or ""
+    if libdir and ldlib:
+        candidate = Path(libdir) / ldlib
+        if candidate.exists():
+            return str(candidate.resolve())
+    framework_lib = Path(sys.prefix) / "Python"
+    if framework_lib.exists():
+        return str(framework_lib.resolve())
+    raise FileNotFoundError(f"Could not locate CPython shared library under {sys.prefix}")
+
+
+def build_launcher(macos: Path, python_path: str, python_dylib: str, entry: str) -> Path:
+    """Compile a native Mach-O bundle launcher so macOS Dock binds to Tracker.app."""
+    launcher = macos / "launcher"
+    c_source = f"""#include <dlfcn.h>
+#include <fcntl.h>
+#include <libgen.h>
+#include <limits.h>
+#include <mach-o/dyld.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+static const char *PYTHON_PATH = "{python_path}";
+static const char *PYTHON_DYLIB = "{python_dylib}";
+static const char *ENTRY_SCRIPT = "{entry}";
+
+typedef int (*Py_BytesMain_t)(int, char **);
+
+static void redirect_logs(const char *log_name) {{
+    const char *home = getenv("HOME");
+    if (!home || !home[0]) return;
+    char dir_path[PATH_MAX];
+    snprintf(dir_path, sizeof(dir_path), "%s/.ableton_tracker", home);
+    mkdir(dir_path, 0755);
+    char log_path[PATH_MAX];
+    snprintf(log_path, sizeof(log_path), "%s/%s", dir_path, log_name);
+    int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) {{
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        if (fd > STDERR_FILENO) close(fd);
+    }}
+}}
+
+int main(int argc, char **argv) {{
+    setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
+    setenv("ABLETON_TRACKER_PYTHON", PYTHON_PATH, 1);
+
+    char exec_buf[PATH_MAX];
+    uint32_t exec_size = sizeof(exec_buf);
+    if (_NSGetExecutablePath(exec_buf, &exec_size) != 0) {{
+        fprintf(stderr, "Failed to resolve executable path\\n");
+        return 1;
+    }}
+    char real_exec[PATH_MAX];
+    if (!realpath(exec_buf, real_exec)) {{
+        strncpy(real_exec, exec_buf, sizeof(real_exec) - 1);
+        real_exec[sizeof(real_exec) - 1] = '\\0';
+    }}
+    char exec_copy[PATH_MAX];
+    strncpy(exec_copy, real_exec, sizeof(exec_copy) - 1);
+    exec_copy[sizeof(exec_copy) - 1] = '\\0';
+    char *macos_dir = dirname(exec_copy);
+
+    char rel_app[PATH_MAX];
+    snprintf(rel_app, sizeof(rel_app), "%s/../Resources/app", macos_dir);
+    char app_source[PATH_MAX];
+    if (!realpath(rel_app, app_source)) {{
+        strncpy(app_source, rel_app, sizeof(app_source) - 1);
+        app_source[sizeof(app_source) - 1] = '\\0';
+    }}
+
+    if (argc >= 2 && strcmp(argv[1], "--background") == 0) {{
+        redirect_logs("tracker.log");
+        if (chdir(app_source) != 0) {{
+            perror("chdir failed");
+            return 1;
+        }}
+        char *bg_argv[] = {{ (char *)PYTHON_PATH, "menubar.py", NULL }};
+        execv(PYTHON_PATH, bg_argv);
+        perror("execv failed");
+        return 1;
+    }}
+
+    redirect_logs("dashboard.log");
+    setenv("ABLETON_TRACKER_IN_BUNDLE", "1", 1);
+
+    void *handle = dlopen(PYTHON_DYLIB, RTLD_LAZY | RTLD_GLOBAL);
+    if (!handle) {{
+        fprintf(stderr, "dlopen(%s) failed: %s\\n", PYTHON_DYLIB, dlerror());
+        return 1;
+    }}
+    Py_BytesMain_t py_main = (Py_BytesMain_t)dlsym(handle, "Py_BytesMain");
+    if (!py_main) {{
+        fprintf(stderr, "dlsym(Py_BytesMain) failed: %s\\n", dlerror());
+        return 1;
+    }}
+
+    if (argc >= 2 && strncmp(argv[1], "-psn_", 5) != 0) {{
+        return py_main(argc, argv);
+    }}
+
+    if (chdir(app_source) != 0) {{
+        perror("chdir failed");
+        return 1;
+    }}
+    char script_path[PATH_MAX];
+    snprintf(script_path, sizeof(script_path), "%s/%s", app_source, ENTRY_SCRIPT);
+    char *win_argv[] = {{ real_exec, script_path, NULL }};
+    return py_main(2, win_argv);
+}}
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".c", encoding="utf-8", delete=False) as tmp:
+        tmp.write(c_source)
+        tmp_path = Path(tmp.name)
+    try:
+        subprocess.run(
+            ["xcrun", "clang", "-O2", str(tmp_path), "-o", str(launcher)],
+            check=True,
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    launcher.chmod(0o755)
+    return launcher
 
 
 def build_icon(app_name: str, accent: str) -> Path:
@@ -130,25 +265,9 @@ def build_bundle(app_name: str, config: dict[str, object], icns: Path) -> Path:
 """, encoding="utf-8")
 
     python_path = sys.executable or shutil.which("python3") or "/usr/bin/python3"
+    python_dylib = resolve_python_dylib()
     entry = str(config["entry"])
-    open_window = ""
-    if app_name == "Tracker":
-        open_window = '''if [ "${1:-}" != "--background" ]; then
-    export ABLETON_TRACKER_OPEN_WINDOW="1"
-fi'''
-    launcher = macos / "launcher"
-    launcher.write_text(f"""#!/bin/bash
-set -u
-export PYTHONDONTWRITEBYTECODE=1
-PYTHON="{python_path}"
-APP_SOURCE="$(cd "$(dirname "$0")/../Resources/app" && pwd)"
-LOG_DIR="$HOME/.ableton_tracker"
-mkdir -p "$LOG_DIR"
-{open_window}
-cd "$APP_SOURCE"
-exec "$PYTHON" {entry} >> "$LOG_DIR/{app_name.lower()}.log" 2>&1
-""", encoding="utf-8")
-    launcher.chmod(0o755)
+    build_launcher(macos, python_path, python_dylib, entry)
     return bundle
 
 
@@ -183,10 +302,11 @@ def main() -> None:
             ["codesign", "--force", "--deep", "--sign", "-", str(bundle)],
             check=True,
         )
-        # Register the embedded sender so macOS can resolve its bundle and artwork.
+        # Register both the embedded notification helper and the main app bundle.
         registrar = Path("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
         if registrar.exists():
             subprocess.run([str(registrar), "-f", str(bundle / "Contents" / "Resources" / "Tracker Notifications.app")], check=True)
+            subprocess.run([str(registrar), "-f", str(bundle)], check=True)
         print(f"Built and signed {bundle}")
 
 

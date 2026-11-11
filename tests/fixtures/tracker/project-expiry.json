@@ -1,6 +1,6 @@
 {
-  "name": "project freshness expires between delayed polls",
-  "expected_seconds": 20,
+  "name": "project memory survives failed title reads until input allowance",
+  "expected_seconds": 180,
   "ticks": [
     {
       "at": 0,
@@ -16,10 +16,186 @@
     },
     {
       "at": 15,
+      "project": null,
       "project_at": 10
     },
     {
-      "at": 23,
+      "at": 20,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 25,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 30,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 35,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 40,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 45,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 50,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 55,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 60,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 65,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 70,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 75,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 80,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 85,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 90,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 95,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 100,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 105,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 110,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 115,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 120,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 125,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 130,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 135,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 140,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 145,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 150,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 155,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 160,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 165,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 170,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 175,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 180,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 185,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 190,
+      "project": null,
+      "project_at": 10
+    },
+    {
+      "at": 195,
       "project": null,
       "project_at": 10
     }

@@ -1,4 +1,5 @@
 """Read-only Ableton set discovery and project launch helpers (no GUI imports)."""
+import glob
 import json
 import os
 from pathlib import Path
@@ -181,6 +182,33 @@ def build_catalog(db_path):
     for candidate in _spotlight_matches(unresolved):
         matches.setdefault(candidate["name"].casefold(), candidate["path"])
     return {"recent": [{"name": name, "path": matches.get(name.casefold())} for name in names], "templates": templates, "folders": folders, "warning": warning}
+
+
+def resolve_project_path(db_path, name):
+    """Newest saved set with this exact name; explains an unplugged drive instead of guessing."""
+    matches = _spotlight_matches([name])
+    if not matches:
+        try:
+            pins = load_pinned_folders(db_path)
+        except ValueError:
+            pins = []
+        for pin in pins:
+            if Path(pin["path"]).is_dir():
+                found, _ = _scan_folder(pin["path"], time.monotonic() + SCAN_SECONDS)
+                matches += [p for p in found if p["name"].casefold() == name.casefold()]
+    if not matches:
+        raise ValueError(f"Could not find \u201c{name}.als\u201d. If it lives on an external drive, reconnect the drive and try again.")
+    return max(matches, key=lambda p: p["modified"])["path"]
+
+
+def find_ableton_app():
+    """Newest installed Live; None lets macOS pick the .als handler."""
+    candidates = sorted(glob.glob("/Applications/Ableton Live *.app"))
+    if candidates:
+        return candidates[-1]
+    if Path("/Applications/Ableton Live.app").exists():
+        return "/Applications/Ableton Live.app"
+    return None
 
 
 def open_project(path, app_path):

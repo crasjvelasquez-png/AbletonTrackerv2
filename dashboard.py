@@ -2,7 +2,10 @@
 """Ableton Tracker Dashboard — local web server."""
 
 import os
+import subprocess
 import sqlite3
+import songs
+from songs import ensure_song_schema
 import json
 import hashlib
 import time
@@ -15,7 +18,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
-from projects import PINNED_FOLDERS_KEY, TEMPLATES_KEY, list_templates, normalize_pinned_folders, normalize_templates
+from projects import (PINNED_FOLDERS_KEY, TEMPLATES_KEY, find_ableton_app, list_templates, normalize_pinned_folders,
+                      normalize_templates, open_project, resolve_project_path)
 from activity_store import ensure_activity_schema, load_activity_rows, read_tracking_status
 from tracking_policy import POLICY_TEXT
 
@@ -773,6 +777,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_sessions_notes_column(conn)
     ensure_activity_schema(conn)
     ensure_indexes(conn)
+    ensure_song_schema(conn)
     purge_legacy_categories(conn)
 
 
@@ -1930,6 +1935,64 @@ def _load_html() -> str:
     raise FileNotFoundError(f"Dashboard template missing: {TEMPLATE_PATH}")
 
 
+# -- On Deck ----------------------------------------------------------------
+
+ON_DECK_SNOOZE_DAYS = (7, 30)
+
+
+class OnDeckConflict(Exception):
+    """The client acted on a song that is no longer On Deck."""
+
+
+def get_on_deck(now: float | None = None) -> dict:
+    """The menu-bar On Deck model plus the fields the dashboard edits in place."""
+    now = time.time() if now is None else now
+    all_songs = songs.load_songs(DB_PATH, now=now)
+    model = songs.panel_model(all_songs, datetime.fromtimestamp(now).date())
+    model["track_stages"] = [(stage, songs.STAGE_LABELS[stage]) for stage in songs.TRACK_STAGES]
+    deck = songs.current_deck(all_songs)
+    if deck:
+        due = songs._effective_due(deck)
+        own_due = songs._parse_date(deck["due_date"])
+        model.update(inferred_stage=deck["inferred_stage"], due_value=due.isoformat() if due else "",
+                     due_source="song" if own_due else "legacy" if due else "",
+                     seconds=deck["seconds"], open_name=deck["open_name"])
+    return model
+
+
+def on_deck_action(payload: dict) -> dict:
+    action = payload.get("action")
+    key = str(payload.get("key") or "")
+    if action == "pick":
+        snooze = payload.get("snooze_days")
+        if snooze is not None and snooze not in ON_DECK_SNOOZE_DAYS:
+            raise ValueError("Snooze for 7 or 30 days")
+        songs.put_on_deck(DB_PATH, key, snooze_previous_days=snooze)
+        return get_on_deck()
+    if action == "snooze":
+        days = payload.get("days")
+        if days not in ON_DECK_SNOOZE_DAYS:
+            raise ValueError("Snooze for 7 or 30 days")
+    elif action not in ("stage", "due", "task", "task_done", "open"):
+        raise ValueError("Unknown On Deck action")
+    deck = songs.current_deck(songs.load_songs(DB_PATH))
+    if not deck or deck["key"] != key:
+        raise OnDeckConflict("On Deck changed in another window. Showing the current song.")
+    if action == "snooze":
+        songs.snooze_deck(DB_PATH, payload["days"])
+    elif action == "stage":
+        songs.set_stage(DB_PATH, key, str(payload.get("stage") or ""))
+    elif action == "due":
+        songs.set_due_date(DB_PATH, key, str(payload.get("date") or ""))
+    elif action == "task":
+        songs.set_next_task(DB_PATH, key, str(payload.get("text") or ""))
+    elif action == "task_done":
+        songs.complete_next_task(DB_PATH, key)
+    elif action == "open":
+        open_project(resolve_project_path(DB_PATH, deck["open_name"]), find_ableton_app())
+    return get_on_deck()
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # silence access logs
@@ -2032,6 +2095,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(get_weekly_target(date_value))
             except ValueError as exc:
                 self._json({"error": str(exc)}, status=400)
+        elif parsed.path == "/api/on-deck":
+            self._json(get_on_deck())
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-templates":
@@ -2277,6 +2342,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
                 return
             self._json(result)
+        elif self.path == "/api/on-deck":
+            try:
+                payload = self._request_json()
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if not isinstance(payload, dict):
+                self._json({"error": "request body is required"}, status=400)
+                return
+            try:
+                self._json({"ok": True, "deck": on_deck_action(payload)})
+            except OnDeckConflict as exc:
+                self._json({"error": str(exc), "deck": get_on_deck()}, status=409)
+            except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+                self._json({"error": str(exc)}, status=400)
         elif self.path == "/api/app-settings":
             try:
                 payload = self._request_json()

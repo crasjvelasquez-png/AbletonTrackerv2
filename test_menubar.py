@@ -1,7 +1,9 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
+from datetime import date, timedelta
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -567,3 +569,107 @@ class AbletonTrackerAppInitTests(_AppTestBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeckActionTests(_AppTestBase):
+    """On Deck wiring, written before the menubar code.
+
+    Failure modes: a pick without a deck song shows a needless prompt or fails to
+    open Live; a swap replaces the deck song without asking, or ignores Cancel;
+    an unplugged drive crashes instead of explaining; finishing a task leaves no
+    way to name the next one; a broken song query takes down the refresh loop.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmpdir.name) / "sessions.db"
+        import sqlite3
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("""CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_name TEXT NOT NULL,
+                start_time REAL NOT NULL, end_time REAL, active_seconds REAL DEFAULT 0, last_seen_time REAL)""")
+            now = time.time()
+            for name, hours in (("April 2026 - Prince - 130 bpm Emaj", 5), ("August 2026 - DANCE - 118 bpm", 4)):
+                conn.execute("INSERT INTO sessions(project_name,start_time,end_time,active_seconds,last_seen_time) VALUES(?,?,?,?,?)",
+                             (name, now - 86400, now - 86400 + hours * 3600, hours * 3600, now - 86400 + hours * 3600))
+        conn.close()
+        self._db_patch = patch.object(tracker, "DB_PATH", self.db)
+        self._db_patch.start()
+        super().setUp()
+        self.app = AbletonTrackerApp()
+        self.app._refresh = MagicMock()
+        self.opened = []
+        self._open_patch = patch.object(menubar, "open_project", side_effect=lambda path, app: self.opened.append(path))
+        self._resolve_patch = patch.object(menubar, "resolve_project_path", side_effect=lambda db, name: f"/sets/{name}.als")
+        self._alert = patch.object(menubar.rumps, "alert", create=True, return_value=1)
+        self._window = patch.object(menubar.rumps, "Window", create=True)
+        for p in (self._open_patch, self._resolve_patch, self._alert, self._window):
+            p.start()
+        import songs as song_model
+        self.songs = song_model
+        self.keys = {s["title"]: s["key"] for s in song_model.load_songs(self.db)}
+
+    def tearDown(self):
+        for p in (self._window, self._alert, self._resolve_patch, self._open_patch):
+            p.stop()
+        super().tearDown()
+        self._db_patch.stop()
+        self._tmpdir.cleanup()
+
+    def deck(self):
+        return self.songs.current_deck(self.songs.load_songs(self.db))
+
+    def test_first_pick_puts_on_deck_and_opens_without_prompt(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        self.assertEqual(self.opened, ["/sets/April 2026 - Prince - 130 bpm Emaj.als"])
+        menubar.rumps.alert.assert_not_called()
+        self.app._refresh.assert_called_with(None)
+
+    def test_swap_asks_and_cancel_keeps_current(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        menubar.rumps.alert.return_value = 0
+        self.app.deck_pick(self.keys["August 2026 - DANCE - 118 bpm"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        self.assertEqual(len(self.opened), 1)
+        menubar.rumps.alert.return_value = -1
+        self.app.deck_pick(self.keys["August 2026 - DANCE - 118 bpm"])
+        self.assertEqual(self.deck()["title"], "August 2026 - DANCE - 118 bpm")
+        prince = next(s for s in self.songs.load_songs(self.db) if s["title"].startswith("April"))
+        self.assertEqual(prince["snoozed_until"], (date.today() + timedelta(days=30)).isoformat())
+
+    def test_offline_drive_explains_instead_of_crashing(self):
+        menubar.resolve_project_path.side_effect = ValueError("This Live set is no longer available. Check its folder or reconnect the drive.")
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        message = menubar.rumps.alert.call_args.kwargs["message"]
+        self.assertIn("reconnect the drive", message)
+
+    def test_done_prompts_for_the_next_task(self):
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.app.deck_pick(key)
+        menubar.rumps.Window.return_value.run.return_value = MagicMock(clicked=1, text="write verse 2")
+        self.app.deck_next_edit()
+        self.assertEqual(self.deck()["next_task"], "write verse 2")
+        menubar.rumps.Window.return_value.run.return_value = MagicMock(clicked=0, text="ignored")
+        self.app.deck_next_done()
+        self.assertEqual(self.deck()["next_task"], "")
+        self.assertEqual(menubar.rumps.Window.call_count, 2)
+
+    def test_due_and_stage_actions(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.app.deck_due(7)
+        self.assertEqual(self.deck()["due_date"], (date.today() + timedelta(days=7)).isoformat())
+        self.app.deck_due(0)
+        self.assertEqual(self.deck()["due_date"], "")
+        self.app.deck_stage("recording")
+        self.assertEqual(self.deck()["stage"], "recording")
+        self.app.deck_snooze(7)
+        self.assertIsNone(self.deck())
+
+    def test_model_failure_hides_deck_instead_of_breaking_refresh(self):
+        with patch.object(menubar.songs, "load_songs", side_effect=RuntimeError("boom")):
+            self.assertIsNone(self.app._build_deck_model())
+        model = self.app._build_deck_model()
+        self.assertEqual(model["mode"], "empty")
+        self.assertEqual([s[1] for s in model["suggestions"]][:2],
+                         ["April 2026 - Prince - 130 bpm Emaj", "August 2026 - DANCE - 118 bpm"])

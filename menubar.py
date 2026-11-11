@@ -11,7 +11,7 @@ import fcntl
 import math
 import struct
 import zlib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import rumps
@@ -33,7 +33,8 @@ from tracker import (
     Tracker,
 )
 from notifications import NotificationCoordinator, NotificationMessage
-from projects import ProjectCatalog, open_project
+from projects import ProjectCatalog, find_ableton_app, open_project, resolve_project_path
+import songs
 
 DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
@@ -153,14 +154,7 @@ def _get_default_goals() -> tuple[float | None, float | None]:
         return None, None
 
 
-def _find_ableton_app() -> str | None:
-    from glob import glob
-    candidates = sorted(glob("/Applications/Ableton Live *.app"))
-    if candidates:
-        return candidates[-1]
-    if Path("/Applications/Ableton Live.app").exists():
-        return "/Applications/Ableton Live.app"
-    return None
+_find_ableton_app = find_ableton_app
 
 
 class TrackerThread(threading.Thread):
@@ -245,6 +239,16 @@ class DashboardProcess:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
+            )
+        elif sys.platform == "darwin" and "unittest" not in sys.modules:
+            subprocess.Popen(
+                [
+                    "osascript",
+                    "-e",
+                    'tell application id "com.abletontracker.tracker"\nreopen\nactivate\nend tell',
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
 
     def stop(self):
@@ -342,6 +346,7 @@ class AbletonTrackerApp(rumps.App):
             except Exception as e:
                 print(f"[refresh] streak/week error: {e}",file=sys.stderr)
             self._totals = today,yesterday,streak,week
+            self._deck_model = self._build_deck_model()
             self._totals_key = key
         today,yesterday,streak,week = self._totals
 
@@ -417,6 +422,13 @@ class AbletonTrackerApp(rumps.App):
                     "tracker": lambda: self.open_dashboard(None),
                     "ableton": lambda: self.open_ableton(None),
                     "quit": lambda: self.quit_app(None),
+                    "deck_open": self.deck_open,
+                    "deck_pick": self.deck_pick,
+                    "deck_stage": self.deck_stage,
+                    "deck_next_edit": self.deck_next_edit,
+                    "deck_next_done": self.deck_next_done,
+                    "deck_due": self.deck_due,
+                    "deck_snooze": self.deck_snooze,
                 },
             )
             self._refresh(None)
@@ -437,6 +449,7 @@ class AbletonTrackerApp(rumps.App):
                 run=self.streak_item.title,
                 show_open_ableton=self._show_open_ableton,
                 state=state,
+                deck=getattr(self, "_deck_model", None),
             )
         except Exception as exc:
             self.panel.dispose()
@@ -615,6 +628,93 @@ class AbletonTrackerApp(rumps.App):
         except Exception as exc:
             rumps.alert(title="Could not open project", message=str(exc))
 
+    # -- On Deck ----------------------------------------------------------
+
+    @staticmethod
+    def _db_path():
+        import tracker
+        return tracker.DB_PATH
+
+    def _build_deck_model(self):
+        """Display-only snapshot for the panel; None hides the section on failure."""
+        try:
+            return songs.panel_model(songs.load_songs(self._db_path()), date.today())
+        except Exception as exc:
+            print(f"[deck] unavailable: {exc}", file=sys.stderr)
+            return None
+
+    def _deck_song(self):
+        return songs.current_deck(songs.load_songs(self._db_path()))
+
+    def _deck_changed(self):
+        self._totals_key = None
+        self._refresh(None)
+
+    def _open_song(self, song):
+        try:
+            open_project(resolve_project_path(self._db_path(), song["open_name"]), _find_ableton_app())
+        except Exception as exc:
+            rumps.alert(title="Could not open the On Deck song", message=str(exc))
+
+    def deck_pick(self, key):
+        current = self._deck_song()
+        snooze_days = None
+        if current and current["key"] != key:
+            choice = rumps.alert(
+                title=f"Snooze \u201c{current['title']}\u201d?",
+                message="Only one song is On Deck at a time. The snoozed song returns to your suggestions when the snooze ends.",
+                ok="Snooze 1 week", cancel="Cancel", other="Snooze 1 month")
+            if choice == 0:
+                return
+            snooze_days = 7 if choice == 1 else 30
+        songs.put_on_deck(self._db_path(), key, snooze_previous_days=snooze_days)
+        self._deck_changed()
+        song = self._deck_song()
+        if song:
+            self._open_song(song)
+
+    def deck_open(self):
+        song = self._deck_song()
+        if song:
+            self._open_song(song)
+
+    def deck_stage(self, stage):
+        song = self._deck_song()
+        if song:
+            songs.set_stage(self._db_path(), song["key"], stage)
+            self._deck_changed()
+
+    def deck_next_edit(self, default_text=None):
+        song = self._deck_song()
+        if not song:
+            return
+        response = rumps.Window(
+            message=f"The one next thing for \u201c{song['title']}\u201d:",
+            title="Next task",
+            default_text=song["next_task"] if default_text is None else default_text,
+            ok="Save", cancel="Cancel", dimensions=(320, 24)).run()
+        if response.clicked:
+            songs.set_next_task(self._db_path(), song["key"], response.text)
+        self._deck_changed()
+
+    def deck_next_done(self):
+        song = self._deck_song()
+        if song:
+            songs.complete_next_task(self._db_path(), song["key"])
+            self._deck_changed()
+            self.deck_next_edit(default_text="")
+
+    def deck_due(self, days):
+        song = self._deck_song()
+        if song:
+            value = (date.today() + timedelta(days=days)).isoformat() if days else ""
+            songs.set_due_date(self._db_path(), song["key"], value)
+            self._deck_changed()
+
+    def deck_snooze(self, days):
+        songs.snooze_deck(self._db_path(), days)
+        self._deck_changed()
+
     def toggle_pause(self, sender):
         if PAUSE_FILE.exists():
             PAUSE_FILE.unlink()
@@ -638,6 +738,8 @@ class AbletonTrackerApp(rumps.App):
 if __name__ == "__main__":
     instance_lock = acquire_instance_lock()
     if instance_lock is None:
+        if os.environ.get("ABLETON_TRACKER_OPEN_WINDOW") == "1":
+            DashboardProcess().open()
         print("Tracker is already running; ignoring duplicate launch.")
         sys.exit(0)
     app = AbletonTrackerApp()

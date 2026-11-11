@@ -16,7 +16,8 @@ import math
 import uuid
 
 from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE,
-                             LISTENING_ALLOWANCE, EVIDENCE_TTL, POLICY_TEXT)
+                             LISTENING_ALLOWANCE, AWAY_ALLOWANCE, PROJECT_GRACE,
+                             EVIDENCE_TTL, POLICY_TEXT)
 from activity_store import ensure_activity_schema, load_activity_rows
 from collections import defaultdict
 from contextlib import closing, suppress
@@ -1275,6 +1276,10 @@ class Tracker:
         self._input_barrier = float('-inf')
         self._last_project_at = None
         self._lost_observability_at = None
+        # Provisional trip to another app: last credited moment before leaving,
+        # and the moment Live came back (counts as attendance like an input).
+        self._away_since = None
+        self._return_at = None
         self._interval_id = None
         self._pause_interval_id = None
         self._interval_start_wall = None
@@ -1571,6 +1576,7 @@ class Tracker:
         self.resume_hint_project = project if preserve_resume_hint else None
         self.session_id = self.project_name = None
         self.last_tick = self.last_tick_mono = None
+        self._away_since = self._return_at = None
         self._interval_id = None
         print(f"[{_ts()}] ■  {project} ({reason})")
 
@@ -1582,7 +1588,8 @@ class Tracker:
         messages = {
             'working': f"Working on: {self.project_name}",
             'listening': f"Listening: pauses in {max(0, int((cutoff or o.mono)-o.mono))}s",
-            'idle': 'Paused: no Live input for 30s',
+            'away': f"Away: counts if back in Live within {max(0, int((cutoff or o.mono)-o.mono))}s",
+            'idle': f'Paused: no Live input for {int(INPUT_ALLOWANCE//60)}m',
             'listening_limit': 'Paused: listening limit reached',
             'background': 'Paused: another app is active',
             'locked': 'Paused: Mac locked or asleep',
@@ -1592,7 +1599,7 @@ class Tracker:
             'awaiting_input': 'Paused: interact with Live to resume',
             'closed': 'Ableton not running',
         }
-        counting = self.session_id is not None and reason in ('working','listening')
+        counting = self.session_id is not None and reason in ('working','listening','away')
         state = (STATE_TRACKING if counting else STATE_PAUSED if reason=='manual'
                  else STATE_ABLETON_CLOSED if not o.pid else STATE_ABLETON_OPEN
                  if reason=='no_project' else STATE_IDLE_PAUSED)
@@ -1640,18 +1647,41 @@ class Tracker:
         if prev and o.mono < prev.mono:
             return  # delayed/out-of-order detector response
         old_session=self.session_id
-        # Settle old evidence before new input can extend it. Never bridge a missed heartbeat.
-        if old_session is not None and prev:
-            end=min(o.mono,prev.mono+EVIDENCE_TTL,self._deadline or o.mono)
-            if o.boundary is not None:
-                end=min(end,max(prev.mono,o.boundary))
-            self._tick(at=o.wall,mono=end)
-            if self.session_id is None:  # externally closed/deleted
-                self._input_barrier=max(self._input_barrier,o.mono)
         gap=bool(prev and o.mono-prev.mono>EVIDENCE_TTL)
         changed_pid=bool(prev and prev.pid!=o.pid)
+        # Settle old evidence before new input can extend it. Never bridge a missed heartbeat.
+        if old_session is not None and prev:
+            if self._away_since is None:
+                end=min(o.mono,prev.mono+EVIDENCE_TTL,self._deadline or o.mono)
+                if o.boundary is not None:
+                    end=min(end,max(prev.mono,o.boundary))
+                self._tick(at=o.wall,mono=end)
+            elif (o.foreground and not o.locked and not paused and not gap and not changed_pid
+                  and o.mono-self._away_since<=AWAY_ALLOWANCE):
+                # Back in Live within the allowance: the trip away counts.
+                self._deadline=None
+                self._tick(at=o.wall,mono=o.mono)
+                self._away_since=None
+                self._return_at=o.mono
+            if self.session_id is None:  # externally closed/deleted
+                self._input_barrier=max(self._input_barrier,o.mono)
+        if changed_pid:
+            self._last_project_at=None
         if (gap or changed_pid) and self.session_id is not None:
             self._close(preserve_resume_hint=not changed_pid,reason='unverified',at=o.wall,mono=self.last_tick_mono)
+        if self.session_id is not None and o.pid and not o.foreground and not o.locked and not paused:
+            if self._away_since is None:
+                self._away_since=self.last_tick_mono
+            if o.mono-self._away_since<AWAY_ALLOWANCE:
+                # Provisional: nothing is credited unless Live comes back in time.
+                self._deadline=self._away_since+AWAY_ALLOWANCE
+                self._input_barrier=max(self._input_barrier,o.mono)
+                self._previous_observation=o
+                self._publish_status(o,'away',self._deadline)
+                return
+        if self.session_id is not None and self._away_since is not None and not (o.locked or paused):
+            # Away too long: the session ends when you left; the trip is not credited.
+            self._close(preserve_resume_hint=True,reason='background',at=o.wall,mono=self.last_tick_mono)
         blocked=paused or not o.pid or not o.foreground or o.locked or gap or changed_pid
         if blocked:
             barrier=(o.boundary if o.boundary is not None else
@@ -1667,34 +1697,38 @@ class Tracker:
         project=o.project
         if project is not None:
             self._last_project_at=o.project_at if o.project_at is not None else o.mono
-        elif (self.session_id is not None and self._last_project_at is not None
-              and o.mono < self._last_project_at+EVIDENCE_TTL):
-            project=self.project_name
+        elif self._last_project_at is not None and o.mono < self._last_project_at+PROJECT_GRACE:
+            # Unreadable or ambiguous titles: same Live process, so keep the known set.
+            project=self.project_name if self.session_id is not None else self.resume_hint_project
         if not project and reason is None:
             reason='unverified' if self.session_id is not None or self.resume_hint_project else 'no_project'
-        fresh_input=(o.input_at is not None and math.isfinite(o.input_at)
-                     and self._input_barrier<o.input_at<=o.mono)
+        input_at=(o.input_at if o.input_at is not None and math.isfinite(o.input_at)
+                  and self._input_barrier<o.input_at<=o.mono else None)
+        if (self._return_at is not None and self._input_barrier<self._return_at<=o.mono
+                and (input_at is None or self._return_at>input_at)):
+            input_at=self._return_at
+        fresh_input=input_at is not None
         if reason is None and (not fresh_input or (self._needs_new_input and not fresh_input)):
             reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified') else 'awaiting_input'
         cutoff=None
         attendance_cutoff=None
         if fresh_input:
-            input_deadline=o.input_at+INPUT_ALLOWANCE
+            input_deadline=input_at+INPUT_ALLOWANCE
             audio_fresh=(o.audio is True and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
-            attendance_cutoff=o.input_at+(LISTENING_ALLOWANCE if audio_fresh else INPUT_ALLOWANCE)
+            attendance_cutoff=input_at+(LISTENING_ALLOWANCE if audio_fresh else INPUT_ALLOWANCE)
             cutoff=attendance_cutoff
             if audio_fresh:
                 cutoff=min(cutoff,max(input_deadline,o.audio_at+EVIDENCE_TTL))
-            if self._last_project_at is not None:
-                cutoff=min(cutoff,self._last_project_at+EVIDENCE_TTL)
+            project_expired=False
+            if o.project is None and self._last_project_at is not None:
+                cutoff=min(cutoff,self._last_project_at+PROJECT_GRACE)
+                project_expired=o.mono>=self._last_project_at+PROJECT_GRACE
             if not o.observable:
                 cutoff=min(cutoff,self._lost_observability_at+EVIDENCE_TTL)
-            if o.project is None and self._last_project_at is not None:
-                cutoff=min(cutoff,self._last_project_at+EVIDENCE_TTL)
             if reason is None:
                 if o.mono>=cutoff:
-                    reason=('unverified' if not o.observable or o.project is None or (self._last_project_at is not None and o.mono>=self._last_project_at+EVIDENCE_TTL) else
-                            'listening_limit' if o.mono>=o.input_at+LISTENING_ALLOWANCE and audio_fresh else 'idle')
+                    reason=('unverified' if not o.observable or project_expired else
+                            'listening_limit' if o.mono>=input_at+LISTENING_ALLOWANCE and audio_fresh else 'idle')
                 else:
                     reason='working' if o.mono<input_deadline else 'listening'
         self._deadline=cutoff
@@ -1720,7 +1754,7 @@ class Tracker:
                     self._new_interval(o.wall)
                     self.last_tick=o.wall
                 self._interval_reason,self._interval_source=reason,interval_source
-                self._within_pause_update(o.wall,max(0,o.mono-o.input_at))
+                self._within_pause_update(o.wall,max(0,o.mono-input_at))
         else:
             # No final catch-up: the previous snapshot was settled above.
             if self.session_id is not None:
@@ -1729,7 +1763,7 @@ class Tracker:
             if not o.pid:
                 self.resume_hint_project=None
             if reason in ('idle','listening_limit','unverified','no_project'):
-                self._input_barrier=max(self._input_barrier,o.input_at or float('-inf'))
+                self._input_barrier=max(self._input_barrier,input_at or o.input_at or float('-inf'))
                 self._needs_new_input=True
         if o.audio is True:
             self.last_audio_active=o.wall

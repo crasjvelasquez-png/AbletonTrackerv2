@@ -126,7 +126,8 @@ class AXReader:
         app=self.lib.AXUIElementCreateApplication(pid)
         windows=None; titles=[]
         try:
-            self.lib.AXUIElementSetMessagingTimeout(app,ctypes.c_float(0.25))
+            # Live's UI thread is often busy; 0.25s produced frequent -25204 (cannot complete).
+            self.lib.AXUIElementSetMessagingTimeout(app,ctypes.c_float(1.0))
             windows=self.attribute(app,'AXWindows')
             if not windows: return []
             for i in range(min(30,self.cf.CFArrayGetCount(windows))):
@@ -290,7 +291,7 @@ class NativeObserver:
                         self.project_failures+=1
                 except Exception as e:
                     self.project_error=str(e); self.project_failures+=1
-                self.next_project_at=now+(5 if not self.project_failures else (5,10,30,60)[min(self.project_failures-1,3)])
+                self.next_project_at=now+(5 if not self.project_failures else (5,5,10,15)[min(self.project_failures-1,3)])
             eligible=(pid and focused and not locked and not paused and self.input.last_input is not None
                       and now-self.input.last_input<LISTENING_ALLOWANCE and now-self.input.last_input>=20)
             if eligible: self.probe.request(pid,generation,now)

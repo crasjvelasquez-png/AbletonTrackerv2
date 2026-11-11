@@ -7,7 +7,7 @@ window.DashboardExtras = (() => {
     const value = Math.max(0, Math.floor(Number(seconds) || 0));
     return `${String(Math.floor(value / 3600)).padStart(2, '0')}:${String(Math.floor(value / 60) % 60).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
   };
-  const isEditing = () => !!document.querySelector('dialog[open],.modal-backdrop.show,.detail-modal-backdrop.is-open,#weeklyGoalEdit:not([hidden])') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  const isEditing = () => !!document.querySelector('dialog[open],.modal-backdrop.show,.detail-modal-backdrop.is-open,#weeklyGoalEdit:not([hidden]),#onDeck .deck-menu') || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
 
   document.body.insertAdjacentHTML('beforeend', `
     <dialog class="warm-dialog command-dialog" id="commandDialog" aria-labelledby="commandTitle">
