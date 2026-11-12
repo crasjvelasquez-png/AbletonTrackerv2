@@ -1,13 +1,14 @@
 """Low-overhead macOS observations. No keys, coordinates or audio are stored."""
 import ctypes
 import ctypes.util
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from tracking_policy import Observation, INPUT_ALLOWANCE, LISTENING_ALLOWANCE, EVIDENCE_TTL
+from tracking_policy import Observation, INPUT_ALLOWANCE, EVIDENCE_TTL
 
-# Audio only extends credit once hands-off time passes INPUT_ALLOWANCE, so the
-# capture starts two evidence windows before that instead of while editing.
+# Play state only matters once hands-off time nears INPUT_ALLOWANCE, so the
+# play-state check starts shortly before the hands-off allowance ends.
 AUDIO_PROBE_AFTER=INPUT_ALLOWANCE-2*EVIDENCE_TTL
 
 
@@ -123,6 +124,27 @@ class AXReader:
         self.cf.CFArrayGetValueAtIndex.argtypes=[ctypes.c_void_p,ctypes.c_long]; self.cf.CFArrayGetValueAtIndex.restype=ctypes.c_void_p
         self.cf.CFRelease.argtypes=[ctypes.c_void_p]
         self.attrs={name:self.cf.CFStringCreateWithCString(None,name.encode(),0x08000100) for name in ['AXWindows','AXTitle']}
+        self.prompted=False
+
+    def request_trust(self):
+        """Show macOS's Accessibility prompt once per launch so a revoked grant is visible, not silent."""
+        if self.prompted: return
+        self.prompted=True
+        try:
+            self.lib.AXIsProcessTrustedWithOptions.argtypes=[ctypes.c_void_p]
+            self.lib.AXIsProcessTrustedWithOptions.restype=ctypes.c_bool
+            self.cf.CFDictionaryCreate.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_void_p),ctypes.POINTER(ctypes.c_void_p),ctypes.c_long,ctypes.c_void_p,ctypes.c_void_p]
+            self.cf.CFDictionaryCreate.restype=ctypes.c_void_p
+            keys=(ctypes.c_void_p*1)(ctypes.c_void_p.in_dll(self.lib,'kAXTrustedCheckOptionPrompt').value)
+            values=(ctypes.c_void_p*1)(ctypes.c_void_p.in_dll(self.cf,'kCFBooleanTrue').value)
+            options=self.cf.CFDictionaryCreate(None,keys,values,1,
+                ctypes.addressof(ctypes.c_byte.in_dll(self.cf,'kCFTypeDictionaryKeyCallBacks')),
+                ctypes.addressof(ctypes.c_byte.in_dll(self.cf,'kCFTypeDictionaryValueCallBacks')))
+            if not options: return None
+            try: return self.lib.AXIsProcessTrustedWithOptions(options)
+            finally: self.cf.CFRelease(options)
+        except (AttributeError,ValueError,OSError):
+            return None
 
     def attribute(self,element,name):
         value=ctypes.c_void_p()
@@ -131,7 +153,9 @@ class AXReader:
         return value.value
 
     def titles(self,pid):
-        if not self.lib.AXIsProcessTrusted(): raise RuntimeError('Accessibility permission is unavailable')
+        if not self.lib.AXIsProcessTrusted():
+            self.request_trust()
+            raise RuntimeError('Accessibility permission is unavailable')
         app=self.lib.AXUIElementCreateApplication(pid)
         windows=None; titles=[]
         try:
@@ -171,9 +195,6 @@ class NativeObserver:
         self.tokens=[]
         self.monitor=None
         self.sleeping=False
-        self.last_counts=None
-        self.last_poll_focus=None
-        self.last_poll_generation=0
         self.last_snapshot_at=None
         self.last_project=None
         self.last_project_at=None
@@ -215,12 +236,8 @@ class NativeObserver:
             self.wake.set()
         for name in names:
             self.tokens.append(center.addObserverForName_object_queue_usingBlock_(name,None,None,changed))
-        # Developer runs compile the audio helper lazily; do it now, not at the
-        # listening boundary, where a cold swiftc run could miss the cutoff.
-        from tracker import _ensure_audio_probe_binary
-        threading.Thread(target=_ensure_audio_probe_binary,name='tracker-probe-build',daemon=True).start()
         # No NSEvent global monitor: registering one stops the status item from
-        # receiving clicks. snapshot() reads input from CGEventSource counters.
+        # receiving clicks. snapshot() uses a single CGEventSource seconds-since-input reading.
         with self.lock: self._sync_focus(time.monotonic())
 
     def _live_app(self):
@@ -231,11 +248,13 @@ class NativeObserver:
         live=self._live_app(); front=self.workspace.frontmostApplication()
         pid=int(live.processIdentifier()) if live else None
         focused=bool(pid and front and int(front.processIdentifier())==pid and not self.sleeping)
-        self.input.focus(pid if focused else None,now)
+        # Policy v3: input in any app counts while Live is open, so attribute the
+        # session's input counters to Live whenever it runs and the Mac is awake.
+        self.input.focus(pid if pid and not self.sleeping else None,now)
         return pid,focused
 
-    def _probe(self,pid,cancel):
-        from tracker import is_ableton_playing_osc,_system_audio_level_active
+    def _probe(self,pid,cancel=None):
+        from tracker import is_ableton_playing_osc
         now=time.monotonic()
         playing=None
         if now>=self._osc_retry_at:
@@ -245,9 +264,7 @@ class NativeObserver:
                 self._osc_retry_at=now+(5,15,30,60)[min(self._osc_failures-1,3)]
             else:
                 self._osc_failures=0; self._osc_retry_at=now+5
-        if playing is True: return True,'osc_transport'
-        # Stopped transport does not imply a monitored instrument is silent.
-        return _system_audio_level_active(pid,cancel_event=cancel),'live_audio'
+        return playing,'osc_transport'
 
     def snapshot(self,current_project=None,paused=False):
         now=time.monotonic(); wall=time.time()
@@ -259,38 +276,29 @@ class NativeObserver:
             # Keep a cheap fallback even when a monitor registered successfully.
             # Registration alone does not prove that this process receives events.
             try:
-                if focused:
-                    types=(10,1,3,25,6,7,27,22)
-                    counts=tuple(int(self.Quartz.CGEventSourceCounterForEventType(0,k)) for k in types)
-                    continuous=(self.last_poll_focus==pid and self.last_poll_generation==self.input.generation)
-                    if continuous and self.last_counts is not None and counts!=self.last_counts:
-                        ages=[float(self.Quartz.CGEventSourceSecondsSinceLastEventType(0,k))
-                              for k,old,new in zip(types,self.last_counts,counts) if old!=new]
-                        event_at=now-min(ages)
-                        newer=(self.input.last_input is None or event_at>self.input.last_input+0.05)
-                        if event_at>now-5.5 and newer:
-                            self.input.event('key',event_at,pid)
-                            self.input_source='native_counters'
-                    self.last_counts=counts
-                else:
-                    self.last_counts=None
+                age=float(self.Quartz.CGEventSourceSecondsSinceLastEventType(0,0xFFFFFFFF))  # combined session state, any input
+                event_at=now-age
+                if (self.input.pid and math.isfinite(age) and age>=0
+                    and event_at>now-5.5 and event_at>self.input.focused_at
+                    and (self.input.last_input is None or event_at>self.input.last_input+0.05)):
+                    self.input.event('key',event_at,pid)
+                    self.input_source='native_counters'
             except Exception:
                 # Healthy, delivered callbacks can still supply evidence; otherwise
                 # the policy stops after the finite observability grace.
                 observable=(self.native_events and self.input_source=='native_events'
                             and self.input.last_input is not None
                             and now-self.input.last_input<EVIDENCE_TTL)
-            self.last_poll_focus=pid if focused else None
-            self.last_poll_generation=self.input.generation
             if locked:
                 self.input.focus(None,now)
             generation=self.input.generation
             if self.project_pid!=pid:
                 self.last_project=self.last_project_at=None
                 self.project_pid=pid; self.next_project_at=0
+                self.project_error=None; self.project_failures=0
                 self._osc_retry_at=0; self._osc_failures=0
                 self.probe.invalidate(generation)
-            if pid and focused and not paused and now>=self.next_project_at:
+            if pid and not locked and not paused and now>=self.next_project_at:
                 from tracker import get_project_name
                 # Same parser, direct AX source. No AppleScript fallback permission prompts.
                 try:
@@ -305,17 +313,16 @@ class NativeObserver:
                 except Exception as e:
                     self.project_error=str(e); self.project_failures+=1
                 self.next_project_at=now+(5 if not self.project_failures else (5,5,10,15)[min(self.project_failures-1,3)])
-            eligible=(pid and focused and not locked and not paused and self.input.last_input is not None
-                      and now-self.input.last_input<LISTENING_ALLOWANCE and now-self.input.last_input>=AUDIO_PROBE_AFTER)
+            # Playback counts in the background and without a time limit, so probe
+            # whenever input has gone quiet, whichever app is in front.
+            eligible=(pid and not locked and not paused and (self.input.last_input is None
+                      or now-self.input.last_input>=AUDIO_PROBE_AFTER))
             if eligible: self.probe.request(pid,generation,now)
-            else:
-                self.probe.invalidate(generation)
-                from tracker import cancel_audio_probe
-                cancel_audio_probe()
+            else: self.probe.invalidate(generation)
             audio,audio_at=self.probe.result(generation,now)
             project=self.last_project if self.last_project_at is not None and now-self.last_project_at<EVIDENCE_TTL else None
             boundary=self.input.boundary
-            if not self.started and not focused and self.last_snapshot_at is not None:
+            if not self.started and not self.input.pid and self.last_snapshot_at is not None:
                 boundary=self.last_snapshot_at
             self.last_snapshot_at=now
             self.input.boundary=None
@@ -329,8 +336,6 @@ class NativeObserver:
 
     def close(self):
         self.probe.close()
-        from tracker import cancel_audio_probe
-        cancel_audio_probe()
         if self.monitor is not None:
             self.AppKit.NSEvent.removeMonitor_(self.monitor); self.monitor=None
         for token in self.tokens: self.workspace.notificationCenter().removeObserver_(token)

@@ -402,13 +402,22 @@ class AbletonTrackerApp(rumps.App):
             self.status_item.title = "Idle"
         if status.checked_at and status.message:
             self.status_item.title = status.message
+        # Without Accessibility the tracker cannot read Live's project title and
+        # records nothing; macOS drops the grant when the app's signature changes.
+        needs_accessibility = (ableton_up and status.running and not status.paused
+                               and status.state != STATE_TRACKING
+                               and "Accessibility permission" in (status.source_error or ""))
+        if needs_accessibility:
+            self.icon, self._badge_key = None, None
+            self.title = f"⚠ {fmt_goal_time(today, None)}"
+            self.status_item.title = "Not tracking: allow Tracker in Accessibility settings"
 
         self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
         self.yesterday_item.title = f"Yesterday: {fmt_dur(yesterday)}"
         self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
         self._update_streak(streak)
         self._update_open_ableton(not ableton_up)
-        self._sync_panel("tracking" if status.state == STATE_TRACKING else "idle")
+        self._sync_panel("error" if needs_accessibility else "tracking" if status.state == STATE_TRACKING else "idle")
 
     def _install_panel(self):
         """Attach presentation only after rumps has initialized the native menu."""

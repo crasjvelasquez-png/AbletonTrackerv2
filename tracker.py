@@ -16,11 +16,11 @@ import math
 import uuid
 
 from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE,
-                             LISTENING_ALLOWANCE, AWAY_ALLOWANCE, PROJECT_GRACE,
+                             LISTENING_ALLOWANCE, PROJECT_GRACE,
                              EVIDENCE_TTL, POLICY_TEXT)
 from activity_store import ensure_activity_schema, load_activity_rows
 from collections import defaultdict
-from contextlib import closing, suppress
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -33,12 +33,6 @@ STATE_ABLETON_CLOSED = "ableton_closed"
 
 POLL_INTERVAL = 5  # lightweight reconciliation; native events wake the loop sooner
 IDLE_THRESHOLD = INPUT_ALLOWANCE  # compatibility alias; policy lives in tracking_policy.py
-AUDIO_POLL_TIMEOUT = 3  # seconds before giving up on the audio probe subprocess
-AUDIO_LEVEL_POLL_SECONDS = 1.0
-# -70 dBFS peak (≈0.000316 linear) — low enough to clear plugin white-noise
-# residue without missing real playback. RMS uses the same floor; the probe
-# treats audio as active when either peak or RMS crosses it.
-AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60  # Deprecated, use DEFAULT_CONDENSE_GAP_MINUTES
 DEFAULT_CONDENSE_GAP_MINUTES = 15
@@ -82,6 +76,7 @@ NON_PROJECT_TITLE_PATTERNS = [
     # Generic accessibility/UI labels exposed as transient Live window titles.
     r"^tooltip$",
     r"^missing value$",
+    r"^window$",
 ]
 _NON_PROJECT_TITLE_RES = [re.compile(p, re.IGNORECASE) for p in NON_PROJECT_TITLE_PATTERNS]
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -829,7 +824,6 @@ def is_ableton_running() -> bool:
 
 _error_state: dict[str, str | None] = {}
 _ERROR_STATE_LOCK = threading.Lock()
-_CG_EVENT_SECONDS_SINCE_LAST_EVENT = None
 
 
 def _log_transient_error(
@@ -854,74 +848,6 @@ def _log_transient_error(
         print(f"[{_ts()}] {recover_label}")
 
 
-def _set_idle_error(message: str | None):
-    _log_transient_error(
-        "idle", message, "HIDIdleTime read failed", "HIDIdleTime read recovered"
-    )
-
-
-def _core_graphics_idle_seconds() -> float | None:
-    global _CG_EVENT_SECONDS_SINCE_LAST_EVENT
-
-    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is False:
-        return None
-
-    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is None:
-        try:
-            core_graphics_path = ctypes.util.find_library("CoreGraphics")
-            if not core_graphics_path:
-                _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-                return None
-            core_graphics = ctypes.CDLL(core_graphics_path)
-            fn = core_graphics.CGEventSourceSecondsSinceLastEventType
-            fn.argtypes = [ctypes.c_int, ctypes.c_uint32]
-            fn.restype = ctypes.c_double
-            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = fn
-        except Exception as e:
-            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-            _set_idle_error(f"CoreGraphics unavailable: {e}")
-            return None
-
-    try:
-        # kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = 0xffffffff.
-        idle_seconds = _CG_EVENT_SECONDS_SINCE_LAST_EVENT(0, 0xFFFFFFFF)
-    except Exception as e:
-        _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-        _set_idle_error(f"CoreGraphics read failed: {e}")
-        return None
-
-    if idle_seconds < 0:
-        _set_idle_error(f"CoreGraphics returned {idle_seconds}")
-        return None
-    _set_idle_error(None)
-    return idle_seconds
-
-
-def get_idle_seconds() -> float:
-    """Seconds since last mouse/keyboard activity (macOS HIDIdleTime)."""
-    core_graphics_idle = _core_graphics_idle_seconds()
-    if core_graphics_idle is not None:
-        return core_graphics_idle
-
-    try:
-        r = subprocess.run(
-            ["/usr/sbin/ioreg", "-c", "IOHIDSystem"],
-            capture_output=True, text=True, timeout=3,
-        )
-    except Exception as e:
-        _set_idle_error(f"subprocess: {e}")
-        return float("inf")
-    if r.returncode != 0:
-        _set_idle_error(f"ioreg exit {r.returncode}: {r.stderr.strip()[:200]}")
-        return float("inf")
-    m = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', r.stdout)
-    if not m:
-        _set_idle_error(f"no HIDIdleTime in {len(r.stdout)} bytes of ioreg output")
-        return float("inf")
-    _set_idle_error(None)
-    return int(m.group(1)) / 1_000_000_000  # ns → s
-
-
 @dataclass(frozen=True)
 class TrackerStatus:
     state: str = STATE_ABLETON_CLOSED
@@ -942,192 +868,6 @@ class TrackerStatus:
     policy_version: int = POLICY_VERSION
     verified_until: float = 0.0
     source_error: str | None = None
-
-
-def _parse_audio_level_probe(output: str) -> bool | None:
-    for line in (output or "").splitlines():
-        parts = line.strip().split()
-        if not parts:
-            continue
-        if parts[0] == "active":
-            return True
-        if parts[0] == "quiet":
-            return False
-        if parts[0] == "unavailable":
-            return None
-    return None
-
-
-def _set_audio_probe_error(message: str | None):
-    _log_transient_error(
-        "audio_probe",
-        message,
-        "audio-level probe unavailable",
-        "audio-level probe recovered",
-    )
-
-
-_AUDIO_PROBE_BUILD_LOCK = threading.Lock()
-_AUDIO_PROBE_PROCESS_LOCK = threading.Lock()
-_AUDIO_PROBE_PROCESS = None
-_AUDIO_PROBE_BUILD_RETRY_AT = 0.0
-
-
-def _ensure_audio_probe_binary() -> Path | None:
-    """Packaged builds include the helper; developer compilation is lazy/cached."""
-    global _AUDIO_PROBE_BUILD_RETRY_AT
-    packaged=Path(__file__).with_name('audio_probe')
-    if packaged.is_file(): return packaged
-    import hashlib
-    source=Path(__file__).with_name('audio_probe.swift')
-    if not source.exists(): return None
-    digest=hashlib.sha256(source.read_bytes()).hexdigest()[:16]
-    binary=DB_PATH.parent / ('audio_probe_'+digest)
-    if binary.is_file(): return binary
-    if time.monotonic()<_AUDIO_PROBE_BUILD_RETRY_AT: return None
-    with _AUDIO_PROBE_BUILD_LOCK:
-        if binary.is_file(): return binary
-        binary.parent.mkdir(parents=True,exist_ok=True)
-        try:
-            result=subprocess.run(['xcrun','swiftc','-O',str(source),'-o',str(binary)],
-                                  capture_output=True,text=True,timeout=60)
-            if result.returncode:
-                raise RuntimeError(result.stderr.strip()[:300])
-        except (OSError,subprocess.SubprocessError,RuntimeError) as e:
-            _AUDIO_PROBE_BUILD_RETRY_AT=time.monotonic()+600
-            _set_audio_probe_error(str(e))
-            return None
-    return binary
-
-
-class _AudioLevelStream:
-    """One long-lived capture of Live's audio, reporting a level line per window.
-
-    Starting a ScreenCaptureKit capture attaches to Live's audio and display
-    output; doing that every poll caused needless churn while Live was playing.
-    """
-
-    def __init__(self, binary, pid):
-        self.pid = pid
-        self.cond = threading.Condition()
-        self.seq = 0
-        self.line = None
-        self.closed = False
-        self.last_text = ''
-        # stdin stays open: the helper exits on EOF if this process dies.
-        self.process = subprocess.Popen(
-            [str(binary), str(AUDIO_LEVEL_POLL_SECONDS), str(AUDIO_LEVEL_ACTIVE_THRESHOLD), str(pid), 'stream'],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        threading.Thread(target=self._read, name='tracker-audio-stream', daemon=True).start()
-
-    def _read(self):
-        try:
-            for line in self.process.stdout:
-                with self.cond:
-                    self.line = line.strip()
-                    if self.line and _parse_audio_level_probe(self.line) is None:
-                        self.last_text = self.line  # diagnostics explain an exit
-                    self.seq += 1
-                    self.cond.notify_all()
-        except (OSError, ValueError):
-            pass
-        finally:
-            with suppress(OSError, ValueError):
-                self.process.stdout.close()
-        with suppress(OSError, subprocess.SubprocessError):
-            self.process.wait(timeout=2)  # reap promptly; no zombie between polls
-        with self.cond:
-            self.closed = True
-            self.cond.notify_all()
-
-    def next_line(self, timeout, cancel_event=None):
-        """The first line produced after this call, or None if cancelled.
-
-        Raises TimeoutExpired when no line arrives and EOFError when the helper exits.
-        """
-        deadline = time.monotonic() + timeout
-        with self.cond:
-            seq = self.seq
-            while self.seq == seq:
-                if cancel_event is not None and cancel_event.is_set():
-                    return None
-                if self.closed:
-                    raise EOFError
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise subprocess.TimeoutExpired(self.process.args, timeout)
-                self.cond.wait(min(remaining, 0.1))
-            return self.line
-
-    def alive(self):
-        return self.process.poll() is None and not self.closed
-
-    def stop(self):
-        process = self.process
-        with suppress(OSError, ValueError):
-            process.stdin.close()
-        if process.poll() is None:
-            with suppress(OSError):
-                process.terminate()
-            try:
-                process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                with suppress(OSError):
-                    process.kill()
-                process.wait()
-
-
-def cancel_audio_probe():
-    global _AUDIO_PROBE_PROCESS
-    with _AUDIO_PROBE_PROCESS_LOCK:
-        stream, _AUDIO_PROBE_PROCESS = _AUDIO_PROBE_PROCESS, None
-    if stream is not None:
-        stream.stop()
-
-
-def _system_audio_level_active(pid=None, cancel_event=None) -> bool | None:
-    global _AUDIO_PROBE_PROCESS
-    if pid is None or (cancel_event is not None and cancel_event.is_set()):
-        return None  # never capture unrelated output or a cancelled generation
-    binary=_ensure_audio_probe_binary()
-    if binary is None: return None
-    stale=stream=None
-    try:
-        with _AUDIO_PROBE_PROCESS_LOCK:
-            if cancel_event is not None and cancel_event.is_set(): return None
-            stream=_AUDIO_PROBE_PROCESS
-            if stream is not None and (stream.pid!=pid or not stream.alive()):
-                stale,stream,_AUDIO_PROBE_PROCESS=stream,None,None
-            if stale is not None: stale.stop()
-            if stream is None:
-                stream=_AUDIO_PROBE_PROCESS=_AudioLevelStream(binary,pid)
-        line=stream.next_line(AUDIO_POLL_TIMEOUT,cancel_event)
-        if line is None: return None
-        result=_parse_audio_level_probe(line)
-        if result is None and not stream.alive():
-            _drop_audio_stream(stream)  # helper reported why it stopped
-        _set_audio_probe_error(None if result is not None else line[:200])
-        return result
-    except (OSError,subprocess.SubprocessError,EOFError) as e:
-        if cancel_event is not None and cancel_event.is_set():
-            _drop_audio_stream(stream)
-            return None
-        if isinstance(e,EOFError):
-            stream.process.wait()
-            message=stream.last_text or f'capture exited {stream.process.returncode}'
-        else:
-            message=str(e)
-        _drop_audio_stream(stream)
-        _set_audio_probe_error(message.strip()[-300:])
-        return None
-
-
-def _drop_audio_stream(stream):
-    global _AUDIO_PROBE_PROCESS
-    if stream is None: return
-    with _AUDIO_PROBE_PROCESS_LOCK:
-        if _AUDIO_PROBE_PROCESS is stream: _AUDIO_PROBE_PROCESS=None
-    stream.stop()
 
 
 def parse_osc_playing(data: bytes) -> bool | None:
@@ -1171,23 +911,6 @@ def is_ableton_playing_osc() -> bool | None:
         except (OSError,ValueError):
             pass
     return None
-
-
-def is_audio_active() -> bool | None:
-    """True when audible output is present while Ableton Live is open.
-
-    Returns None when the audio probe ran but could not produce a reliable
-    signal. That is different from quiet: treating an unavailable probe as
-    silence can falsely pause long passive listens.
-    """
-    if _live_pid() is None:
-        return False
-
-    osc_playing = is_ableton_playing_osc()
-    if osc_playing is True:
-        return True
-
-    return _system_audio_level_active(_live_pid())
 
 
 def get_live_window_titles() -> list[str]:
@@ -1681,9 +1404,9 @@ class Tracker:
     def _publish_status(self, o, reason, cutoff=None):
         messages = {
             'working': f"Working on: {self.project_name}",
-            'listening': f"Listening: pauses in {max(0, int((cutoff or o.mono)-o.mono))}s",
+            'listening': "Listening: Live is playing",
             'away': f"Away: counts if back in Live within {max(0, int((cutoff or o.mono)-o.mono))}s",
-            'idle': f'Paused: no Live input for {int(INPUT_ALLOWANCE//60)}m',
+            'idle': f'Paused: no activity for {int(INPUT_ALLOWANCE//60)}m',
             'listening_limit': 'Paused: listening limit reached',
             'background': 'Paused: another app is active',
             'locked': 'Paused: Mac locked or asleep',
@@ -1745,45 +1468,26 @@ class Tracker:
         changed_pid=bool(prev and prev.pid!=o.pid)
         # Settle old evidence before new input can extend it. Never bridge a missed heartbeat.
         if old_session is not None and prev:
-            if self._away_since is None:
-                end=min(o.mono,prev.mono+EVIDENCE_TTL,self._deadline or o.mono)
-                if o.boundary is not None:
-                    end=min(end,max(prev.mono,o.boundary))
-                self._tick(at=o.wall,mono=end)
-            elif (o.foreground and not o.locked and not paused and not gap and not changed_pid
-                  and o.mono-self._away_since<=AWAY_ALLOWANCE):
-                # Back in Live within the allowance: the trip away counts.
-                self._deadline=None
-                self._tick(at=o.wall,mono=o.mono)
-                self._away_since=None
-                self._return_at=o.mono
+            end=min(o.mono,prev.mono+EVIDENCE_TTL,self._deadline or o.mono)
+            if o.boundary is not None:
+                end=min(end,max(prev.mono,o.boundary))
+            self._tick(at=o.wall,mono=end)
             if self.session_id is None:  # externally closed/deleted
                 self._input_barrier=max(self._input_barrier,o.mono)
         if changed_pid:
             self._last_project_at=None
         if (gap or changed_pid) and self.session_id is not None:
             self._close(preserve_resume_hint=not changed_pid,reason='unverified',at=o.wall,mono=self.last_tick_mono)
-        if self.session_id is not None and o.pid and not o.foreground and not o.locked and not paused:
-            if self._away_since is None:
-                self._away_since=self.last_tick_mono
-            if o.mono-self._away_since<AWAY_ALLOWANCE:
-                # Provisional: nothing is credited unless Live comes back in time.
-                self._deadline=self._away_since+AWAY_ALLOWANCE
-                self._input_barrier=max(self._input_barrier,o.mono)
-                self._previous_observation=o
-                self._publish_status(o,'away',self._deadline)
-                return
-        if self.session_id is not None and self._away_since is not None and not (o.locked or paused):
-            # Away too long: the session ends when you left; the trip is not credited.
-            self._close(preserve_resume_hint=True,reason='background',at=o.wall,mono=self.last_tick_mono)
-        blocked=paused or not o.pid or not o.foreground or o.locked or gap or changed_pid
+        # Policy v3: Live need not be in front. Other apps and background playback
+        # count; only lock/sleep, quit, manual pause and inactivity stop the session.
+        blocked=paused or not o.pid or o.locked or gap or changed_pid
         if blocked:
             barrier=(o.boundary if o.boundary is not None else
-                     prev.mono+EVIDENCE_TTL if gap and not (paused or not o.pid or not o.foreground or o.locked or changed_pid) else o.mono)
+                     prev.mono+EVIDENCE_TTL if gap and not (paused or not o.pid or o.locked or changed_pid) else o.mono)
             self._input_barrier=max(self._input_barrier,barrier)
             self._needs_new_input=True
         reason=('manual' if paused else 'closed' if not o.pid else 'locked' if o.locked
-                else 'background' if not o.foreground else 'unverified' if changed_pid or (gap and (o.input_at is None or o.input_at<=self._input_barrier)) else None)
+                else 'unverified' if changed_pid or (gap and (o.input_at is None or o.input_at<=self._input_barrier)) else None)
         if o.observable:
             self._lost_observability_at=None
         elif self._lost_observability_at is None:
@@ -1802,17 +1506,16 @@ class Tracker:
                 and (input_at is None or self._return_at>input_at)):
             input_at=self._return_at
         fresh_input=input_at is not None
-        if reason is None and (not fresh_input or (self._needs_new_input and not fresh_input)):
+        # Live playing is evidence on its own, in front or not; it has no time limit.
+        audio_fresh=(o.audio is True and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
+        if reason is None and not (fresh_input or audio_fresh):
             reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified') else 'awaiting_input'
         cutoff=None
         attendance_cutoff=None
-        if fresh_input:
-            input_deadline=input_at+INPUT_ALLOWANCE
-            audio_fresh=(o.audio is True and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
-            attendance_cutoff=input_at+(LISTENING_ALLOWANCE if audio_fresh else INPUT_ALLOWANCE)
+        if fresh_input or audio_fresh:
+            input_deadline=input_at+INPUT_ALLOWANCE if fresh_input else float('-inf')
+            attendance_cutoff=max(input_deadline,o.audio_at+EVIDENCE_TTL if audio_fresh else float('-inf'))
             cutoff=attendance_cutoff
-            if audio_fresh:
-                cutoff=min(cutoff,max(input_deadline,o.audio_at+EVIDENCE_TTL))
             project_expired=False
             if o.project is None and self._last_project_at is not None:
                 cutoff=min(cutoff,self._last_project_at+PROJECT_GRACE)
@@ -1821,8 +1524,7 @@ class Tracker:
                 cutoff=min(cutoff,self._lost_observability_at+EVIDENCE_TTL)
             if reason is None:
                 if o.mono>=cutoff:
-                    reason=('unverified' if not o.observable or project_expired else
-                            'listening_limit' if o.mono>=input_at+LISTENING_ALLOWANCE and audio_fresh else 'idle')
+                    reason='unverified' if not o.observable or project_expired else 'idle'
                 else:
                     reason='working' if o.mono<input_deadline else 'listening'
         self._deadline=cutoff
@@ -1848,7 +1550,7 @@ class Tracker:
                     self._new_interval(o.wall)
                     self.last_tick=o.wall
                 self._interval_reason,self._interval_source=reason,interval_source
-                self._within_pause_update(o.wall,max(0,o.mono-input_at))
+                self._within_pause_update(o.wall,max(0,o.mono-input_at) if fresh_input else 0)
         else:
             # No final catch-up: the previous snapshot was settled above.
             if self.session_id is not None:

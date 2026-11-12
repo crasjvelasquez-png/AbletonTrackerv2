@@ -1,203 +1,570 @@
 {
-  "name": "project memory survives failed title reads until input allowance",
-  "expected_seconds": 180,
+  "name": "project memory survives failed title reads until the project grace",
+  "expected_seconds": 310,
   "ticks": [
     {
       "at": 0,
-      "project_at": 0
+      "project_at": 0,
+      "audio": true,
+      "audio_at": 0
     },
     {
       "at": 5,
-      "project_at": 5
+      "project_at": 5,
+      "audio": true,
+      "audio_at": 5
     },
     {
       "at": 10,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 10
     },
     {
       "at": 15,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 15
     },
     {
       "at": 20,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 20
     },
     {
       "at": 25,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 25
     },
     {
       "at": 30,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 30
     },
     {
       "at": 35,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 35
     },
     {
       "at": 40,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 40
     },
     {
       "at": 45,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 45
     },
     {
       "at": 50,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 50
     },
     {
       "at": 55,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 55
     },
     {
       "at": 60,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 60
     },
     {
       "at": 65,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 65
     },
     {
       "at": 70,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 70
     },
     {
       "at": 75,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 75
     },
     {
       "at": 80,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 80
     },
     {
       "at": 85,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 85
     },
     {
       "at": 90,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 90
     },
     {
       "at": 95,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 95
     },
     {
       "at": 100,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 100
     },
     {
       "at": 105,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 105
     },
     {
       "at": 110,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 110
     },
     {
       "at": 115,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 115
     },
     {
       "at": 120,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 120
     },
     {
       "at": 125,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 125
     },
     {
       "at": 130,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 130
     },
     {
       "at": 135,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 135
     },
     {
       "at": 140,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 140
     },
     {
       "at": 145,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 145
     },
     {
       "at": 150,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 150
     },
     {
       "at": 155,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 155
     },
     {
       "at": 160,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 160
     },
     {
       "at": 165,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 165
     },
     {
       "at": 170,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 170
     },
     {
       "at": 175,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 175
     },
     {
       "at": 180,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 180
     },
     {
       "at": 185,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 185
     },
     {
       "at": 190,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 190
     },
     {
       "at": 195,
       "project": null,
-      "project_at": 10
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 195
+    },
+    {
+      "at": 200,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 200
+    },
+    {
+      "at": 205,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 205
+    },
+    {
+      "at": 210,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 210
+    },
+    {
+      "at": 215,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 215
+    },
+    {
+      "at": 220,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 220
+    },
+    {
+      "at": 225,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 225
+    },
+    {
+      "at": 230,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 230
+    },
+    {
+      "at": 235,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 235
+    },
+    {
+      "at": 240,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 240
+    },
+    {
+      "at": 245,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 245
+    },
+    {
+      "at": 250,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 250
+    },
+    {
+      "at": 255,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 255
+    },
+    {
+      "at": 260,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 260
+    },
+    {
+      "at": 265,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 265
+    },
+    {
+      "at": 270,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 270
+    },
+    {
+      "at": 275,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 275
+    },
+    {
+      "at": 280,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 280
+    },
+    {
+      "at": 285,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 285
+    },
+    {
+      "at": 290,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 290
+    },
+    {
+      "at": 295,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 295
+    },
+    {
+      "at": 300,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 300
+    },
+    {
+      "at": 305,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 305
+    },
+    {
+      "at": 310,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 310
+    },
+    {
+      "at": 315,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 315
+    },
+    {
+      "at": 320,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 320
+    },
+    {
+      "at": 325,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 325
+    },
+    {
+      "at": 330,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 330
+    },
+    {
+      "at": 335,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 335
+    },
+    {
+      "at": 340,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 340
+    },
+    {
+      "at": 345,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 345
+    },
+    {
+      "at": 350,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 350
+    },
+    {
+      "at": 355,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 355
+    },
+    {
+      "at": 360,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 360
+    },
+    {
+      "at": 365,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 365
+    },
+    {
+      "at": 370,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 370
+    },
+    {
+      "at": 375,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 375
+    },
+    {
+      "at": 380,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 380
+    },
+    {
+      "at": 385,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 385
+    },
+    {
+      "at": 390,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 390
+    },
+    {
+      "at": 395,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 395
+    },
+    {
+      "at": 400,
+      "project": null,
+      "project_at": 10,
+      "audio": true,
+      "audio_at": 400
     }
   ]
 }

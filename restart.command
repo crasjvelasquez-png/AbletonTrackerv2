@@ -12,6 +12,7 @@ PID_FILE="$DATA_DIR/tracker.pid"
 PYTHON="$(command -v python3)"
 
 mkdir -p "$DATA_DIR"
+LOG_MARK="$(wc -l < "$TRACKER_LOG" 2>/dev/null || echo 0)"
 
 echo "Restarting Ableton Tracker..."
 echo ""
@@ -48,6 +49,19 @@ else
     echo "Tracker log:   $TRACKER_LOG"
 fi
 
+# A rebuild must never silently cost the Accessibility grant (that stops tracking).
+echo "Checking macOS permissions..."
+sleep 12
+if tail -n +"$((LOG_MARK + 1))" "$TRACKER_LOG" 2>/dev/null | grep -q "Accessibility permission is unavailable"; then
+    echo ""
+    echo "!!! TRACKING IS NOT WORKING: Tracker lost its Accessibility permission. !!!"
+    echo "    System Settings > Privacy & Security > Accessibility:"
+    echo "    remove Tracker (-), then add (+) $DIR/dist/Tracker.app"
+    echo ""
+else
+    echo "Permissions OK."
+fi
+echo ""
 echo "Dashboard log: $DASHBOARD_LOG"
 echo ""
 echo "If your dashboard was open, reopen it so it starts with fresh code."

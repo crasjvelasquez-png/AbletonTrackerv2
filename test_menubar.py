@@ -169,7 +169,6 @@ class TrackerThreadRunTests(unittest.TestCase):
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -248,7 +247,6 @@ class _AppTestBase(unittest.TestCase):
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
         ]
         for p in self._patchers:
             p.start()
@@ -415,6 +413,38 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         with patch.object(menubar, "day_seconds", return_value=0):
             self.app._refresh(None)
         self.assertIn("Ableton not running", self.app.status_item.title)
+
+    def test_refresh_flags_missing_accessibility_permission(self):
+        # A rebuilt/re-signed app loses its Accessibility grant; that must read as
+        # "not tracking", never as a neutral "Ableton open (no verified project)".
+        for state in (tracker.STATE_ABLETON_OPEN, tracker.STATE_IDLE_PAUSED):
+            with self.subTest(state=state):
+                self.app.tracker_thread.status.return_value = replace(
+                    tracker.TrackerStatus(), state=state, running=True, checked_at=1.0,
+                    message="Ableton open (no verified project)",
+                    source_error="Accessibility permission is unavailable")
+                with patch.object(menubar, "day_seconds", return_value=0):
+                    self.app._refresh(None)
+                self.assertTrue(self.app.title.startswith("⚠"))
+                self.assertEqual(self.app.status_item.title,
+                                 "Not tracking: allow Tracker in Accessibility settings")
+
+    def test_refresh_manual_pause_wins_over_stale_accessibility_error(self):
+        self._touch_pause()
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_PAUSED, paused=True, running=True,
+            source_error="Accessibility permission is unavailable")
+        with patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app.status_item.title, "Paused")
+
+    def test_refresh_ignores_accessibility_error_when_ableton_closed(self):
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_ABLETON_CLOSED, running=False,
+            source_error="Accessibility permission is unavailable")
+        with patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app.status_item.title, "Ableton not running")
 
     def test_refresh_shows_error(self):
         self.app.tracker_thread.tracker._consecutive_failures = 3

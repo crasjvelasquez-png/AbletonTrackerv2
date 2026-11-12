@@ -41,7 +41,7 @@ Start here. This is the repository-specific source of truth for coding agents. U
 
 ## Dependencies
 
-- Runtime dependencies are installed ad hoc: `python3 -m pip install --user rumps pywebview`. The tracker also imports macOS frameworks such as `AVFoundation`, `CoreMedia`, and `ScreenCaptureKit` for audio probing.
+- Runtime dependencies are installed ad hoc: `python3 -m pip install --user rumps pywebview`.
 - Pillow is needed only for icon generation in `build_app.py`: `python3 -m pip install --user Pillow`.
 - Unit tests mock GUI and macOS modules and use temporary SQLite databases. Keep platform seams injectable so tests remain runnable from a non-GUI shell.
 - Do not introduce a package manager, build system, frontend framework, telemetry, authentication service, or remote dependency unless the user explicitly requests it and the tradeoff is justified.
@@ -74,6 +74,7 @@ Start here. This is the repository-specific source of truth for coding agents. U
 - Keep motion purposeful, quick, and interruptible—generally 100–180 ms for small state or spatial changes—and provide a `prefers-reduced-motion` fallback.
 - Avoid cosmetic renames of states, API keys, labels, colors, or time-allocation behavior; tests and saved user data may depend on exact values.
 - Keep `*.command` output understandable for users who launch scripts by double-clicking in Terminal, and preserve executable bits.
+- Code signing is load-bearing. macOS keeps Tracker's Accessibility grant against its designated requirement, so `build_app.py` signs with the stable local identity in `~/.ableton_tracker/signing/` (requirement: `identifier "com.abletontracker.tracker" and certificate leaf = H"..."`). Never switch to ad-hoc (`--sign -`) signing, delete that folder, remove its login-keychain password item (`com.abletontracker.signing`), or bypass the build's identity-change refusal; any of these silently stops tracking. Run `python3 scripts/verify_signing_stability.py` after packaging changes.
 - Do not hand-edit generated `.app` bundles. Change source/build scripts and rebuild when packaging work is requested.
 - Keep generated and local artifacts out of commits: `__pycache__/`, `.DS_Store`, `.history/`, `.app` bundles, local databases, and temporary diagnostic output.
 - Preserve unrelated user changes in a dirty worktree. Check the diff before editing and again before handoff.
@@ -88,7 +89,8 @@ If tracking is not logging or the menu bar appears stuck, establish whether the 
   `sqlite3 ~/.ableton_tracker/sessions.db "PRAGMA busy_timeout=3000; SELECT id, project_name, datetime(start_time,'unixepoch','localtime'), datetime(last_seen_time,'unixepoch','localtime'), end_time IS NULL, round(active_seconds/60,2) FROM sessions ORDER BY id DESC LIMIT 5;"`
 - Check today's total separately:
   `sqlite3 ~/.ableton_tracker/sessions.db "PRAGMA busy_timeout=3000; SELECT round(COALESCE(SUM(active_seconds),0)/60,2) FROM sessions WHERE start_time >= strftime('%s','now','localtime','start of day','utc');"`
-- Inspect `~/.ableton_tracker/menubar.log` and `~/.ableton_tracker/tracker.log`. `audio_active=unknown` alone does not mean tracking stopped; current behavior continues when the audio probe is unavailable.
+- If the log shows `Accessibility permission is unavailable`, compare `codesign -d -r- dist/Tracker.app` with the stable requirement above; the user must re-grant Tracker once if the identity changed.
+- Inspect `~/.ableton_tracker/menubar.log` and `~/.ableton_tracker/tracker.log`. Playback detection needs AbletonOSC enabled in Live; tracking continues on keyboard/mouse input when OSC does not answer.
 - Confirm Ableton window-title visibility with `osascript -e 'tell application "System Events" to tell process "Live" to get name of every window'`. Run `python3 debug.py` when Accessibility, title parsing, database access, or LaunchAgent state is unclear.
 - Treat SQLite as the source of truth for recorded minutes. The menu title uses `fmt_goal_time()`/`fmt_quarter()` and may display early activity as `0m` or a quarter-hour glyph.
 - Compare current time, process start time, and the latest session's `start_time`/`last_seen_time`. Work performed before the app started cannot be reconstructed from runtime evidence; report that as a startup gap, not a database write failure.

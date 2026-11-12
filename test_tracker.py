@@ -12,10 +12,9 @@ def fixture_poll(t, paused=False):
     now,mono=tracker.time.time(),tracker.time.monotonic()
     running=tracker.is_ableton_running()
     project=tracker.get_project_name(t.project_name) if running else None
-    hid=tracker.get_idle_seconds() if running else 0
     return t.poll_once(paused=paused,observation=tracker.Observation(
         wall=now,mono=mono,pid=42 if running else None,foreground=running,
-        project=project,project_at=mono,input_at=mono-hid,
+        project=project,project_at=mono,input_at=mono,
         audio=False,audio_at=mono,source='fixture'))
 
 
@@ -108,20 +107,6 @@ class TrackerPauseResumeTests(unittest.TestCase):
 
 
 
-class AudioQuietSignalTests(unittest.TestCase):
-    def test_audio_active_uses_level_probe_result(self):
-        with patch.object(tracker, "_live_pid", return_value=123), \
-             patch.object(tracker, "is_ableton_playing_osc", return_value=None), \
-             patch.object(tracker, "_system_audio_level_active", return_value=False):
-            self.assertFalse(tracker.is_audio_active())
-
-    def test_audio_active_preserves_unavailable_probe_result(self):
-        with patch.object(tracker, "_live_pid", return_value=123), \
-             patch.object(tracker, "is_ableton_playing_osc", return_value=None), \
-             patch.object(tracker, "_system_audio_level_active", return_value=None):
-            self.assertIsNone(tracker.is_audio_active())
-
-
 class ParseProjectTitleTests(unittest.TestCase):
     def test_accepts_bare_project_titles(self):
         self.assertEqual(tracker.parse_project_title("My Song"), "My Song")
@@ -133,6 +118,13 @@ class ParseProjectTitleTests(unittest.TestCase):
     def test_rejects_transient_accessibility_labels(self):
         self.assertIsNone(tracker.parse_project_title("tooltip"))
         self.assertIsNone(tracker.parse_project_title("missing value"))
+        # Seen live on 2026-11-11: Live exposes a second AX window titled "Window".
+        self.assertIsNone(tracker.parse_project_title("Window"))
+
+    def test_generic_window_label_does_not_block_startup_project(self):
+        self.assertEqual(
+            tracker.get_project_name(None, titles=["Window", "October 2026 - Check it - 93 bpm  12.4"]),
+            "October 2026 - Check it - 93 bpm 12.4")
 
 
 class GetProjectNameTests(unittest.TestCase):
@@ -527,7 +519,6 @@ class UntitledSessionTests(unittest.TestCase):
         project_state = {"name": "Untitled"}
 
         with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
@@ -538,7 +529,6 @@ class UntitledSessionTests(unittest.TestCase):
 
         project_state["name"] = "Real Song"
         with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1010.0), \
              patch.object(tracker.time, "monotonic", return_value=20.0):
@@ -633,8 +623,6 @@ class UntitledSessionTests(unittest.TestCase):
         project_state = {"name": "Untitled"}
 
         with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):
@@ -644,8 +632,6 @@ class UntitledSessionTests(unittest.TestCase):
 
         project_state["name"] = None
         with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
-             patch.object(tracker, "is_audio_active", return_value=False), \
              patch.object(tracker, "get_project_name", side_effect=lambda cp=None: project_state["name"]), \
              patch.object(tracker.time, "time", return_value=1010.0), \
              patch.object(tracker.time, "monotonic", return_value=20.0):
@@ -658,7 +644,6 @@ class UntitledSessionTests(unittest.TestCase):
 
     def test_ableton_closed_deletes_untitled_through_poll(self):
         with patch.object(tracker, "is_ableton_running", return_value=True), \
-             patch.object(tracker, "get_idle_seconds", return_value=0), \
              patch.object(tracker, "get_project_name", return_value="Untitled"), \
              patch.object(tracker.time, "time", return_value=1000.0), \
              patch.object(tracker.time, "monotonic", return_value=10.0):

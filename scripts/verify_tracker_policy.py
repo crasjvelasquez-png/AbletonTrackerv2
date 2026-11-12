@@ -17,6 +17,10 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import tracker
 
+REPLAY_SECONDS=660
+# The last playback sample stays valid for EVIDENCE_TTL; shutdown settles it.
+CREDITED_SECONDS=REPLAY_SECONDS+int(tracker.EVIDENCE_TTL)
+
 
 def replay_fixtures(out):
     fixtures=Path(__file__).resolve().parents[1]/'tests/fixtures/tracker'
@@ -54,7 +58,8 @@ def main():
     with patch.object(tracker,'DB_PATH',db),contextlib.redirect_stdout(io.StringIO()):
         t=tracker.Tracker()
         try:
-            for sec in range(0,661,5):
+            # Policy v3: uninterrupted playback is credited in full, with no listening cap.
+            for sec in range(0,REPLAY_SECONDS+1,5):
                 o=tracker.Observation(wall=1800000000+sec,mono=1000+sec,pid=42,
                     foreground=True,project='Verification set',project_at=1000+sec,
                     input_at=1000,observable=True,locked=False,audio=True,
@@ -67,7 +72,7 @@ def main():
         actual={'active_seconds':c.execute('SELECT COALESCE(SUM(active_seconds),0) FROM sessions').fetchone()[0],
                 'evidence_seconds':c.execute('SELECT COALESCE(SUM(credited_seconds),0) FROM activity_intervals').fetchone()[0],
                 'open_sessions':c.execute('SELECT COUNT(*) FROM sessions WHERE end_time IS NULL').fetchone()[0]}
-    expected={'active_seconds':tracker.LISTENING_ALLOWANCE,'evidence_seconds':tracker.LISTENING_ALLOWANCE,'open_sessions':0}
+    expected={'active_seconds':CREDITED_SECONDS,'evidence_seconds':CREDITED_SECONDS,'open_sessions':0}
     lock=tracker.acquire_writer_lock(db)
     try:
         child=subprocess.run([sys.executable,'-c',
@@ -75,7 +80,7 @@ def main():
             capture_output=True,text=True)
         assert child.returncode!=0 and 'Another tracker already owns' in child.stderr
         with contextlib.closing(sqlite3.connect(db)) as c:
-            assert c.execute('SELECT SUM(active_seconds) FROM sessions').fetchone()[0]==tracker.LISTENING_ALLOWANCE
+            assert c.execute('SELECT SUM(active_seconds) FROM sessions').fetchone()[0]==CREDITED_SECONDS
         (out/'writer-contention.json').write_text(json.dumps({'second_writer_rejected':True,'totals_unchanged':True},indent=2)+'\n')
     finally:
         if lock is not None: lock.close()
@@ -85,7 +90,7 @@ def main():
     revision=subprocess.run(['git','rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()
     root=Path(__file__).resolve().parents[1]
     hashes={name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in
-        ['tracker.py','tracking_policy.py','activity_store.py','activity_observer.py','dashboard.py','menubar.py','audio_probe.swift']}
+        ['tracker.py','tracking_policy.py','activity_store.py','activity_observer.py','dashboard.py','menubar.py']}
     manifest={'source_sha256':hashes,'revision':revision,'python':platform.python_version(),'platform':platform.platform(),
               'policy_version':tracker.POLICY_VERSION,'type':'simulated adapters, real tracker and SQLite',
               'tests':result.testsRun,'failures':len(result.failures),'errors':len(result.errors)}
