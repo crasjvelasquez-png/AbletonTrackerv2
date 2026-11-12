@@ -7,9 +7,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from tracking_policy import Observation, INPUT_ALLOWANCE, EVIDENCE_TTL
 
-# Play state only matters once hands-off time nears INPUT_ALLOWANCE, so the
-# play-state check starts shortly before the hands-off allowance ends.
-AUDIO_PROBE_AFTER=INPUT_ALLOWANCE-2*EVIDENCE_TTL
+# Play state is the work signal, so it is checked continuously while Live is open.
+AUDIO_PROBE_AFTER=0.0
 
 
 class InputEvidence:
@@ -313,10 +312,8 @@ class NativeObserver:
                 except Exception as e:
                     self.project_error=str(e); self.project_failures+=1
                 self.next_project_at=now+(5 if not self.project_failures else (5,5,10,15)[min(self.project_failures-1,3)])
-            # Playback counts in the background and without a time limit, so probe
-            # whenever input has gone quiet, whichever app is in front.
-            eligible=(pid and not locked and not paused and (self.input.last_input is None
-                      or now-self.input.last_input>=AUDIO_PROBE_AFTER))
+            # Playback is the work signal, in front or not, so always probe while Live is open.
+            eligible=bool(pid and not locked and not paused)
             if eligible: self.probe.request(pid,generation,now)
             else: self.probe.invalidate(generation)
             audio,audio_at=self.probe.result(generation,now)

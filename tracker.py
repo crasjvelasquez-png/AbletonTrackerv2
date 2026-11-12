@@ -15,7 +15,7 @@ import json
 import math
 import uuid
 
-from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE,
+from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE, PLAY_ALLOWANCE,
                              LISTENING_ALLOWANCE, PROJECT_GRACE,
                              EVIDENCE_TTL, POLICY_TEXT)
 from activity_store import ensure_activity_schema, load_activity_rows
@@ -1093,6 +1093,8 @@ class Tracker:
         self._input_barrier = float('-inf')
         self._last_project_at = None
         self._lost_observability_at = None
+        self._last_play_at = None
+        self._play_mode = False
         # Provisional trip to another app: last credited moment before leaving,
         # and the moment Live came back (counts as attendance like an input).
         self._away_since = None
@@ -1406,14 +1408,16 @@ class Tracker:
             'working': f"Working on: {self.project_name}",
             'listening': "Listening: Live is playing",
             'away': f"Away: counts if back in Live within {max(0, int((cutoff or o.mono)-o.mono))}s",
-            'idle': f'Paused: no activity for {int(INPUT_ALLOWANCE//60)}m',
+            'idle': (f'Paused: no playback for {int(PLAY_ALLOWANCE//60)}m' if self._play_mode
+                     else f'Paused: no activity for {int(INPUT_ALLOWANCE//60)}m'),
             'listening_limit': 'Paused: listening limit reached',
             'background': 'Paused: another app is active',
             'locked': 'Paused: Mac locked or asleep',
             'manual': 'Paused',
             'unverified': 'Paused: cannot verify activity',
             'no_project': 'Ableton open (no verified project)',
-            'awaiting_input': 'Paused: interact with Live to resume',
+            'awaiting_input': ('Paused: press play in Live to resume' if self._play_mode
+                               else 'Paused: interact with Live to resume'),
             'closed': 'Ableton not running',
         }
         counting = self.session_id is not None and reason in ('working','listening','away')
@@ -1506,15 +1510,26 @@ class Tracker:
                 and (input_at is None or self._return_at>input_at)):
             input_at=self._return_at
         fresh_input=input_at is not None
-        # Live playing is evidence on its own, in front or not; it has no time limit.
-        audio_fresh=(o.audio is True and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
-        if reason is None and not (fresh_input or audio_fresh):
+        # Policy v5: the play button is the work signal. Counts while Live plays, in
+        # front or not, and for PLAY_ALLOWANCE after it stops. Input alone counts only
+        # when play state is unknown (AbletonOSC off), so tracking never goes dark.
+        audio_known=(o.audio is not None and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
+        audio_fresh=audio_known and o.audio is True
+        if audio_fresh and (self._last_play_at is None or o.audio_at>self._last_play_at):
+            self._last_play_at=o.audio_at
+        self._play_mode=audio_known
+        # Play from before a lock, sleep or manual pause never bridges across it.
+        play_at=(self._last_play_at if self._last_play_at is not None
+                 and self._last_play_at>self._input_barrier else None)
+        play_deadline=play_at+PLAY_ALLOWANCE if play_at is not None else float('-inf')
+        input_deadline=input_at+INPUT_ALLOWANCE if fresh_input and not audio_known else float('-inf')
+        evidence=play_at is not None or input_deadline>float('-inf')
+        if reason is None and not evidence:
             reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified') else 'awaiting_input'
         cutoff=None
         attendance_cutoff=None
-        if fresh_input or audio_fresh:
-            input_deadline=input_at+INPUT_ALLOWANCE if fresh_input else float('-inf')
-            attendance_cutoff=max(input_deadline,o.audio_at+EVIDENCE_TTL if audio_fresh else float('-inf'))
+        if evidence:
+            attendance_cutoff=max(input_deadline,play_deadline)
             cutoff=attendance_cutoff
             project_expired=False
             if o.project is None and self._last_project_at is not None:
@@ -1526,7 +1541,7 @@ class Tracker:
                 if o.mono>=cutoff:
                     reason='unverified' if not o.observable or project_expired else 'idle'
                 else:
-                    reason='working' if o.mono<input_deadline else 'listening'
+                    reason='listening' if audio_fresh and not (fresh_input and o.mono<input_at+INPUT_ALLOWANCE) else 'working'
         self._deadline=cutoff
         active=reason in ('working','listening')
         if active:

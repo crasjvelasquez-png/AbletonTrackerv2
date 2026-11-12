@@ -15,7 +15,7 @@ def fixture_poll(t, paused=False):
     return t.poll_once(paused=paused,observation=tracker.Observation(
         wall=now,mono=mono,pid=42 if running else None,foreground=running,
         project=project,project_at=mono,input_at=mono,
-        audio=False,audio_at=mono,source='fixture'))
+        audio=True,audio_at=mono,source='fixture'))
 
 
 class TrackerPauseResumeTests(unittest.TestCase):

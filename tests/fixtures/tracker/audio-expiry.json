@@ -1,6 +1,6 @@
 {
-  "name": "audio freshness expires between delayed polls",
-  "expected_seconds": 630,
+  "name": "after playback stops the 3m play window keeps counting until shutdown",
+  "expected_seconds": 642,
   "ticks": [
     {
       "at": 0,

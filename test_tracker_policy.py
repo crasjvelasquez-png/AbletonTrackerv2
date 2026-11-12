@@ -23,6 +23,16 @@ Policy v3 (work happens outside Live too) failure inventory:
 - no input anywhere and no playback still counts forever
 - lock, quit or manual pause while Live is in the background keeps counting
 - stale input from before sleep resumes a session after wake
+
+Policy v5 (the play button is the work signal) failure inventory:
+- mouse/keyboard input alone keeps counting while play detection works
+- time keeps counting more than 3m after playback last stopped
+- a stop shorter than 3m between plays loses or splits time
+- continuous playback is cut off at 3m
+- pressing play does not resume after a 3m stop
+- play from before a lock, sleep or manual pause bridges across it
+- play detection unavailable (AbletonOSC off) stops all tracking
+- status says "Listening" while Live is stopped
 """
 import contextlib
 import dataclasses
@@ -54,8 +64,10 @@ class PolicyReplayTests(unittest.TestCase):
         fields = dict(wall=self.base + second, mono=1000.0 + second,
                       pid=42, foreground=True, project='Song A',
                       project_at=1000.0 + second, input_at=self.last_input,
-                      observable=True, locked=False, audio=False,
-                      audio_at=1000.0 + second, source='fixture')
+                      observable=True, locked=False, audio=None,
+                      audio_at=None, source='fixture')
+        if changes.get('audio') is not None:
+            fields['audio_at'] = 1000.0 + second
         fields.update(changes)
         self.t.poll_once(observation=tracker.Observation(**fields))
         return self.t.status()
@@ -107,7 +119,7 @@ class PolicyReplayTests(unittest.TestCase):
         self.run_until(605, audio=True)
         self.assertEqual(self.t.status().reason, 'listening')
         self.assertIn('Listening', self.t.status().message)
-        self.assertAlmostEqual(self.t.status().cutoff, self.base + 615)
+        self.assertAlmostEqual(self.t.status().cutoff, self.base + 605 + tracker.PLAY_ALLOWANCE)
 
     def test_other_apps_count_while_live_is_open(self):
         self.run_until(10)
@@ -133,7 +145,7 @@ class PolicyReplayTests(unittest.TestCase):
 
     def test_background_without_input_or_playback_stops_at_two_minutes(self):
         for sec in range(0, 721, 5):
-            self.poll(sec, foreground=False, audio=False)
+            self.poll(sec, foreground=False)
         self.assertEqual(self.total(), 120)
         self.assertEqual(self.t.status().reason, 'idle')
         self.assertIn('2m', self.t.status().message)
@@ -234,7 +246,7 @@ class PolicyReplayTests(unittest.TestCase):
     def test_stale_audio_expires(self):
         for sec in range(0,721,5):
             self.poll(sec,audio=True,audio_at=1000)
-        self.assertEqual(self.total(),120)
+        self.assertEqual(self.total(),tracker.PLAY_ALLOWANCE)
 
     def test_missed_poll_does_not_invent_work(self):
         self.run_until(10,audio=True)
@@ -307,6 +319,88 @@ class PolicyReplayTests(unittest.TestCase):
         try:
             self.assertIsNone(tracker.acquire_writer_lock(self.db.with_name("other.db")))
         finally: first.close()
+
+    # Policy v5: playback drives the count whenever the play detector answers.
+    def stopped(self, sec, **changes):
+        return self.poll(sec, audio=False, audio_at=1000.0 + sec, **changes)
+
+    def playing(self, sec, **changes):
+        return self.poll(sec, audio=True, audio_at=1000.0 + sec, **changes)
+
+    def test_v5_input_without_play_does_not_count(self):
+        for sec in range(0, 601, 5):
+            self.stopped(sec, input_at=1000 + sec)
+        self.assertEqual(self.total(), 0)
+        self.assertIsNone(self.t.session_id)
+        self.assertIn('play', self.t.status().message.lower())
+
+    def test_v5_stops_three_minutes_after_last_play(self):
+        for sec in range(0, 61, 5):
+            self.playing(sec)
+        for sec in range(65, 901, 5):
+            self.stopped(sec, input_at=1000 + sec)
+        self.assertEqual(self.total(), 60 + tracker.PLAY_ALLOWANCE)
+        self.assertEqual(self.t.status().reason, 'idle')
+        self.assertIn('3m', self.t.status().message)
+
+    def test_v5_short_stop_between_plays_is_one_session(self):
+        for sec in range(0, 61, 5):
+            self.playing(sec)
+        for sec in range(65, 216, 5):
+            self.stopped(sec)
+        for sec in range(220, 301, 5):
+            self.playing(sec)
+        self.assertEqual(self.total(), 300)
+        with contextlib.closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM sessions').fetchone()[0], 1)
+
+    def test_v5_continuous_playback_is_not_cut_off(self):
+        for sec in range(0, 1201, 5):
+            self.playing(sec)
+        self.assertEqual(self.total(), 1200)
+        self.assertEqual(self.t.status().reason, 'listening')
+
+    def test_v5_play_resumes_after_stop(self):
+        self.playing(0)
+        for sec in range(5, 501, 5):
+            self.stopped(sec, input_at=1000 + sec)
+        self.assertEqual(self.total(), tracker.PLAY_ALLOWANCE)
+        for sec in range(505, 601, 5):
+            self.playing(sec)
+        self.assertIsNotNone(self.t.session_id)
+        self.assertEqual(self.total(), tracker.PLAY_ALLOWANCE + 95)
+
+    def test_v5_play_before_lock_does_not_bridge(self):
+        for sec in range(0, 31, 5):
+            self.playing(sec)
+        self.poll(35, locked=True, boundary=1032)
+        self.stopped(60)
+        self.stopped(65, input_at=1065)
+        self.assertIsNone(self.t.session_id)
+        self.assertEqual(self.total(), 32)
+
+    def test_v5_manual_pause_does_not_bridge(self):
+        for sec in range(0, 31, 5):
+            self.playing(sec)
+        self.t.poll_once(paused=True, observation=tracker.Observation(
+            wall=self.base+35, mono=1035, pid=42, audio=False, audio_at=1035, source='fixture'))
+        for sec in range(40, 101, 5):
+            self.stopped(sec, input_at=1000 + sec)
+        self.assertIsNone(self.t.session_id)
+        self.assertLessEqual(self.total(), 35)
+
+    def test_v5_unavailable_detector_falls_back_to_input(self):
+        for sec in range(0, 101, 5):
+            self.poll(sec, input_at=1000 + sec, audio=None, audio_at=None)
+        self.assertEqual(self.total(), 100)
+        self.assertEqual(self.t.status().reason, 'working')
+
+    def test_v5_stopped_window_is_not_listening(self):
+        self.playing(0)
+        for sec in range(5, 31, 5):
+            st = self.stopped(sec)
+        self.assertEqual(st.reason, 'working')
+        self.assertNotIn('Listening', st.message)
 
 
 class OSCProtocolTests(unittest.TestCase):
