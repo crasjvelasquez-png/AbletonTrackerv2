@@ -81,8 +81,10 @@ class PolicyReplayTests(unittest.TestCase):
             return c.execute('SELECT COALESCE(SUM(active_seconds),0) FROM sessions').fetchone()[0]
 
     def test_silence_stops_at_two_minutes_and_stays_flat(self):
-        self.run_until(720)
-        self.assertEqual(self.total(), 120)
+        # v6: the 2m fallback tail is taken back to the last input with Live in front.
+        for sec in range(0, 721, 5):
+            self.poll(sec, input_at=1000 + min(sec, 60))
+        self.assertEqual(self.total(), 60)
         self.assertEqual(self.t.status().reason, 'idle')
 
     def test_hands_off_listening_counts_without_playback_probe(self):
@@ -92,7 +94,7 @@ class PolicyReplayTests(unittest.TestCase):
 
     def test_unavailable_audio_never_extends_input_allowance(self):
         self.run_until(720, audio=None)
-        self.assertEqual(self.total(), 120)
+        self.assertEqual(self.total(), 0)
 
     def test_playback_counts_with_no_time_limit(self):
         self.run_until(1800, audio=True)
@@ -129,34 +131,34 @@ class PolicyReplayTests(unittest.TestCase):
         self.assertEqual(self.t.status().reason, 'working')
         self.assertEqual(self.t.status().state, tracker.STATE_TRACKING)
 
-    def test_long_time_in_other_apps_counts(self):
+    def test_long_time_in_other_apps_does_not_count_in_fallback(self):
+        # v6: with play state unknown, only input with Live in front counts.
         self.run_until(10)
         for sec in range(15, 1201, 5):
             self.poll(sec, foreground=False, input_at=1000+sec)
-        self.assertEqual(self.total(), 1200)
-        self.assertIsNotNone(self.t.session_id)
+        self.assertEqual(self.total(), 0)
+        self.assertIsNone(self.t.session_id)
 
     def test_background_playback_counts_without_input(self):
+        # v6: playback behind other apps counts for BACKGROUND_ALLOWANCE, then stops.
         for sec in range(0, 1201, 5):
             self.poll(sec, foreground=False, audio=True)
-        self.assertEqual(self.total(), 1200)
-        self.assertEqual(self.t.status().reason, 'listening')
-        self.assertEqual(self.t.status().state, tracker.STATE_TRACKING)
+        self.assertEqual(self.total(), tracker.BACKGROUND_ALLOWANCE)
+        self.assertEqual(self.t.status().reason, 'background')
 
     def test_background_without_input_or_playback_stops_at_two_minutes(self):
         for sec in range(0, 721, 5):
             self.poll(sec, foreground=False)
-        self.assertEqual(self.total(), 120)
-        self.assertEqual(self.t.status().reason, 'idle')
-        self.assertIn('2m', self.t.status().message)
+        self.assertEqual(self.total(), 0)
+        self.assertIsNone(self.t.session_id)
 
     def test_playback_alone_resumes_after_idle(self):
         self.run_until(400)
-        self.assertEqual(self.total(), 120)
+        self.assertEqual(self.total(), 0)
         for sec in range(405, 501, 5):
             self.poll(sec, foreground=False, audio=True)
         self.assertIsNotNone(self.t.session_id)
-        self.assertEqual(self.total(), 215)
+        self.assertEqual(self.total(), 95)
 
     def test_lock_in_background_stops_counting(self):
         self.run_until(10)
@@ -193,7 +195,7 @@ class PolicyReplayTests(unittest.TestCase):
 
     def test_pointer_only_motion_does_not_reset_attendance(self):
         self.run_until(720)
-        self.assertEqual(self.total(),120)
+        self.assertEqual(self.total(),0)
         self.poll(725,input_at=1725)
         self.assertIsNotNone(self.t.session_id)
 
@@ -204,7 +206,7 @@ class PolicyReplayTests(unittest.TestCase):
         self.poll(315,project='Song B',input_at=1310)
         with contextlib.closing(sqlite3.connect(self.db)) as c:
             rows=c.execute('SELECT project_name,active_seconds FROM sessions ORDER BY id').fetchall()
-        self.assertEqual(rows,[('Song A',120),('Song B',5)])
+        self.assertEqual(rows,[('Song B',5)])  # v6: Song A's 2m tail was taken back
 
     def test_title_read_failure_keeps_current_project(self):
         self.run_until(10)
@@ -238,7 +240,7 @@ class PolicyReplayTests(unittest.TestCase):
         self.run_until(10)
         self.poll(15,locked=True,boundary=1012)
         self.poll(100,input_at=1000,audio=False)
-        self.assertEqual(self.total(),12)
+        self.assertEqual(self.total(),0)  # v6: lock trims back to the last input (1000)
         self.assertIsNone(self.t.session_id)
         self.poll(105,input_at=1105)
         self.assertIsNotNone(self.t.session_id)
@@ -246,7 +248,7 @@ class PolicyReplayTests(unittest.TestCase):
     def test_stale_audio_expires(self):
         for sec in range(0,721,5):
             self.poll(sec,audio=True,audio_at=1000)
-        self.assertEqual(self.total(),tracker.PLAY_ALLOWANCE)
+        self.assertEqual(self.total(),0)  # v6: taken back to the only play reading
 
     def test_missed_poll_does_not_invent_work(self):
         self.run_until(10,audio=True)
@@ -377,7 +379,7 @@ class PolicyReplayTests(unittest.TestCase):
         self.stopped(60)
         self.stopped(65, input_at=1065)
         self.assertIsNone(self.t.session_id)
-        self.assertEqual(self.total(), 32)
+        self.assertEqual(self.total(), 30)  # v6: lock trims back to the last play
 
     def test_v5_manual_pause_does_not_bridge(self):
         for sec in range(0, 31, 5):

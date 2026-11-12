@@ -16,6 +16,7 @@ import math
 import uuid
 
 from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE, PLAY_ALLOWANCE,
+                             BACKGROUND_ALLOWANCE,
                              LISTENING_ALLOWANCE, PROJECT_GRACE,
                              EVIDENCE_TTL, POLICY_TEXT)
 from activity_store import ensure_activity_schema, load_activity_rows
@@ -1095,6 +1096,8 @@ class Tracker:
         self._lost_observability_at = None
         self._last_play_at = None
         self._play_mode = False
+        self._front_input_at = None  # last input while Live was the front app
+        self._background_since = None  # Live has been behind other apps since then
         # Provisional trip to another app: last credited moment before leaving,
         # and the moment Live came back (counts as attendance like an input).
         self._away_since = None
@@ -1360,6 +1363,36 @@ class Tracker:
         self._interval_credit = target
         self.last_tick, self.last_tick_mono = end_wall, end_mono
 
+    def _trim_tail(self, anchor):
+        """Take back credit after the last moment of presence (play, or input with Live in front).
+
+        Absolute targets like _tick, so a retried or ambiguous commit never subtracts twice.
+        Limited to the current interval, which holds the post-stop tail.
+        """
+        if self.session_id is None or anchor is None or self.last_tick_mono is None:
+            return
+        excess = min(self.last_tick_mono - anchor, self._interval_credit)
+        if excess <= 0:
+            return
+        target = self._interval_credit - excess
+        end_wall = self.last_tick - excess
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute('SELECT end_time FROM sessions WHERE id=?', (self.session_id,)).fetchone()
+            if row is None or row[0] is not None:
+                conn.rollback()
+                return
+            old = conn.execute('SELECT credited_seconds FROM activity_intervals WHERE id=?', (self._interval_id,)).fetchone()
+            delta = max(0.0, (old[0] if old else 0.0) - target)
+            conn.execute('UPDATE activity_intervals SET credited_seconds=?,end_time=MAX(start_time,?) WHERE id=?',
+                         (target, end_wall, self._interval_id))
+            conn.execute('UPDATE sessions SET active_seconds=MAX(0,active_seconds-?),last_seen_time=? WHERE id=? AND end_time IS NULL',
+                         (delta, end_wall, self.session_id))
+            conn.commit()
+        self._interval_credit = target
+        self.last_tick, self.last_tick_mono = end_wall, self.last_tick_mono - excess
+        print(f"[{_ts()}] ✂  {self.project_name}: took back {int(excess)}s after you left")
+
     def _close(self, preserve_resume_hint=False, reason=PAUSE_REASON_UNKNOWN, at=None, mono=None):
         if self.session_id is None:
             if not preserve_resume_hint:
@@ -1513,6 +1546,13 @@ class Tracker:
         # Policy v5: the play button is the work signal. Counts while Live plays, in
         # front or not, and for PLAY_ALLOWANCE after it stops. Input alone counts only
         # when play state is unknown (AbletonOSC off), so tracking never goes dark.
+        if fresh_input and o.foreground and (self._front_input_at is None or input_at>self._front_input_at):
+            self._front_input_at=input_at
+        # Live behind other apps: the timer restarts whenever Live comes to the front.
+        if o.foreground or blocked:
+            self._background_since=None
+        elif self._background_since is None:
+            self._background_since=o.mono
         audio_known=(o.audio is not None and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
         audio_fresh=audio_known and o.audio is True
         if audio_fresh and (self._last_play_at is None or o.audio_at>self._last_play_at):
@@ -1522,14 +1562,23 @@ class Tracker:
         play_at=(self._last_play_at if self._last_play_at is not None
                  and self._last_play_at>self._input_barrier else None)
         play_deadline=play_at+PLAY_ALLOWANCE if play_at is not None else float('-inf')
-        input_deadline=input_at+INPUT_ALLOWANCE if fresh_input and not audio_known else float('-inf')
+        # Fallback (play state unknown): only input with Live in front counts.
+        front_at=(self._front_input_at if self._front_input_at is not None
+                  and self._front_input_at>self._input_barrier else None)
+        input_deadline=front_at+INPUT_ALLOWANCE if front_at is not None and not audio_known else float('-inf')
         evidence=play_at is not None or input_deadline>float('-inf')
+        # Last moment you were clearly there; an expired tail is trimmed back to it.
+        # Raw values: a lock raises the barrier first but must still trim. The trim
+        # never reaches before this session, since it is capped at the open interval.
+        anchor=max((x for x in (self._last_play_at,self._front_input_at) if x is not None),default=None)
         if reason is None and not evidence:
-            reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified') else 'awaiting_input'
+            reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified','background') else 'awaiting_input'
         cutoff=None
         attendance_cutoff=None
+        background_cutoff=(self._background_since+BACKGROUND_ALLOWANCE
+                           if self._background_since is not None else float('inf'))
         if evidence:
-            attendance_cutoff=max(input_deadline,play_deadline)
+            attendance_cutoff=min(max(input_deadline,play_deadline),background_cutoff)
             cutoff=attendance_cutoff
             project_expired=False
             if o.project is None and self._last_project_at is not None:
@@ -1539,13 +1588,15 @@ class Tracker:
                 cutoff=min(cutoff,self._lost_observability_at+EVIDENCE_TTL)
             if reason is None:
                 if o.mono>=cutoff:
-                    reason='unverified' if not o.observable or project_expired else 'idle'
+                    reason=('unverified' if not o.observable or project_expired
+                            else 'background' if o.mono>=background_cutoff else 'idle')
                 else:
                     reason='listening' if audio_fresh and not (fresh_input and o.mono<input_at+INPUT_ALLOWANCE) else 'working'
         self._deadline=cutoff
         active=reason in ('working','listening')
         if active:
             if self.session_id is not None and self.last_tick_mono < o.mono-0.000001:
+                self._trim_tail(anchor)
                 self._close(preserve_resume_hint=True,reason='idle',at=o.wall,mono=self.last_tick_mono)
             if self.session_id is not None and project!=self.project_name:
                 if is_untitled_project_name(self.project_name) and not is_untitled_project_name(project):
@@ -1569,11 +1620,13 @@ class Tracker:
         else:
             # No final catch-up: the previous snapshot was settled above.
             if self.session_id is not None:
+                if reason in ('idle','locked','background'):
+                    self._trim_tail(anchor)
                 self._close(preserve_resume_hint=bool(o.pid) and not changed_pid,
                             reason=reason,at=o.wall,mono=self.last_tick_mono)
             if not o.pid:
                 self.resume_hint_project=None
-            if reason in ('idle','listening_limit','unverified','no_project'):
+            if reason in ('idle','listening_limit','unverified','no_project','background'):
                 self._input_barrier=max(self._input_barrier,input_at or o.input_at or float('-inf'))
                 self._needs_new_input=True
         if o.audio is True:
