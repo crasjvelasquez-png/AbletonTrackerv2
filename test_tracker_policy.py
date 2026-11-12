@@ -68,19 +68,19 @@ class PolicyReplayTests(unittest.TestCase):
         with contextlib.closing(sqlite3.connect(self.db)) as c:
             return c.execute('SELECT COALESCE(SUM(active_seconds),0) FROM sessions').fetchone()[0]
 
-    def test_silence_stops_at_five_minutes_and_stays_flat(self):
+    def test_silence_stops_at_two_minutes_and_stays_flat(self):
         self.run_until(720)
-        self.assertEqual(self.total(), 300)
+        self.assertEqual(self.total(), 120)
         self.assertEqual(self.t.status().reason, 'idle')
 
     def test_hands_off_listening_counts_without_playback_probe(self):
-        self.run_until(150, audio=None)
-        self.assertEqual(self.total(), 150)
+        self.run_until(100, audio=None)
+        self.assertEqual(self.total(), 100)
         self.assertIsNotNone(self.t.session_id)
 
     def test_unavailable_audio_never_extends_input_allowance(self):
         self.run_until(720, audio=None)
-        self.assertEqual(self.total(), 300)
+        self.assertEqual(self.total(), 120)
 
     def test_playback_counts_with_no_time_limit(self):
         self.run_until(1800, audio=True)
@@ -131,20 +131,20 @@ class PolicyReplayTests(unittest.TestCase):
         self.assertEqual(self.t.status().reason, 'listening')
         self.assertEqual(self.t.status().state, tracker.STATE_TRACKING)
 
-    def test_background_without_input_or_playback_stops_at_five_minutes(self):
+    def test_background_without_input_or_playback_stops_at_two_minutes(self):
         for sec in range(0, 721, 5):
             self.poll(sec, foreground=False, audio=False)
-        self.assertEqual(self.total(), 300)
+        self.assertEqual(self.total(), 120)
         self.assertEqual(self.t.status().reason, 'idle')
-        self.assertIn('5m', self.t.status().message)
+        self.assertIn('2m', self.t.status().message)
 
     def test_playback_alone_resumes_after_idle(self):
         self.run_until(400)
-        self.assertEqual(self.total(), 300)
+        self.assertEqual(self.total(), 120)
         for sec in range(405, 501, 5):
             self.poll(sec, foreground=False, audio=True)
         self.assertIsNotNone(self.t.session_id)
-        self.assertEqual(self.total(), 395)
+        self.assertEqual(self.total(), 215)
 
     def test_lock_in_background_stops_counting(self):
         self.run_until(10)
@@ -181,7 +181,7 @@ class PolicyReplayTests(unittest.TestCase):
 
     def test_pointer_only_motion_does_not_reset_attendance(self):
         self.run_until(720)
-        self.assertEqual(self.total(),300)
+        self.assertEqual(self.total(),120)
         self.poll(725,input_at=1725)
         self.assertIsNotNone(self.t.session_id)
 
@@ -192,7 +192,7 @@ class PolicyReplayTests(unittest.TestCase):
         self.poll(315,project='Song B',input_at=1310)
         with contextlib.closing(sqlite3.connect(self.db)) as c:
             rows=c.execute('SELECT project_name,active_seconds FROM sessions ORDER BY id').fetchall()
-        self.assertEqual(rows,[('Song A',300),('Song B',5)])
+        self.assertEqual(rows,[('Song A',120),('Song B',5)])
 
     def test_title_read_failure_keeps_current_project(self):
         self.run_until(10)
@@ -234,7 +234,7 @@ class PolicyReplayTests(unittest.TestCase):
     def test_stale_audio_expires(self):
         for sec in range(0,721,5):
             self.poll(sec,audio=True,audio_at=1000)
-        self.assertEqual(self.total(),300)
+        self.assertEqual(self.total(),120)
 
     def test_missed_poll_does_not_invent_work(self):
         self.run_until(10,audio=True)
