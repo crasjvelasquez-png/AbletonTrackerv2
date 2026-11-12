@@ -674,16 +674,15 @@ class DeckActionTests(_AppTestBase):
         message = menubar.rumps.alert.call_args.kwargs["message"]
         self.assertIn("reconnect the drive", message)
 
-    def test_done_prompts_for_the_next_task(self):
+    def test_next_task_saves_and_completes_without_a_dialog(self):
         key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
         self.app.deck_pick(key)
-        menubar.rumps.Window.return_value.run.return_value = MagicMock(clicked=1, text="write verse 2")
-        self.app.deck_next_edit()
+        self.app.deck_next_save("write verse 2")
         self.assertEqual(self.deck()["next_task"], "write verse 2")
-        menubar.rumps.Window.return_value.run.return_value = MagicMock(clicked=0, text="ignored")
-        self.app.deck_next_done()
+        self.app.deck_next_complete()
         self.assertEqual(self.deck()["next_task"], "")
-        self.assertEqual(menubar.rumps.Window.call_count, 2)
+        menubar.rumps.Window.assert_not_called()
+        self.app._refresh.assert_called_with(None)
 
     def test_due_and_stage_actions(self):
         self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])

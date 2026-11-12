@@ -6,7 +6,11 @@ suggestions; dialog titles leak into the picker; picking does not put exactly
 one song On Deck; due dates or next tasks do not reach the panel; long titles
 clip the stage control; rows overlap the metrics or actions; dark/light render
 breaks; keyboard order skips On Deck rows; pick and popup choices dispatch the
-wrong song or action; the source database is modified.
+wrong song or action; the source database is modified. Inline next task:
+clicking the task closes the panel or opens a dialog; the field is not focused
+or prefilled; Return saves the wrong (unstripped) text or nothing; Escape
+closes the panel or saves; closing the panel loses typed text; one commit fires
+twice; a refresh mid-edit hides the field; Done does not reopen an empty field.
 
 The source database is copied with SQLite's backup API and opened read-only.
 Artifacts: screenshots and results.json in --output.
@@ -85,7 +89,7 @@ def verify(output, source):
     projects.add(rumps.MenuItem("Recent"))
     record = lambda name: (lambda *args: calls.append((name, *args)))
     actions = {name: record(name) for name in ("tracker", "ableton", "quit", "deck_open", "deck_pick", "deck_stage",
-                                                "deck_next_edit", "deck_next_done", "deck_due", "deck_snooze")}
+                                                "deck_next_save", "deck_next_complete", "deck_due", "deck_snooze")}
     panel = MenuBarPanel.attach(status, projects._menu, lambda: None, actions)
     base = dict(status="Working on: April 2026 - Prince - 130 bpm Emaj", today="Today: 1¼ / 2h",
                 week="This week: 6 / 7h", run="Streak: 4 days", show_open_ableton=False, state="tracking")
@@ -170,13 +174,57 @@ def verify(output, source):
         assert calls[-1] == ("deck_open",)
         panel.toggle_(None)
         pump()
-        panel.deck_check_button.performClick_(None)
-        assert calls[-1] == ("deck_next_done",)
+        checks.append("Tab walks On Deck rows before Open Project; title opens")
+
+        # 4. Inline next task: no dialog, Return saves, Escape cancels, closing commits.
+        def key(code, chars):
+            return AK.NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode_(
+                AK.NSEventTypeKeyDown, (0, 0), 0, 0, panel.root.window().windowNumber(), None, chars, chars, False, code)
+
+        field = panel.deck_next_field
+        window = panel.root.window()
+        panel.deck_next_button.performClick_(None)
+        pump(0.05)
+        assert panel.popover.isShown() and panel._editing and not field.isHidden() and panel.deck_next_button.isHidden()
+        assert field.currentEditor() is not None and field.stringValue() == late["task"]
+        assert not overlaps(field, panel.deck_check_button) and not overlaps(field, panel.deck_change_button)
+        bitmap = panel.root.bitmapImageRepForCachingDisplayInRect_(panel.root.bounds())
+        panel.root.cacheDisplayInRect_toBitmapImageRep_(panel.root.bounds(), bitmap)
+        path = output / "light-deck-editing.png"
+        bitmap.representationUsingType_properties_(AK.NSBitmapImageFileTypePNG, {}).writeToFile_atomically_(str(path), True)
+        screenshots.append(str(path))
+        panel.update(**dict(base, today="Today: 1½ / 2h"), deck=late)
+        assert panel._editing and not field.isHidden() and field.currentEditor() is not None, "refresh ended the edit"
+        start = len(calls)
+        field.setStringValue_("  bounce the chorus  ")
+        app.sendEvent_(key(53, "\x1b"))
+        pump(0.05)
+        assert panel.popover.isShown() and not panel._editing and len(calls) == start, "Escape closed or saved"
+        assert field.isHidden() and not panel.deck_next_button.isHidden()
+        panel.deck_next_button.performClick_(None)
+        field.setStringValue_("  bounce the chorus  ")
+        app.sendEvent_(key(36, "\r"))
+        pump(0.05)
+        assert calls[start:] == [("deck_next_save", "bounce the chorus")], calls[start:]
+        assert panel.popover.isShown() and not panel._editing
+        panel.deck_next_button.performClick_(None)
+        field.setStringValue_("comp vocals")
+        panel.close()
+        pump()
+        assert calls[-1] == ("deck_next_save", "comp vocals") and len(calls) == start + 2, "close lost or doubled the edit"
         panel.toggle_(None)
         pump()
-        panel.deck_next_button.performClick_(None)
-        assert calls[-1] == ("deck_next_edit",)
-        checks.append("Tab walks On Deck rows before Open Project; title opens, circle completes, text edits")
+        panel.deck_check_button.performClick_(None)
+        pump(0.05)
+        assert calls[-1] == ("deck_next_complete",) and panel.popover.isShown()
+        assert panel._editing and field.stringValue() == "" and field.currentEditor() is not None
+        app.sendEvent_(key(36, "\r"))
+        pump(0.05)
+        assert calls[-1] == ("deck_next_complete",), "empty field after Done saved anyway"
+        panel.close()
+        pump()
+        checks.append("next task edits inline: Return saves trimmed text, Escape cancels, closing commits once, "
+                      "refresh keeps the edit, Done reopens an empty field; no dialog")
 
         for name, entries_from, expected in (
             ("stage", lambda: [(label, panel._act("deck_stage", stage)) for stage, label in late["stages"]], ("deck_stage", "recording")),

@@ -49,6 +49,15 @@ class PanelRoot(AK.NSView):
             # A quiet grouped surface: same material as the panel, slightly lifted.
             _rounded(card, 10, _dynamic('text').colorWithAlphaComponent_(0.045),
                      _dynamic('line'))
+        editing = getattr(self, 'edit_rect', None)
+        if editing is not None:
+            # The row itself becomes the field: recessed fill plus the panel's focus ring.
+            box = AK.NSInsetRect(editing, 1, 1)
+            _rounded(box, 6, _dynamic('background'))
+            ring = AK.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(AK.NSInsetRect(box, 1, 1), 5, 5)
+            _dynamic('focus').setStroke()
+            ring.setLineWidth_(1.5)
+            ring.stroke()
         if not hasattr(self, 'separator_ys'):
             return
         _dynamic('line').setStroke()
@@ -282,6 +291,10 @@ class MenuBarPanel(AK.NSObject):
         self.deck_due_button = self._button('', 'deckDue:', cls=DueButton)
         self.deck_check_button = self._button('', 'deckDone:', cls=CheckButton)
         self.deck_next_button = self._button('', 'deckNext:')
+        self.deck_next_field = self._field('The one next thing…')
+        self._editing = False
+        self._edit_original = ''
+        self._update_args = None
         self.deck_change_button = self._button('Change On Deck…', 'deckChange:', '›', tone='secondary')
         self.deck_pick_buttons = [self._button('', 'deckPick:') for _ in range(3)]
         for index, button in enumerate(self.deck_pick_buttons):
@@ -321,6 +334,25 @@ class MenuBarPanel(AK.NSObject):
         return label
 
     @objc.python_method
+    def _field(self, placeholder):
+        field = AK.NSTextField.alloc().initWithFrame_(NSMakeRect(0, 0, 100, 18))
+        field.setBezeled_(False)
+        field.setBordered_(False)
+        field.setDrawsBackground_(False)
+        field.setFocusRingType_(AK.NSFocusRingTypeNone)
+        field.setFont_(_font(13))
+        field.setTextColor_(_dynamic('text'))
+        field.setPlaceholderString_(placeholder)
+        field.setLineBreakMode_(AK.NSLineBreakByTruncatingTail)
+        field.cell().setUsesSingleLineMode_(True)
+        field.cell().setScrollable_(True)
+        field.setAccessibilityLabel_('Next task')
+        field.setDelegate_(self)
+        field.setHidden_(True)
+        self.root.addSubview_(field)
+        return field
+
+    @objc.python_method
     def _button(self, title, action, shortcut='', primary=False, tone='text', cls=None):
         button = (cls or PanelButton).alloc().initWithFrame_(NSMakeRect(0, 0, 100, 42))
         button.setTitle_(title)
@@ -335,7 +367,9 @@ class MenuBarPanel(AK.NSObject):
 
     @objc.python_method
     def update(self, *, status, today, week, run, show_open_ableton, state, deck=None):
-        display = (status, today, week, run, show_open_ableton, state, repr(deck))
+        self._update_args = dict(status=status, today=today, week=week, run=run,
+                                 show_open_ableton=show_open_ableton, state=state, deck=deck)
+        display = (status, today, week, run, show_open_ableton, state, repr(deck), self._editing)
         if display == self._display:
             return
         self._display = display
@@ -394,6 +428,11 @@ class MenuBarPanel(AK.NSObject):
         for view in deck_views:
             view.setHidden_(True)
         self.root.deck_card = None
+        self.root.edit_rect = None
+        editing = self._editing and bool(deck) and deck.get('mode') == 'set'
+        if not editing:
+            # Never hide the field mid-edit: hiding the first responder would end the edit.
+            self.deck_next_field.setHidden_(True)
         if not deck:
             return [], y
         self.deck_caption.setHidden_(False)
@@ -441,7 +480,14 @@ class MenuBarPanel(AK.NSObject):
             nxt.shortcut = '' if task else '+'
             nxt.setToolTip_(task or 'Add the next task')
             nxt.setAccessibilityLabel_(f'Edit next task: {task}' if task else 'Add the next task')
-            show(nxt, NSMakeRect(42, y, 266, 32) if task else NSMakeRect(12, y, 296, 32))
+            row = NSMakeRect(42, y, 266, 32) if task else NSMakeRect(12, y, 296, 32)
+            if editing:
+                # Text sits where the row's title was drawn, so the swap reads as one surface.
+                self.root.edit_rect = row
+                self.deck_next_field.setFrame_(NSMakeRect(row.origin.x + 6, y + 7, row.size.width - 14, 18))
+                self.deck_next_field.setHidden_(False)
+            else:
+                show(nxt, row)
             y += 36
             self.root.deck_card = NSMakeRect(8, card_top, 304, y - card_top)
             show(self.deck_change_button, NSMakeRect(8, y + 6, 304, 30))
@@ -545,10 +591,60 @@ class MenuBarPanel(AK.NSObject):
             (label, self._act('deck_stage', stage), stage == current) for stage, label in (self._deck or {}).get('stages', [])])
 
     def deckNext_(self, sender):
-        self._dispatch('deck_next_edit')
+        self._begin_edit((self._deck or {}).get('task', ''))
 
     def deckDone_(self, sender):
-        self._dispatch('deck_next_done')
+        try:
+            self.actions['deck_next_complete']()
+        except Exception:
+            logging.exception('Menu-bar action failed: deck_next_complete')
+            return
+        self._begin_edit('')
+
+    @objc.python_method
+    def _relayout(self):
+        if self._update_args is not None:
+            self._display = None
+            self.update(**self._update_args)
+
+    @objc.python_method
+    def _begin_edit(self, text):
+        """Turn the next-task row into an in-place field (Reminders-style), keeping the panel open."""
+        self._editing = True
+        self._edit_original = text
+        self.deck_next_field.setStringValue_(text)
+        self._relayout()
+        if self.deck_next_field.isHidden():
+            self._editing = False
+            return
+        window = self.root.window()
+        if window is not None:
+            window.makeFirstResponder_(self.deck_next_field)
+            editor = self.deck_next_field.currentEditor()
+            if editor is not None:
+                editor.moveToEndOfDocument_(None)
+
+    @objc.python_method
+    def _finish_edit(self, commit):
+        if not self._editing:
+            return
+        self._editing = False
+        text = self.deck_next_field.stringValue().strip()
+        window = self.root.window()
+        if window is not None:
+            window.makeFirstResponder_(self.deck_next_button if self.popover.isShown() else None)
+        self._relayout()
+        if commit and text != self._edit_original:
+            try:
+                self.actions['deck_next_save'](text)
+            except Exception:
+                logging.exception('Menu-bar action failed: deck_next_save')
+        if self.popover.isShown() and window is not None and not self.deck_next_button.isHidden():
+            window.makeFirstResponder_(self.deck_next_button)
+
+    def controlTextDidEndEditing_(self, notification):
+        # Clicking elsewhere or tabbing away keeps what was typed, like other macOS inline fields.
+        self._finish_edit(True)
 
     def deckDue_(self, sender):
         self._popup(sender, [('Due date', None), ('In 3 days', self._act('deck_due', 3)),
@@ -606,10 +702,22 @@ class MenuBarPanel(AK.NSObject):
     def _handle_key(self, event):
         if not self.popover.isShown() or self._menu_open:
             return event
+        flags = event.modifierFlags() & AK.NSEventModifierFlagDeviceIndependentFlagsMask
+        if self._editing:
+            editor = self.deck_next_field.currentEditor()
+            if editor is not None and editor.hasMarkedText():
+                return event  # Let input methods finish composing first.
+            if event.keyCode() == 53:
+                self._finish_edit(False)
+                return None
+            if event.keyCode() in (36, 76):
+                self._finish_edit(True)
+                return None
+            if event.keyCode() != 48:
+                return event
         if event.keyCode() == 53:
             self.close()
             return None
-        flags = event.modifierFlags() & AK.NSEventModifierFlagDeviceIndependentFlagsMask
         if event.keyCode() == 48 and not flags & (AK.NSEventModifierFlagCommand | AK.NSEventModifierFlagControl | AK.NSEventModifierFlagOption):
             for button in self._focus_buttons:
                 button.shows_keyboard_focus = True
@@ -650,6 +758,9 @@ class MenuBarPanel(AK.NSObject):
             self._menu_open = False
             self.popover.setBehavior_(AK.NSPopoverBehaviorTransient)
             self.close()
+
+    def popoverWillClose_(self, notification):
+        self._finish_edit(True)
 
     def popoverDidClose_(self, notification):
         self.status_item.button().highlight_(False)

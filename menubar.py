@@ -434,8 +434,8 @@ class AbletonTrackerApp(rumps.App):
                     "deck_open": self.deck_open,
                     "deck_pick": self.deck_pick,
                     "deck_stage": self.deck_stage,
-                    "deck_next_edit": self.deck_next_edit,
-                    "deck_next_done": self.deck_next_done,
+                    "deck_next_save": self.deck_next_save,
+                    "deck_next_complete": self.deck_next_complete,
                     "deck_due": self.deck_due,
                     "deck_snooze": self.deck_snooze,
                 },
@@ -693,25 +693,17 @@ class AbletonTrackerApp(rumps.App):
             songs.set_stage(self._db_path(), song["key"], stage)
             self._deck_changed()
 
-    def deck_next_edit(self, default_text=None):
+    def deck_next_save(self, text):
         song = self._deck_song()
-        if not song:
-            return
-        response = rumps.Window(
-            message=f"The one next thing for \u201c{song['title']}\u201d:",
-            title="Next task",
-            default_text=song["next_task"] if default_text is None else default_text,
-            ok="Save", cancel="Cancel", dimensions=(320, 24)).run()
-        if response.clicked:
-            songs.set_next_task(self._db_path(), song["key"], response.text)
-        self._deck_changed()
+        if song:
+            songs.set_next_task(self._db_path(), song["key"], text)
+            self._deck_changed()
 
-    def deck_next_done(self):
+    def deck_next_complete(self):
         song = self._deck_song()
         if song:
             songs.complete_next_task(self._db_path(), song["key"])
             self._deck_changed()
-            self.deck_next_edit(default_text="")
 
     def deck_due(self, days):
         song = self._deck_song()
