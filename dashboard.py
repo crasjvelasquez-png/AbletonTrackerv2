@@ -19,7 +19,7 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 from projects import (PINNED_FOLDERS_KEY, TEMPLATES_KEY, find_ableton_app, list_templates, normalize_pinned_folders,
-                      normalize_templates, open_project, resolve_project_path)
+                      normalize_templates, open_project, resolve_project_path, resolve_song_path)
 from activity_store import ensure_activity_schema, load_activity_rows, read_tracking_status
 from tracking_policy import POLICY_TEXT
 
@@ -1989,7 +1989,7 @@ def on_deck_action(payload: dict) -> dict:
     elif action == "task_done":
         songs.complete_next_task(DB_PATH, key)
     elif action == "open":
-        open_project(resolve_project_path(DB_PATH, deck["open_name"]), find_ableton_app())
+        open_project(resolve_song_path(DB_PATH, deck, resolver=resolve_project_path), find_ableton_app())
     return get_on_deck()
 
 

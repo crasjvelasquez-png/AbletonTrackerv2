@@ -674,6 +674,24 @@ class DeckActionTests(_AppTestBase):
         message = menubar.rumps.alert.call_args.kwargs["message"]
         self.assertIn("reconnect the drive", message)
 
+    def test_open_falls_back_to_other_song_file_when_open_name_is_missing(self):
+        import sqlite3
+        now = time.time()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO sessions(project_name,start_time,end_time,active_seconds,last_seen_time) VALUES(?,?,?,?,?)",
+                ("April 2026 - Prince - 130 bpm Emaj - Mixing", now - 600, now, 600, now),
+            )
+            conn.commit()
+        menubar.resolve_project_path.side_effect = lambda db, name: (
+            f"/sets/{name}.als"
+            if name == "April 2026 - Prince - 130 bpm Emaj"
+            else (_ for _ in ()).throw(ValueError(f"Could not find {name}"))
+        )
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.opened, ["/sets/April 2026 - Prince - 130 bpm Emaj.als"])
+        menubar.rumps.alert.assert_not_called()
+
     def test_next_task_saves_and_completes_without_a_dialog(self):
         key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
         self.app.deck_pick(key)

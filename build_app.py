@@ -42,7 +42,7 @@ APPS = {
     "Tracker": {
         "bundle_id": "com.abletontracker.tracker",
         "accent": "#3B82F6",
-        "ui_element": False,
+        "ui_element": True,
         "entry": "dashboard_window.py",
     },
 }
@@ -308,20 +308,12 @@ int main(int argc, char **argv) {{
         app_source[sizeof(app_source) - 1] = '\\0';
     }}
 
-    if (argc >= 2 && strcmp(argv[1], "--background") == 0) {{
-        redirect_logs("tracker.log");
-        if (chdir(app_source) != 0) {{
-            perror("chdir failed");
-            return 1;
-        }}
-        char *bg_argv[] = {{ (char *)PYTHON_PATH, "menubar.py", NULL }};
-        execv(PYTHON_PATH, bg_argv);
-        perror("execv failed");
-        return 1;
-    }}
-
-    redirect_logs("dashboard.log");
+    int background = (argc >= 2 && strcmp(argv[1], "--background") == 0);
+    redirect_logs(background ? "tracker.log" : "dashboard.log");
     setenv("ABLETON_TRACKER_IN_BUNDLE", "1", 1);
+    if (background) {{
+        setenv("ABLETON_TRACKER_BACKGROUND", "1", 1);
+    }}
 
     void *handle = dlopen(PYTHON_DYLIB, RTLD_LAZY | RTLD_GLOBAL);
     if (!handle) {{
@@ -332,6 +324,17 @@ int main(int argc, char **argv) {{
     if (!py_main) {{
         fprintf(stderr, "dlsym(Py_BytesMain) failed: %s\\n", dlerror());
         return 1;
+    }}
+
+    if (background) {{
+        if (chdir(app_source) != 0) {{
+            perror("chdir failed");
+            return 1;
+        }}
+        char bg_script[PATH_MAX];
+        snprintf(bg_script, sizeof(bg_script), "%s/menubar.py", app_source);
+        char *bg_argv[] = {{ real_exec, bg_script, NULL }};
+        return py_main(2, bg_argv);
     }}
 
     if (argc >= 2 && strncmp(argv[1], "-psn_", 5) != 0) {{
@@ -444,6 +447,7 @@ def build_bundle(app_name: str, config: dict[str, object], icns: Path, identity:
 <key>LSMinimumSystemVersion</key><string>10.13</string>
 <key>LSUIElement</key><{str(config['ui_element']).lower()}/>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSRemovableVolumesUsageDescription</key><string>Ableton Tracker needs access to external drives to locate and open your Ableton Live sets.</string>
 </dict></plist>
 """, encoding="utf-8")
 

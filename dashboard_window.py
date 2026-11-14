@@ -22,7 +22,9 @@ TRACKER_BUNDLE_ID = "com.abletontracker.tracker"
 
 
 def python_executable() -> str:
-    """Return the headless CPython binary for background child processes."""
+    """Return the CPython executable for background child processes."""
+    if os.environ.get("ABLETON_TRACKER_IN_BUNDLE") == "1":
+        return sys.executable
     return os.environ.get("ABLETON_TRACKER_PYTHON") or sys.executable
 
 
@@ -63,13 +65,41 @@ def acquire_window_lock(path: Path = WINDOW_LOCK_PATH):
     except BlockingIOError:
         lock_file.close()
         return None
+    try:
+        lock_file.seek(0)
+        lock_file.truncate()
+        lock_file.write(f"{os.getpid()}\n")
+        lock_file.flush()
+    except OSError:
+        pass
     return lock_file
+
+
+def activate_pid(pid: int) -> bool:
+    """Bring a specific macOS GUI process PID to the foreground."""
+    if sys.platform != "darwin" or not pid or pid <= 0:
+        return False
+    try:
+        from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+        app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+        if app is not None:
+            return bool(app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps))
+    except Exception:
+        pass
+    return False
 
 
 def activate_existing_window() -> bool:
     """Bring an already-running Tracker.app window to the foreground."""
     if sys.platform != "darwin":
         return False
+    try:
+        raw_pid = WINDOW_LOCK_PATH.read_text(encoding="utf-8").strip()
+        if raw_pid.isdigit() and activate_pid(int(raw_pid)):
+            return True
+    except OSError:
+        pass
     try:
         subprocess.run(
             [
@@ -122,8 +152,10 @@ def ensure_menubar_if_needed() -> subprocess.Popen | None:
     env = os.environ.copy()
     env.pop("ABLETON_TRACKER_OPEN_WINDOW", None)
     env.pop("ABLETON_TRACKER_IN_BUNDLE", None)
+    launcher = find_bundle_launcher()
+    cmd = [str(launcher), "--background"] if launcher is not None else [python_executable(), str(menubar_script)]
     proc = subprocess.Popen(
-        [python_executable(), str(menubar_script)],
+        cmd,
         stdout=log_file,
         stderr=log_file,
         cwd=APP_DIR,
@@ -142,6 +174,13 @@ def configure_macos_app_icon() -> bool:
     try:
         from AppKit import NSApplication, NSImage
         import Foundation
+        try:
+            from AppKit import NSApplicationActivationPolicyRegular
+        except ImportError:
+            NSApplicationActivationPolicyRegular = 0
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyRegular
+        )
     except ImportError:
         log("AppKit unavailable; keeping the default application icon")
         return False

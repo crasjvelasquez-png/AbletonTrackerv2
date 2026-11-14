@@ -33,7 +33,7 @@ from tracker import (
     Tracker,
 )
 from notifications import NotificationCoordinator, NotificationMessage
-from projects import ProjectCatalog, find_ableton_app, open_project, resolve_project_path
+from projects import ProjectCatalog, find_ableton_app, open_project, resolve_project_path, resolve_song_path
 import songs
 
 DASHBOARD_PORT = 7421
@@ -51,6 +51,8 @@ BADGE_PX = 40  # rumps sizes status icons to 20pt; draw at 2x.
 BADGE_STEPS = 24
 BADGE_ACCENT = (164, 178, 246)
 BADGE_GLYPHS = {"tracking": "●", "open": "◐", "idle": "○"}
+STATUS_ITEM_AUTOSAVE_NAME = "TrackerStatusItem"
+STATUS_ITEM_DEFAULT_POSITION = 400.0  # points from the screen's right edge
 
 
 def render_badge_png(state: str, progress: float) -> bytes:
@@ -99,6 +101,40 @@ def acquire_instance_lock(path: Path = INSTANCE_LOCK_PATH):
         lock_file.close()
         return None
     return lock_file
+
+
+def pin_status_item_position(status_item, defaults=None) -> None:
+    """Remember the status item's slot, seeding one beside the clock on first run.
+
+    macOS puts a new status item leftmost, which on notched MacBooks lands it
+    under the notch where it is silently hidden. A saved position (which
+    Cmd-dragging later updates) keeps it in view across relaunches.
+    """
+    if defaults is None:
+        from Foundation import NSUserDefaults
+        defaults = NSUserDefaults.standardUserDefaults()
+    key = f"NSStatusItem Preferred Position {STATUS_ITEM_AUTOSAVE_NAME}"
+    if defaults.objectForKey_(key) is None:
+        defaults.setDouble_forKey_(STATUS_ITEM_DEFAULT_POSITION, key)
+    status_item.setAutosaveName_(STATUS_ITEM_AUTOSAVE_NAME)
+
+
+def install_reopen_handler(on_reopen) -> None:
+    """Open the Tracker window when Tracker.app is launched while already running.
+
+    LaunchServices routes a second launch to this process as a "reopen" event
+    instead of starting a new copy, so without a handler it does nothing.
+    """
+    import objc
+
+    class NSApp(objc.Category(rumps.rumps.NSApp)):  # PyObjC requires the class's own name
+        @objc.typedSelector(b"Z@:@Z")
+        def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible):
+            try:
+                on_reopen()
+            except Exception as exc:
+                print(f"[reopen] could not open Tracker: {exc}", file=sys.stderr)
+            return True
 
 
 def fmt_dur(seconds: float) -> str:
@@ -223,6 +259,7 @@ class DashboardProcess:
             if self.server_proc is not None and self.server_proc.poll() is None:
                 return
             env = os.environ.copy()
+            env.pop("ABLETON_TRACKER_BACKGROUND", None)
             env["ABLETON_TRACKER_NO_BROWSER"] = "1"
             self.server_proc = subprocess.Popen(
                 [sys.executable, str(APP_DIR / "dashboard.py")],
@@ -234,22 +271,35 @@ class DashboardProcess:
 
     def open(self):
         if self.proc is None or self.proc.poll() is not None:
+            env = os.environ.copy()
+            env.pop("ABLETON_TRACKER_BACKGROUND", None)
             self.proc = subprocess.Popen(
                 [sys.executable, str(DASHBOARD_WINDOW_SCRIPT), "tracker"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
+                env=env,
             )
         elif sys.platform == "darwin" and "unittest" not in sys.modules:
-            subprocess.Popen(
-                [
-                    "osascript",
-                    "-e",
-                    'tell application id "com.abletontracker.tracker"\nreopen\nactivate\nend tell',
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            activated = False
+            try:
+                from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+                app = NSRunningApplication.runningApplicationWithProcessIdentifier_(self.proc.pid)
+                if app is not None:
+                    activated = bool(app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps))
+            except Exception:
+                activated = False
+            if not activated:
+                subprocess.Popen(
+                    [
+                        "osascript",
+                        "-e",
+                        'tell application id "com.abletontracker.tracker"\nreopen\nactivate\nend tell',
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
@@ -421,6 +471,12 @@ class AbletonTrackerApp(rumps.App):
 
     def _install_panel(self):
         """Attach presentation only after rumps has initialized the native menu."""
+        if "unittest" not in sys.modules:
+            try:
+                pin_status_item_position(self._nsapp.nsstatusitem)
+                install_reopen_handler(lambda: self.open_dashboard(None))
+            except Exception as exc:
+                print(f"[startup] status item setup failed: {exc}", file=sys.stderr)
         try:
             from menubar_panel import MenuBarPanel
             self.panel = MenuBarPanel.attach(
@@ -661,7 +717,7 @@ class AbletonTrackerApp(rumps.App):
 
     def _open_song(self, song):
         try:
-            open_project(resolve_project_path(self._db_path(), song["open_name"]), _find_ableton_app())
+            open_project(resolve_song_path(self._db_path(), song, resolver=resolve_project_path), _find_ableton_app())
         except Exception as exc:
             rumps.alert(title="Could not open the On Deck song", message=str(exc))
 
