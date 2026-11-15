@@ -1993,6 +1993,40 @@ def on_deck_action(payload: dict) -> dict:
     return get_on_deck()
 
 
+def get_lanes(now: float | None = None) -> dict:
+    return songs.lanes_model(DB_PATH, now=now)
+
+
+def lanes_action(payload: dict, now: float | None = None) -> dict:
+    action = payload.get("action")
+    if action == "assign":
+        key = str(payload.get("key") or "")
+        if not key:
+            raise ValueError("Song key is required")
+        lane = payload.get("lane")
+        if lane is not None and not isinstance(lane, str):
+            raise ValueError("Unknown lane")
+        songs.assign_lane(DB_PATH, key, lane, now=now)
+    elif action == "deck":
+        key = str(payload.get("key") or "")
+        if not key:
+            raise ValueError("Song key is required")
+        songs.set_lane_deck(DB_PATH, key, now=now)
+    elif action == "focus":
+        lane = payload.get("lane")
+        if not isinstance(lane, str):
+            raise ValueError("Unknown lane")
+        songs.set_now_lane(DB_PATH, lane, now=now)
+    elif action == "move":
+        key = str(payload.get("key") or "")
+        if not key:
+            raise ValueError("Song key is required")
+        songs.move_in_lane(DB_PATH, key, payload.get("delta"), now=now)
+    else:
+        raise ValueError("Unknown lanes action")
+    return get_lanes(now=now)
+
+
 def get_song_planner_list(query: str = "", now: float | None = None) -> dict:
     now = time.time() if now is None else now
     today = datetime.fromtimestamp(now).date()
@@ -2203,6 +2237,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/on-deck":
             self._json(get_on_deck())
+        elif parsed.path == "/api/lanes":
+            self._json(get_lanes())
         elif parsed.path == "/api/song-planner":
             query = parse_qs(parsed.query, keep_blank_values=True)
             if "key" in query:
@@ -2473,6 +2509,19 @@ class Handler(BaseHTTPRequestHandler):
             except OnDeckConflict as exc:
                 self._json({"error": str(exc), "deck": get_on_deck()}, status=409)
             except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+                self._json({"error": str(exc)}, status=400)
+        elif self.path == "/api/lanes":
+            try:
+                payload = self._request_json()
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if not isinstance(payload, dict):
+                self._json({"error": "request body is required"}, status=400)
+                return
+            try:
+                self._json({"ok": True, "lanes": lanes_action(payload)})
+            except ValueError as exc:
                 self._json({"error": str(exc)}, status=400)
         elif self.path == "/api/song-planner":
             try:

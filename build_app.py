@@ -28,6 +28,7 @@ SOURCE_FILES = (
     "dashboard_window.py",
     "menubar.py",
     "menubar_panel.py",
+    "native_sidebar.py",
     "notifications.py",
     "projects.py",
     "songs.py",

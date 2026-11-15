@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 
@@ -225,6 +226,7 @@ def install_native_sidebar(window) -> None:
     """Swap the window content for a native sidebar + web detail split view."""
     if sys.platform != "darwin" or getattr(window, "_native_sidebar", None):
         return
+    log("install_native_sidebar: loaded event received")
     try:
         from PyObjCTools import AppHelper
         import webview.platforms.cocoa as cocoa
@@ -237,24 +239,33 @@ def install_native_sidebar(window) -> None:
                     return
 
                 def _select(view_id):
-                    window.evaluate_js(f"setActiveView({view_id!r})")
+                    # Never block the UI thread on the web view: run JS off-thread.
+                    threading.Thread(
+                        target=lambda: window.evaluate_js(f"setActiveView({view_id!r})"),
+                        daemon=True,
+                    ).start()
 
                 sidebar = NativeSidebar(browser.window, browser.webview, _select)
                 window._native_sidebar = sidebar
                 browser.webview.removeFromSuperview()
                 sidebar.install()
+                log("Native sidebar installed")
                 browser.window.makeFirstResponder_(browser.webview)
                 def native_nav_sync(view_id):
                     AppHelper.callAfter(lambda: sidebar.select(view_id))
 
-                window.expose(native_nav_sync)
-                window.evaluate_js(
-                    "document.documentElement.classList.add('native-sidebar');"
-                    "window.__nativeNavSync=v=>window.pywebview?.api?.native_nav_sync?.(v);"
-                    "window.__nativeNavSync(activeView);"
-                )
+                def _web_setup():
+                    window.expose(native_nav_sync)
+                    window.evaluate_js(
+                        "document.documentElement.classList.add('native-sidebar');"
+                        "window.__nativeNavSync=v=>window.pywebview?.api?.native_nav_sync?.(v);"
+                        "window.__nativeNavSync(activeView);"
+                    )
+
+                threading.Thread(target=_web_setup, daemon=True).start()
             except Exception as exc:
-                log(f"Native sidebar unavailable; using in-page navigation: {exc}")
+                import traceback
+                log(f"Native sidebar unavailable; using in-page navigation: {exc}\n{traceback.format_exc()}")
 
         AppHelper.callAfter(_install)
     except Exception as exc:

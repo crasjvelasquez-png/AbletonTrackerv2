@@ -434,5 +434,231 @@ class SongTaskTests(SongTestCase):
         self.assertEqual(done_listed, list(reversed(done_ids[-20:])))
 
 
+class LanesTests(SongTestCase):
+    def setUp(self):
+        super().setUp()
+        self.add("April 2026 - Prince - 130 bpm Emaj 12.4", 1, 4)
+        self.add("Neighbors - Zenny - Mixing", 2, 2)
+        self.add("Wonder Woman - Zenny - Master", 3, 1.5)
+        self.add("August 2026 - DANCE - 118 bpm", 4, 3)
+        self.add("September 2026 - Colorful - 138 bpm", 5, 2)
+        loaded = {s["title"]: s["key"] for s in songs.load_songs(self.db, now=NOW)}
+        self.prince = loaded["April 2026 - Prince - 130 bpm Emaj 12.4"]
+        self.neighbors = loaded["Neighbors - Zenny - Mixing"]
+        self.wonder = loaded["Wonder Woman - Zenny - Master"]
+        self.dance = loaded["August 2026 - DANCE - 118 bpm"]
+        self.colorful = loaded["September 2026 - Colorful - 138 bpm"]
+
+    def test_idempotent_schema_creates_lanes_tables_and_unique_deck_index(self):
+        with sqlite3.connect(self.db) as conn:
+            songs.ensure_song_schema(conn)
+            songs.ensure_song_schema(conn)
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(song_lanes)").fetchall()]
+            settings_cols = [r[1] for r in conn.execute("PRAGMA table_info(lane_settings)").fetchall()]
+            indexes = [r[1] for r in conn.execute("PRAGMA index_list(song_lanes)").fetchall()]
+        self.assertEqual(cols, ["song_key", "lane", "position", "is_deck", "updated_at"])
+        self.assertEqual(settings_cols, ["key", "value"])
+        self.assertTrue(any("deck" in idx for idx in indexes))
+
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO song_lanes(song_key, lane, position, is_deck, updated_at) VALUES(?, ?, 0, 1, ?)",
+                (self.prince, "produce", NOW),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO song_lanes(song_key, lane, position, is_deck, updated_at) VALUES(?, ?, 0, 1, ?)",
+                    (self.dance, "produce", NOW),
+                )
+
+    def test_default_model_available_limit_and_song_shape(self):
+        songs.set_next_task(self.db, self.neighbors, "tame vocals", now=NOW)
+        songs.set_due_date(self.db, self.neighbors, "2026-11-20", now=NOW)
+        for i in range(45):
+            self.add(f"Extra Song {i:02d}", 10 + i, 1)
+
+        model = songs.lanes_model(self.db, now=NOW)
+        self.assertEqual(model["now_lane"], "produce")
+        self.assertEqual([(l["key"], l["label"]) for l in model["lanes"]],
+                         [("produce", "Produce"), ("mix", "Mix"), ("master", "Master")])
+        self.assertTrue(all(l["deck"] is None and l["queue"] == [] for l in model["lanes"]))
+        self.assertEqual(len(model["available"]), 40)
+        self.assertEqual(
+            model["available"][0],
+            {"key": self.prince, "title": "April 2026 - Prince - 130 bpm Emaj", "stage": "Production"},
+        )
+
+        songs.assign_lane(self.db, self.neighbors, "mix", now=NOW)
+        songs.set_lane_deck(self.db, self.neighbors, now=NOW)
+        model = songs.lanes_model(self.db, now=NOW)
+        mix_lane = next(l for l in model["lanes"] if l["key"] == "mix")
+        self.assertEqual(
+            mix_lane["deck"],
+            {
+                "key": self.neighbors,
+                "title": "Neighbors - Zenny - Mixing",
+                "stage": "Mixing",
+                "next_task": "tame vocals",
+                "due_value": "2026-11-20",
+                "seconds": 7200.0,
+            },
+        )
+        self.assertNotIn(self.neighbors, [a["key"] for a in model["available"]])
+
+    def test_assign_reassign_and_remove(self):
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        songs.assign_lane(self.db, self.dance, "produce", now=NOW + 2)
+        songs.set_lane_deck(self.db, self.prince, now=NOW + 3)
+
+        # Reassigning a deck song to another lane drops deck status and appends to target queue.
+        songs.assign_lane(self.db, self.colorful, "mix", now=NOW + 4)
+        songs.assign_lane(self.db, self.prince, "mix", now=NOW + 5)
+
+        model = songs.lanes_model(self.db, now=NOW + 6)
+        by_lane = {l["key"]: l for l in model["lanes"]}
+        self.assertIsNone(by_lane["produce"]["deck"])
+        self.assertEqual([s["key"] for s in by_lane["produce"]["queue"]], [self.dance])
+        self.assertIsNone(by_lane["mix"]["deck"])
+        self.assertEqual([s["key"] for s in by_lane["mix"]["queue"]], [self.colorful, self.prince])
+
+        # Reassigning to same lane moves to end of queue; removing with None or "" restores to available.
+        songs.assign_lane(self.db, self.colorful, "mix", now=NOW + 7)
+        by_lane = {l["key"]: l for l in songs.lanes_model(self.db, now=NOW + 8)["lanes"]}
+        self.assertEqual([s["key"] for s in by_lane["mix"]["queue"]], [self.prince, self.colorful])
+
+        songs.assign_lane(self.db, self.prince, None, now=NOW + 9)
+        songs.assign_lane(self.db, self.colorful, "", now=NOW + 10)
+        model = songs.lanes_model(self.db, now=NOW + 11)
+        by_lane = {l["key"]: l for l in model["lanes"]}
+        self.assertEqual(by_lane["mix"]["queue"], [])
+        avail_keys = [a["key"] for a in model["available"]]
+        self.assertIn(self.prince, avail_keys)
+        self.assertIn(self.colorful, avail_keys)
+
+    def test_deck_promotion_and_one_deck_per_lane(self):
+        with self.assertRaises(ValueError):
+            songs.set_lane_deck(self.db, self.prince, now=NOW)
+
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        songs.assign_lane(self.db, self.dance, "produce", now=NOW + 2)
+        songs.assign_lane(self.db, self.colorful, "produce", now=NOW + 3)
+        songs.assign_lane(self.db, self.neighbors, "mix", now=NOW + 4)
+        songs.assign_lane(self.db, self.wonder, "master", now=NOW + 5)
+
+        songs.set_lane_deck(self.db, self.prince, now=NOW + 6)
+        # Promoting colorful pushes previous deck (prince) to front of queue, ahead of dance.
+        songs.set_lane_deck(self.db, self.colorful, now=NOW + 7)
+        songs.set_lane_deck(self.db, self.neighbors, now=NOW + 8)
+        songs.set_lane_deck(self.db, self.wonder, now=NOW + 9)
+
+        model = songs.lanes_model(self.db, now=NOW + 10)
+        by_lane = {l["key"]: l for l in model["lanes"]}
+        self.assertEqual(by_lane["produce"]["deck"]["key"], self.colorful)
+        self.assertEqual([s["key"] for s in by_lane["produce"]["queue"]], [self.prince, self.dance])
+        self.assertEqual(by_lane["mix"]["deck"]["key"], self.neighbors)
+        self.assertEqual(by_lane["master"]["deck"]["key"], self.wonder)
+
+    def test_focus_and_legacy_on_deck_sync(self):
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        songs.assign_lane(self.db, self.neighbors, "mix", now=NOW + 2)
+        songs.assign_lane(self.db, self.wonder, "master", now=NOW + 3)
+
+        # now_lane defaults to "produce"; promoting prince syncs legacy On Deck.
+        songs.set_lane_deck(self.db, self.prince, now=NOW + 4)
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 4))["key"], self.prince)
+
+        # Promoting mix deck while now_lane is "produce" leaves legacy On Deck on prince.
+        songs.set_lane_deck(self.db, self.neighbors, now=NOW + 5)
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 5))["key"], self.prince)
+
+        # Focusing "mix" syncs legacy On Deck to neighbors.
+        songs.set_now_lane(self.db, "mix", now=NOW + 6)
+        self.assertEqual(songs.lanes_model(self.db, now=NOW + 6)["now_lane"], "mix")
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 6))["key"], self.neighbors)
+
+        # Focusing "master" when master has no deck leaves legacy On Deck untouched (still neighbors).
+        songs.set_now_lane(self.db, "master", now=NOW + 7)
+        self.assertEqual(songs.lanes_model(self.db, now=NOW + 7)["now_lane"], "master")
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 7))["key"], self.neighbors)
+
+        # Focusing "produce", then removing produce's deck leaves legacy On Deck untouched (neighbors).
+        songs.set_now_lane(self.db, "produce", now=NOW + 8)
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 8))["key"], self.prince)
+        songs.assign_lane(self.db, self.prince, None, now=NOW + 9)
+        self.assertEqual(songs.current_deck(songs.load_songs(self.db, now=NOW + 9))["key"], self.prince)
+
+    def test_move_in_lane_reorders_queue_and_validates(self):
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        songs.assign_lane(self.db, self.dance, "produce", now=NOW + 2)
+        songs.assign_lane(self.db, self.colorful, "produce", now=NOW + 3)
+
+        songs.move_in_lane(self.db, self.prince, 1, now=NOW + 4)
+        q = [s["key"] for s in songs.lanes_model(self.db, now=NOW + 4)["lanes"][0]["queue"]]
+        self.assertEqual(q, [self.dance, self.prince, self.colorful])
+
+        songs.move_in_lane(self.db, self.colorful, -1, now=NOW + 5)
+        q = [s["key"] for s in songs.lanes_model(self.db, now=NOW + 5)["lanes"][0]["queue"]]
+        self.assertEqual(q, [self.dance, self.colorful, self.prince])
+
+        # Boundary moves are safe no-ops.
+        songs.move_in_lane(self.db, self.dance, -1, now=NOW + 6)
+        songs.move_in_lane(self.db, self.prince, 1, now=NOW + 7)
+        q = [s["key"] for s in songs.lanes_model(self.db, now=NOW + 7)["lanes"][0]["queue"]]
+        self.assertEqual(q, [self.dance, self.colorful, self.prince])
+
+        with self.assertRaises(ValueError):
+            songs.move_in_lane(self.db, self.dance, 0, now=NOW + 8)
+        with self.assertRaises(ValueError):
+            songs.move_in_lane(self.db, self.neighbors, 1, now=NOW + 8)
+        songs.set_lane_deck(self.db, self.dance, now=NOW + 9)
+        with self.assertRaises(ValueError):
+            songs.move_in_lane(self.db, self.dance, 1, now=NOW + 10)
+
+    def test_migration_from_legacy_on_deck_runs_once(self):
+        # Mixing stage -> mix lane
+        songs.put_on_deck(self.db, self.neighbors, now=NOW)
+        model = songs.lanes_model(self.db, now=NOW + 1)
+        self.assertEqual(model["now_lane"], "mix")
+        by_lane = {l["key"]: l for l in model["lanes"]}
+        self.assertEqual(by_lane["mix"]["deck"]["key"], self.neighbors)
+
+        # Removing migrated song and calling lanes_model again does not re-migrate.
+        songs.assign_lane(self.db, self.neighbors, None, now=NOW + 2)
+        model2 = songs.lanes_model(self.db, now=NOW + 3)
+        self.assertIsNone(model2["lanes"][1]["deck"])
+
+    def test_migration_master_and_produce_stages(self):
+        songs.put_on_deck(self.db, self.wonder, now=NOW)
+        model = songs.lanes_model(self.db, now=NOW + 1)
+        self.assertEqual(model["now_lane"], "master")
+        self.assertEqual(model["lanes"][2]["deck"]["key"], self.wonder)
+
+    def test_migration_skipped_if_song_lanes_already_populated(self):
+        songs.put_on_deck(self.db, self.neighbors, now=NOW)
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        model = songs.lanes_model(self.db, now=NOW + 2)
+        self.assertEqual(model["now_lane"], "produce")
+        by_lane = {l["key"]: l for l in model["lanes"]}
+        self.assertIsNone(by_lane["mix"]["deck"])
+        self.assertEqual([s["key"] for s in by_lane["produce"]["queue"]], [self.prince])
+
+    def test_released_or_missing_songs_skipped_and_unknown_lane_errors(self):
+        songs.assign_lane(self.db, self.prince, "produce", now=NOW + 1)
+        songs.set_lane_deck(self.db, self.prince, now=NOW + 2)
+        songs.assign_lane(self.db, self.dance, "produce", now=NOW + 3)
+        songs.set_stage(self.db, self.prince, "released", now=NOW + 4)
+
+        model = songs.lanes_model(self.db, now=NOW + 5)
+        produce = model["lanes"][0]
+        self.assertIsNone(produce["deck"])
+        self.assertEqual([s["key"] for s in produce["queue"]], [self.dance])
+        self.assertNotIn(self.prince, [a["key"] for a in model["available"]])
+
+        with self.assertRaises(ValueError):
+            songs.assign_lane(self.db, self.dance, "invalid", now=NOW + 6)
+        with self.assertRaises(ValueError):
+            songs.set_now_lane(self.db, "invalid", now=NOW + 6)
+
+
 if __name__ == "__main__":
     unittest.main()

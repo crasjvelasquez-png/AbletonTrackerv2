@@ -1,12 +1,17 @@
 import json
 import os
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from contextlib import closing
 from datetime import date, datetime, timedelta
+from http.server import HTTPServer
 from unittest.mock import patch
 
 import dashboard
+import songs
 import tracker
 
 
@@ -1329,6 +1334,145 @@ class FocusTimelineTests(unittest.TestCase):
         self.assertEqual(len(dashboard.get_pauses()), 2)
         self.assertEqual(len(dashboard.get_pauses(kind="within")), 1)
         self.assertEqual(len(dashboard.get_pauses(kind="between")), 1)
+
+
+class DashboardLanesTests(unittest.TestCase):
+    def setUp(self):
+        fd, path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.db_path = tracker.Path(path)
+        self.addCleanup(self._cleanup_db)
+
+        tracker.DB_PATH = self.db_path
+        dashboard.DB_PATH = self.db_path
+        tracker.setup_db()
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            dashboard.run_schema_migrations(conn)
+
+        self.now = 1_700_000_000.0
+        self._insert_session("Song Alpha", self.now - 3600, self.now - 1800, 1800.0)
+        self._insert_session("Song Beta - Mixing", self.now - 1800, self.now - 900, 900.0)
+        self._insert_session("Song Gamma - Master", self.now - 900, self.now - 300, 600.0)
+        self._insert_session("Song Delta", self.now - 300, self.now - 60, 240.0)
+        loaded = {s["title"]: s["key"] for s in songs.load_songs(self.db_path, now=self.now)}
+        self.alpha = loaded["Song Alpha"]
+        self.beta = loaded["Song Beta - Mixing"]
+        self.gamma = loaded["Song Gamma - Master"]
+        self.delta = loaded["Song Delta"]
+
+    def _cleanup_db(self):
+        for suffix in ("", "-shm", "-wal"):
+            try:
+                (tracker.Path(str(self.db_path) + suffix)).unlink()
+            except FileNotFoundError:
+                pass
+
+    def _insert_session(self, name, start, end, active):
+        with closing(tracker.sqlite3.connect(tracker.DB_PATH)) as conn:
+            conn.execute(
+                """
+                INSERT INTO sessions (project_name, start_time, last_seen_time, end_time, active_seconds)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, start, end, end, active),
+            )
+            conn.commit()
+
+    def _start_server(self):
+        server = HTTPServer(("127.0.0.1", 0), dashboard.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        return f"http://127.0.0.1:{server.server_port}"
+
+    def _request_json(self, url, method="GET", payload=None):
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"} if payload is not None else {}
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read().decode("utf-8"))
+
+    def test_get_lanes_and_lanes_action_flow(self):
+        initial = dashboard.get_lanes(now=self.now)
+        self.assertEqual(initial["now_lane"], "produce")
+        self.assertEqual([l["key"] for l in initial["lanes"]], ["produce", "mix", "master"])
+        self.assertEqual(len(initial["available"]), 4)
+
+        res = dashboard.lanes_action({"action": "assign", "key": self.alpha, "lane": "produce"}, now=self.now)
+        res = dashboard.lanes_action({"action": "assign", "key": self.delta, "lane": "produce"}, now=self.now)
+        res = dashboard.lanes_action({"action": "assign", "key": self.beta, "lane": "mix"}, now=self.now)
+        res = dashboard.lanes_action({"action": "deck", "key": self.alpha}, now=self.now)
+        self.assertEqual(dashboard.get_on_deck(now=self.now)["key"], self.alpha)
+
+        res = dashboard.lanes_action({"action": "deck", "key": self.beta}, now=self.now)
+        # now_lane is produce, so legacy On Deck stays on alpha
+        self.assertEqual(dashboard.get_on_deck(now=self.now)["key"], self.alpha)
+
+        res = dashboard.lanes_action({"action": "focus", "lane": "mix"}, now=self.now)
+        self.assertEqual(res["now_lane"], "mix")
+        self.assertEqual(dashboard.get_on_deck(now=self.now)["key"], self.beta)
+
+        res = dashboard.lanes_action({"action": "assign", "key": self.gamma, "lane": "produce"}, now=self.now)
+        res = dashboard.lanes_action({"action": "move", "key": self.gamma, "delta": -1}, now=self.now)
+        produce_queue = [s["key"] for s in res["lanes"][0]["queue"]]
+        self.assertEqual(produce_queue, [self.gamma, self.delta])
+
+        with self.assertRaises(ValueError):
+            dashboard.lanes_action({"action": "bogus"}, now=self.now)
+        with self.assertRaises(ValueError):
+            dashboard.lanes_action({"action": "focus", "lane": "unknown"}, now=self.now)
+
+    def test_http_get_and_post_lanes_endpoints(self):
+        base = self._start_server()
+        status, body = self._request_json(f"{base}/api/lanes")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["now_lane"], "produce")
+        self.assertEqual(len(body["available"]), 4)
+
+        status, body = self._request_json(
+            f"{base}/api/lanes",
+            method="POST",
+            payload={"action": "assign", "key": self.beta, "lane": "mix"},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual([s["key"] for s in body["lanes"]["lanes"][1]["queue"]], [self.beta])
+
+        status, body = self._request_json(
+            f"{base}/api/lanes",
+            method="POST",
+            payload={"action": "deck", "key": self.beta},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["lanes"]["lanes"][1]["deck"]["key"], self.beta)
+
+        status, body = self._request_json(
+            f"{base}/api/lanes",
+            method="POST",
+            payload={"action": "focus", "lane": "mix"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["lanes"]["now_lane"], "mix")
+
+        status, deck_body = self._request_json(f"{base}/api/on-deck")
+        self.assertEqual(status, 200)
+        self.assertEqual(deck_body["key"], self.beta)
+
+        # Error cases return 400 with {"error": msg}
+        for bad_payload in (
+            {"action": "nope"},
+            {"action": "assign", "key": self.alpha, "lane": "badlane"},
+            {"action": "deck", "key": self.alpha},
+            {"action": "focus", "lane": "badlane"},
+            {"action": "move", "key": self.alpha, "delta": 2},
+        ):
+            status, err_body = self._request_json(f"{base}/api/lanes", method="POST", payload=bad_payload)
+            self.assertEqual(status, 400)
+            self.assertIn("error", err_body)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ from pathlib import Path
 STAGES = ("idea", "production", "recording", "mixing", "mastering", "released")
 STAGE_LABELS = {stage: stage.capitalize() for stage in STAGES}
 STAGE_RANK = {stage: index for index, stage in enumerate(STAGES)}
+LANES = (("produce", "Produce"), ("mix", "Mix"), ("master", "Master"))
+LANE_KEYS = {key for key, _ in LANES}
 # Labeled estimates used until the history has evidence for a stage.
 DEFAULT_STAGE_HOURS = {"idea": 4.0, "production": 8.0, "recording": 4.0, "mixing": 4.0, "mastering": 1.0}
 PACE_WINDOW_DAYS = 28
@@ -71,6 +73,18 @@ SCHEMA = (
         updated_at REAL NOT NULL
     )""",
     "CREATE INDEX IF NOT EXISTS idx_song_tasks_key ON song_tasks(song_key, done_at)",
+    """CREATE TABLE IF NOT EXISTS song_lanes (
+        song_key   TEXT PRIMARY KEY,
+        lane       TEXT NOT NULL,
+        position   INTEGER NOT NULL,
+        is_deck    INTEGER NOT NULL DEFAULT 0,
+        updated_at REAL NOT NULL
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_song_lanes_single_deck ON song_lanes(lane) WHERE is_deck = 1",
+    """CREATE TABLE IF NOT EXISTS lane_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )""",
 )
 
 
@@ -549,3 +563,270 @@ def panel_model(songs, today: date) -> dict:
     if deck:
         model.update(deck_display(deck, today), mode="set")
     return model
+
+
+def _lane_song(song: dict) -> dict:
+    due = _effective_due(song)
+    return {
+        "key": song["key"],
+        "title": display_title(song["title"]),
+        "stage": STAGE_LABELS.get(song["stage"], song["stage"]),
+        "next_task": song.get("next_task") or "",
+        "due_value": due.isoformat() if due else "",
+        "seconds": song["seconds"],
+    }
+
+
+def _validate_lane(lane: str) -> str:
+    if not isinstance(lane, str):
+        raise ValueError(f"Unknown lane: {lane}")
+    cleaned = lane.strip()
+    if cleaned not in LANE_KEYS:
+        raise ValueError(f"Unknown lane: {lane}")
+    return cleaned
+
+
+def _reindex_lane_queue(conn: sqlite3.Connection, lane: str) -> None:
+    rows = conn.execute(
+        "SELECT song_key FROM song_lanes WHERE lane = ? AND is_deck = 0 "
+        "ORDER BY position ASC, updated_at ASC, song_key ASC",
+        (lane,),
+    ).fetchall()
+    for idx, (sk,) in enumerate(rows):
+        conn.execute("UPDATE song_lanes SET position = ? WHERE song_key = ?", (idx, sk))
+
+
+def lanes_model(db_path, now: float | None = None) -> dict:
+    now = time.time() if now is None else now
+    all_songs = load_songs(db_path, now=now)
+    path = Path(db_path)
+    settings: dict[str, str] = {}
+    lane_rows: list[tuple] = []
+
+    if path.exists():
+        ro = None
+        try:
+            ro = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=3)
+            with ro:
+                settings = dict(_optional_rows(ro, "SELECT key, value FROM lane_settings"))
+                lane_rows = _optional_rows(
+                    ro,
+                    "SELECT song_key, lane, position, is_deck FROM song_lanes "
+                    "ORDER BY position ASC, updated_at ASC, song_key ASC",
+                )
+        except sqlite3.OperationalError:
+            settings = {}
+            lane_rows = []
+        finally:
+            if ro is not None:
+                ro.close()
+
+        if "migrated" not in settings:
+            with _connect(db_path) as conn:
+                if not conn.execute("SELECT 1 FROM lane_settings WHERE key = 'migrated'").fetchone():
+                    count = conn.execute("SELECT COUNT(*) FROM song_lanes").fetchone()[0]
+                    if count == 0:
+                        legacy_deck = current_deck(all_songs)
+                        if legacy_deck and not legacy_deck["settled"]:
+                            stage = legacy_deck["stage"]
+                            target_lane = (
+                                "mix" if stage == "mixing"
+                                else "master" if stage == "mastering"
+                                else "produce"
+                            )
+                            conn.execute(
+                                "INSERT INTO song_lanes(song_key, lane, position, is_deck, updated_at) "
+                                "VALUES(?, ?, 0, 1, ?)",
+                                (legacy_deck["key"], target_lane, now),
+                            )
+                            conn.execute(
+                                "INSERT INTO lane_settings(key, value) VALUES('now_lane', ?) "
+                                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                                (target_lane,),
+                            )
+                    conn.execute(
+                        "INSERT INTO lane_settings(key, value) VALUES('migrated', '1') "
+                        "ON CONFLICT(key) DO UPDATE SET value = '1'"
+                    )
+                settings = dict(conn.execute("SELECT key, value FROM lane_settings").fetchall())
+                lane_rows = conn.execute(
+                    "SELECT song_key, lane, position, is_deck FROM song_lanes "
+                    "ORDER BY position ASC, updated_at ASC, song_key ASC"
+                ).fetchall()
+
+    now_lane = settings.get("now_lane", "produce")
+    if now_lane not in LANE_KEYS:
+        now_lane = "produce"
+
+    active_by_key = {s["key"]: s for s in all_songs if not s["settled"]}
+    decks = {k: None for k, _ in LANES}
+    queues = {k: [] for k, _ in LANES}
+    in_any_lane = set()
+
+    for song_key, lane, _pos, is_deck in lane_rows:
+        in_any_lane.add(song_key)
+        song = active_by_key.get(song_key)
+        if song is None or lane not in LANE_KEYS:
+            continue
+        item = _lane_song(song)
+        if is_deck:
+            decks[lane] = item
+        else:
+            queues[lane].append(item)
+
+    available = [
+        {
+            "key": s["key"],
+            "title": display_title(s["title"]),
+            "stage": STAGE_LABELS.get(s["stage"], s["stage"]),
+        }
+        for s in all_songs
+        if not s["settled"] and s["key"] not in in_any_lane
+    ][:40]
+
+    return {
+        "now_lane": now_lane,
+        "lanes": [
+            {"key": key, "label": label, "deck": decks[key], "queue": queues[key]}
+            for key, label in LANES
+        ],
+        "available": available,
+    }
+
+
+def assign_lane(db_path, key: str, lane: str | None, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    key = str(key or "")
+    if not key:
+        raise ValueError("Song key is required")
+
+    if lane is None or (isinstance(lane, str) and lane.strip() == ""):
+        with _connect(db_path) as conn:
+            prev = conn.execute("SELECT lane FROM song_lanes WHERE song_key = ?", (key,)).fetchone()
+            if prev:
+                conn.execute("DELETE FROM song_lanes WHERE song_key = ?", (key,))
+                _reindex_lane_queue(conn, prev[0])
+                _event(conn, key, "lane_remove", prev[0], now)
+        return
+
+    target_lane = _validate_lane(lane)
+    _find(load_songs(db_path, now=now), key)
+    with _connect(db_path) as conn:
+        prev = conn.execute("SELECT lane FROM song_lanes WHERE song_key = ?", (key,)).fetchone()
+        max_pos = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) FROM song_lanes "
+            "WHERE lane = ? AND is_deck = 0 AND song_key != ?",
+            (target_lane, key),
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT INTO song_lanes(song_key, lane, position, is_deck, updated_at)
+               VALUES(?, ?, ?, 0, ?)
+               ON CONFLICT(song_key) DO UPDATE SET
+                   lane       = excluded.lane,
+                   position   = excluded.position,
+                   is_deck    = 0,
+                   updated_at = excluded.updated_at""",
+            (key, target_lane, max_pos + 1, now),
+        )
+        if prev and prev[0] != target_lane:
+            _reindex_lane_queue(conn, prev[0])
+        _reindex_lane_queue(conn, target_lane)
+        _event(conn, key, "lane_assign", target_lane, now)
+
+
+def set_lane_deck(db_path, key: str, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    key = str(key or "")
+    if not key:
+        raise ValueError("Song key is required")
+    all_songs = load_songs(db_path, now=now)
+    song = _find(all_songs, key)
+
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT lane, is_deck FROM song_lanes WHERE song_key = ?", (key,)).fetchone()
+        if row is None:
+            raise ValueError("Song must be in a lane first")
+        lane, was_deck = row[0], bool(row[1])
+        if not was_deck:
+            prev_deck = conn.execute(
+                "SELECT song_key FROM song_lanes WHERE lane = ? AND is_deck = 1",
+                (lane,),
+            ).fetchone()
+            if prev_deck:
+                conn.execute(
+                    "UPDATE song_lanes SET is_deck = 0, position = -1, updated_at = ? WHERE song_key = ?",
+                    (now, prev_deck[0]),
+                )
+            conn.execute(
+                "UPDATE song_lanes SET is_deck = 1, position = 0, updated_at = ? WHERE song_key = ?",
+                (now, key),
+            )
+            _reindex_lane_queue(conn, lane)
+            _event(conn, key, "lane_deck", lane, now)
+        nl_row = conn.execute("SELECT value FROM lane_settings WHERE key = 'now_lane'").fetchone()
+        now_lane = nl_row[0] if nl_row and nl_row[0] in LANE_KEYS else "produce"
+
+    if lane == now_lane and not song["settled"]:
+        put_on_deck(db_path, key, now=now)
+
+
+def set_now_lane(db_path, lane: str, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    target_lane = _validate_lane(lane)
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO lane_settings(key, value) VALUES('now_lane', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (target_lane,),
+        )
+        deck_row = conn.execute(
+            "SELECT song_key FROM song_lanes WHERE lane = ? AND is_deck = 1",
+            (target_lane,),
+        ).fetchone()
+        deck_key = deck_row[0] if deck_row else None
+
+    if deck_key:
+        all_songs = load_songs(db_path, now=now)
+        deck_song = next((s for s in all_songs if s["key"] == deck_key and not s["settled"]), None)
+        if deck_song is not None:
+            put_on_deck(db_path, deck_key, now=now)
+
+
+def move_in_lane(db_path, key: str, delta: int, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    key = str(key or "")
+    if not key:
+        raise ValueError("Song key is required")
+    if isinstance(delta, bool) or delta not in (-1, 1):
+        raise ValueError("delta must be -1 or 1")
+
+    unsettled_keys = {s["key"] for s in load_songs(db_path, now=now) if not s["settled"]}
+    with _connect(db_path) as conn:
+        row = conn.execute("SELECT lane, is_deck FROM song_lanes WHERE song_key = ?", (key,)).fetchone()
+        if row is None:
+            raise ValueError("Song is not in any lane")
+        lane, is_deck = row[0], bool(row[1])
+        if is_deck:
+            raise ValueError("Deck song cannot be reordered in the queue")
+        rows = conn.execute(
+            "SELECT song_key FROM song_lanes WHERE lane = ? AND is_deck = 0 "
+            "ORDER BY position ASC, updated_at ASC, song_key ASC",
+            (lane,),
+        ).fetchall()
+        all_keys = [r[0] for r in rows]
+        if key in unsettled_keys:
+            visible = [k for k in all_keys if k in unsettled_keys]
+            hidden = [k for k in all_keys if k not in unsettled_keys]
+        else:
+            visible = all_keys
+            hidden = []
+        idx = visible.index(key)
+        new_idx = idx + delta
+        if 0 <= new_idx < len(visible):
+            visible[idx], visible[new_idx] = visible[new_idx], visible[idx]
+            for pos, sk in enumerate([*visible, *hidden]):
+                conn.execute(
+                    "UPDATE song_lanes SET position = ?, updated_at = ? WHERE song_key = ?",
+                    (pos, now, sk),
+                )
+
