@@ -221,6 +221,46 @@ def configure_macos_app_icon() -> bool:
     return True
 
 
+def install_native_sidebar(window) -> None:
+    """Swap the window content for a native sidebar + web detail split view."""
+    if sys.platform != "darwin" or getattr(window, "_native_sidebar", None):
+        return
+    try:
+        from PyObjCTools import AppHelper
+        import webview.platforms.cocoa as cocoa
+        from native_sidebar import NativeSidebar
+
+        def _install():
+            try:
+                browser = cocoa.BrowserView.instances.get(window.uid)
+                if browser is None or getattr(window, "_native_sidebar", None):
+                    return
+
+                def _select(view_id):
+                    window.evaluate_js(f"setActiveView({view_id!r})")
+
+                sidebar = NativeSidebar(browser.window, browser.webview, _select)
+                window._native_sidebar = sidebar
+                browser.webview.removeFromSuperview()
+                sidebar.install()
+                browser.window.makeFirstResponder_(browser.webview)
+                def native_nav_sync(view_id):
+                    AppHelper.callAfter(lambda: sidebar.select(view_id))
+
+                window.expose(native_nav_sync)
+                window.evaluate_js(
+                    "document.documentElement.classList.add('native-sidebar');"
+                    "window.__nativeNavSync=v=>window.pywebview?.api?.native_nav_sync?.(v);"
+                    "window.__nativeNavSync(activeView);"
+                )
+            except Exception as exc:
+                log(f"Native sidebar unavailable; using in-page navigation: {exc}")
+
+        AppHelper.callAfter(_install)
+    except Exception as exc:
+        log(f"Native sidebar not installed: {exc}")
+
+
 def activate_current_app() -> None:
     """Bring the current Tracker window process to the foreground."""
     if sys.platform != "darwin":
@@ -320,6 +360,7 @@ def run_window() -> None:
             min_size=(900, 650),
         )
         window.events.shown += activate_current_app
+        window.events.loaded += lambda: install_native_sidebar(window)
         webview.start()
 
         if server_proc and server_proc.poll() is None:

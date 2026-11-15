@@ -142,6 +142,8 @@ header{
   padding:4px;border-radius:999px;
   background:var(--control-bg);border:1px solid var(--border);
 }
+html.native-sidebar .header-nav{display:none}
+.planner-empty{padding:48px 0;color:var(--ink-3)}
 .nav-tab{
   border:none;background:transparent;color:var(--ink-3);
   font-size:13px;font-weight:600;padding:9px 14px;border-radius:999px;cursor:pointer;
@@ -2557,6 +2559,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
     <div class="header-nav" role="tablist" aria-label="Pages">
       <button class="nav-tab is-active" id="navDashboard" type="button" role="tab" aria-selected="true" data-view-tab="dashboard">Dashboard</button>
       <button class="nav-tab" id="navSettings" type="button" role="tab" aria-selected="false" data-view-tab="settings">Settings</button>
+      <button class="nav-tab" id="navPlanner" type="button" role="tab" aria-selected="false" data-view-tab="planner">Planner</button>
     </div>
     <button class="btn small command-trigger" id="commandTrigger" type="button" aria-label="Search projects and actions" title="Search projects and actions (⌘K / Ctrl+K)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><kbd>⌘K</kbd></button>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
@@ -2603,6 +2606,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
   </div>
   <div id="app">
     <div id="appSettings" hidden></div>
+    <div id="appPlanner" hidden><div class="empty planner-empty"><p>Planner</p><small>Nothing planned yet</small></div></div>
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
   </div>
   <div class="mark">
@@ -2956,12 +2960,13 @@ let settingsRequest = null;
 let showShortSessions = false;
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
+  window.__nativeNavSync?.(activeView);
   document.querySelectorAll('[data-view-tab]').forEach(button => {
     const selected = button.dataset.viewTab === activeView;
     button.classList.toggle('is-active', selected);
     button.setAttribute('aria-selected', String(selected));
   });
-  document.getElementById('pageTitle').textContent = isSettings ? 'Settings' : 'Dashboard';
+  document.getElementById('pageTitle').textContent = {settings: 'Settings', planner: 'Planner'}[activeView] || 'Dashboard';
   setIntroDates();
   updateMonthNav(latestDashboardData?.summary || null);
 }
@@ -2969,6 +2974,7 @@ async function setActiveView(view = 'dashboard') {
   activeView = view;
   updateHeaderForView();
   document.getElementById('appDashboard').hidden = view !== 'dashboard';
+  document.getElementById('appPlanner').hidden = view !== 'planner';
   const mount = document.getElementById('appSettings');
   mount.hidden = view !== 'settings';
   if (view !== 'settings') return;
@@ -2994,7 +3000,9 @@ document.querySelectorAll('[data-view-tab]').forEach(button => {
   button.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
     event.preventDefault();
-    const next = button.dataset.viewTab === 'dashboard' ? 'settings' : 'dashboard';
+    const order = ['dashboard', 'settings', 'planner'];
+    const step = event.key === 'ArrowRight' ? 1 : -1;
+    const next = order[(order.indexOf(button.dataset.viewTab) + step + order.length) % order.length];
     document.querySelector(`[data-view-tab="${next}"]`).focus();
     setActiveView(next);
   });
@@ -3015,6 +3023,10 @@ async function applyLocationView() {
     document.querySelector('[data-tab-target="projects"]')?.click();
   } else if (location.hash === '#settings') {
     await setActiveView('settings');
+  } else if (location.hash === '#planner') {
+    await setActiveView('planner');
+  } else if (location.hash === '#dashboard') {
+    await setActiveView('dashboard');
   }
 }
 window.addEventListener('hashchange', applyLocationView);
