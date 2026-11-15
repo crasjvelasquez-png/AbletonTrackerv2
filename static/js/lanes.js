@@ -92,7 +92,7 @@ window.Lanes = (() => {
   }
 
   function isBusy() {
-    return state.busy || (!!root?.contains(document.activeElement) && document.activeElement.tagName === 'SELECT');
+    return state.busy || !!picker || (!!root?.contains(document.activeElement) && document.activeElement.tagName === 'SELECT');
   }
 
   async function refresh({ force = false } = {}) {
@@ -249,14 +249,10 @@ window.Lanes = (() => {
         ${queueView(queue, laneLabel)}
       </div>
       <div class="lanes-add-wrap">
-        <select class="text-input lanes-add-select" data-lanes="add" data-lane="${esc(laneKey)}" aria-label="Add song to ${esc(laneLabel)}" ${available.length ? '' : 'disabled'}>
-          <option value="">${available.length ? 'Add song…' : 'No available songs'}</option>
-          ${available.map(song => {
-            const title = String(song?.title ?? '');
-            const st = stageLabel(song?.stage);
-            return `<option value="${esc(song?.key ?? '')}">${esc(title)}${st ? ` (${esc(st)})` : ''}</option>`;
-          }).join('')}
-        </select>
+        <button class="lanes-add-btn" type="button" data-lanes="pick" data-lane="${esc(laneKey)}" data-label="${esc(laneLabel)}" aria-haspopup="listbox" aria-expanded="false" ${available.length ? '' : 'disabled'}>
+          <span class="lanes-add-plus" aria-hidden="true">+</span>
+          <span>${available.length ? 'Add song' : 'No available songs'}</span>
+        </button>
       </div>
     </article>`;
   }
@@ -331,6 +327,8 @@ window.Lanes = (() => {
       await act({ action: 'deck', key: button.dataset.key }, { pending: button });
     } else if (kind === 'move') {
       await act({ action: 'move', key: button.dataset.key, delta: Number(button.dataset.delta) }, { pending: button });
+    } else if (kind === 'pick') {
+      togglePicker(button);
     } else if (kind === 'remove') {
       await act({ action: 'assign', key: button.dataset.key, lane: '' }, { pending: button });
     }
@@ -344,6 +342,100 @@ window.Lanes = (() => {
     select.value = '';
     if (!key || !lane || state.busy) return;
     await act({ action: 'assign', key, lane }, { pending: select });
+  }
+
+  // ── Song picker ──────────────────────────────────────────────────────────────
+
+  let picker = null;
+
+  function closePicker({ returnFocus = false } = {}) {
+    if (!picker) return;
+    const { el, button } = picker;
+    picker = null;
+    el.remove();
+    button.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutside, true);
+    if (returnFocus && button.isConnected) button.focus();
+  }
+
+  function onOutside(event) {
+    if (picker && !picker.el.contains(event.target) && !picker.button.contains(event.target)) closePicker();
+  }
+
+  function togglePicker(button) {
+    if (picker && picker.button === button) { closePicker({ returnFocus: true }); return; }
+    closePicker();
+    const lane = button.dataset.lane;
+    const available = Array.isArray(state.model?.available) ? state.model.available : [];
+    const el = document.createElement('div');
+    el.className = 'lanes-picker';
+    el.innerHTML = `<div class="lanes-picker-search">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" class="lanes-picker-input" placeholder="Search songs" aria-label="Search songs to add to ${esc(button.dataset.label || lane)}" autocomplete="off" spellcheck="false">
+      </div>
+      <ul class="lanes-picker-list" role="listbox"></ul>`;
+    button.after(el);
+    button.setAttribute('aria-expanded', 'true');
+    const input = el.querySelector('input');
+    const list = el.querySelector('ul');
+    let matches = [];
+    let active = 0;
+
+    function render() {
+      const q = input.value.trim().toLowerCase();
+      matches = available.filter(song => {
+        if (!q) return true;
+        return `${song?.title ?? ''} ${stageLabel(song?.stage)}`.toLowerCase().includes(q);
+      });
+      active = Math.min(active, Math.max(matches.length - 1, 0));
+      list.innerHTML = matches.length
+        ? matches.map((song, i) => {
+            const st = stageLabel(song?.stage);
+            return `<li role="option" class="lanes-picker-item${i === active ? ' is-active' : ''}" data-index="${i}" aria-selected="${i === active}">
+              <span class="lanes-picker-title">${esc(song?.title ?? '')}</span>
+              ${st ? `<span class="lanes-stage-pill">${esc(st)}</span>` : ''}
+            </li>`;
+          }).join('')
+        : '<li class="lanes-picker-empty">No songs match.</li>';
+    }
+
+    function highlight(i) {
+      active = i;
+      list.querySelectorAll('.lanes-picker-item').forEach((li, n) => {
+        li.classList.toggle('is-active', n === i);
+        li.setAttribute('aria-selected', String(n === i));
+        if (n === i) li.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    async function choose(i) {
+      const song = matches[i];
+      if (!song || state.busy) return;
+      closePicker();
+      await act({ action: 'assign', key: song.key, lane }, { pending: button });
+    }
+
+    input.addEventListener('input', () => { active = 0; render(); });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); if (matches.length) highlight((active + 1) % matches.length); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); if (matches.length) highlight((active - 1 + matches.length) % matches.length); }
+      else if (event.key === 'Enter') { event.preventDefault(); choose(active); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePicker({ returnFocus: true }); }
+      else if (event.key === 'Tab') { closePicker(); }
+    });
+    list.addEventListener('mousedown', event => event.preventDefault());
+    list.addEventListener('mousemove', event => {
+      const li = event.target.closest('.lanes-picker-item');
+      if (li && Number(li.dataset.index) !== active) highlight(Number(li.dataset.index));
+    });
+    list.addEventListener('click', event => {
+      const li = event.target.closest('.lanes-picker-item');
+      if (li) choose(Number(li.dataset.index));
+    });
+    document.addEventListener('mousedown', onOutside, true);
+    picker = { el, button };
+    render();
+    input.focus();
   }
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });

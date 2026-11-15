@@ -494,6 +494,7 @@ class AbletonTrackerApp(rumps.App):
                     "deck_next_complete": self.deck_next_complete,
                     "deck_due": self.deck_due,
                     "deck_snooze": self.deck_snooze,
+                    "lane_focus": self.lane_focus,
                 },
             )
             self._refresh(None)
@@ -703,7 +704,27 @@ class AbletonTrackerApp(rumps.App):
     def _build_deck_model(self):
         """Display-only snapshot for the panel; None hides the section on failure."""
         try:
-            return songs.panel_model(songs.load_songs(self._db_path()), date.today())
+            model = songs.lanes_model(self._db_path())
+            now_lane = model.get("now_lane", "produce")
+            lanes = model.get("lanes") or []
+            active = next((lane for lane in lanes if lane.get("key") == now_lane), None)
+            if active is None and lanes:
+                active = lanes[0]
+            now_label = active["label"] if active else now_lane.capitalize()
+            deck_song = active.get("deck") if active else None
+            return {
+                "now_lane": now_lane,
+                "now_lane_label": now_label,
+                "lanes": [
+                    {
+                        "key": lane["key"],
+                        "label": lane["label"],
+                        "deck": lane.get("deck"),
+                    }
+                    for lane in lanes
+                ],
+                "deck": deck_song,
+            }
         except Exception as exc:
             print(f"[deck] unavailable: {exc}", file=sys.stderr)
             return None
@@ -714,6 +735,10 @@ class AbletonTrackerApp(rumps.App):
     def _deck_changed(self):
         self._totals_key = None
         self._refresh(None)
+
+    def lane_focus(self, lane):
+        songs.set_now_lane(self._db_path(), lane)
+        self._deck_changed()
 
     def _open_song(self, song):
         try:

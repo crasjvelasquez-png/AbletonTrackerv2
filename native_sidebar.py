@@ -1,9 +1,8 @@
 """Native macOS floating glass sidebar for the Tracker window.
 
-The sidebar is a rounded glass panel that floats over the detail view. Showing
-or hiding it never resizes the detail view (the web dashboard keeps a fixed
-left inset), so the dashboard layout stays still. Navigation lives only here;
-the detail view never knows about the rows.
+The sidebar is a rounded glass panel that floats over the full-width detail
+view. Showing or hiding it never resizes or shifts the detail view. Navigation
+lives only here; the detail view never knows about the rows.
 """
 from __future__ import annotations
 
@@ -28,8 +27,6 @@ PILL_RADIUS = 11
 CORNER_RADIUS = 18
 ANIM_SECONDS = 0.16
 TOOLBAR_ID = "TrackerMainToolbar"
-# Web dashboard keeps this left inset whether the sidebar is shown or hidden.
-DETAIL_LEFT_INSET = SIDEBAR_WIDTH + MARGIN
 
 
 class _Row:
@@ -197,6 +194,35 @@ class ToolbarDelegate(AK.NSObject):
         return None  # system items only
 
 
+def _rounded_mask(radius):
+    size = radius * 2 + 1
+    def _draw(rect):
+        AK.NSColor.blackColor().setFill()
+        AK.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(rect, radius, radius).fill()
+        return True
+    img = AK.NSImage.imageWithSize_flipped_drawingHandler_(FN.NSMakeSize(size, size), False, _draw)
+    img.setCapInsets_(AK.NSEdgeInsetsMake(radius, radius, radius, radius))
+    img.setResizingMode_(AK.NSImageResizingModeStretch)
+    return img
+
+
+class BorderView(AK.NSView):
+    """Hairline rounded outline drawn on top of the glass; never intercepts clicks."""
+
+    def hitTest_(self, point):
+        return None
+
+    def isOpaque(self):
+        return False
+
+    def drawRect_(self, rect):
+        path = AK.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
+            FN.NSInsetRect(self.bounds(), 0.5, 0.5), CORNER_RADIUS - 0.5, CORNER_RADIUS - 0.5)
+        path.setLineWidth_(1.0)
+        AK.NSColor.colorWithWhite_alpha_(1.0, 0.16).setStroke()
+        path.stroke()
+
+
 def _make_glass(frame):
     """Real Liquid Glass on macOS 26+, frosted vibrancy fallback elsewhere."""
     glass_cls = getattr(AK, "NSGlassEffectView", None)
@@ -209,26 +235,8 @@ def _make_glass(frame):
     glass.setMaterial_(AK.NSVisualEffectMaterialHUDWindow)
     glass.setBlendingMode_(AK.NSVisualEffectBlendingModeWithinWindow)  # blur the dashboard behind
     glass.setState_(AK.NSVisualEffectStateActive)
-    glass.setWantsLayer_(True)
-    layer = glass.layer()
-    layer.setCornerRadius_(CORNER_RADIUS)
-    layer.setMasksToBounds_(True)
-    layer.setBorderWidth_(1.0)
-    layer.setBorderColor_(AK.NSColor.colorWithWhite_alpha_(1.0, 0.14).CGColor())
-    glass.setMaskImage_(_rounded_mask(CORNER_RADIUS))  # clip the blur itself, not just the border
+    glass.setMaskImage_(_rounded_mask(CORNER_RADIUS))  # clips the blur to the rounded shape
     return glass, False
-
-
-def _rounded_mask(radius):
-    size = radius * 2 + 1
-    def _draw(rect):
-        AK.NSColor.blackColor().setFill()
-        AK.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(rect, radius, radius).fill()
-        return True
-    img = AK.NSImage.imageWithSize_flipped_drawingHandler_(FN.NSMakeSize(size, size), False, _draw)
-    img.setCapInsets_(AK.NSEdgeInsetsMake(radius, radius, radius, radius))
-    img.setResizingMode_(AK.NSImageResizingModeStretch)
-    return img
 
 
 class NativeSidebar:
@@ -272,7 +280,10 @@ class NativeSidebar:
             self.scroll.setFrame_(self.glass.bounds())
             self.scroll.setAutoresizingMask_(AK.NSViewWidthSizable | AK.NSViewHeightSizable)
             self.glass.addSubview_(self.scroll)
-        self.glass.setShadow_(self._shadow())
+        border = BorderView.alloc().initWithFrame_(self.glass.bounds())
+        border.setAutoresizingMask_(AK.NSViewWidthSizable | AK.NSViewHeightSizable)
+        self.glass.addSubview_(border)
+        self.border = border
 
         self.container = GlassContainerView.alloc().initWithFrame_(FN.NSMakeRect(0, 0, 900, 600))
         self.container.owner = self
@@ -290,7 +301,7 @@ class NativeSidebar:
         x = MARGIN if shown else -(SIDEBAR_WIDTH + MARGIN * 2)
         return FN.NSMakeRect(x, MARGIN, SIDEBAR_WIDTH, max(h - MARGIN * 2, 0))
 
-    def install(self, initial=DEFAULT_VIEW):
+    def install(self, initial=DEFAULT_VIEW, collapsed=True):
         frame = self.window.frame()
         self.window.setStyleMask_(self.window.styleMask() | AK.NSWindowStyleMaskFullSizeContentView)
         self.window.setTitlebarAppearsTransparent_(True)
@@ -304,7 +315,9 @@ class NativeSidebar:
         self.detail_view.setAutoresizingMask_(AK.NSViewWidthSizable | AK.NSViewHeightSizable)
         self.container.addSubview_(self.detail_view)
 
-        self.glass.setFrame_(self._panel_frame(True))
+        self._collapsed = collapsed
+        self.glass.setFrame_(self._panel_frame(not collapsed))
+        self.glass.setAlphaValue_(0.0 if collapsed else 1.0)
         self.glass.setAutoresizingMask_(AK.NSViewHeightSizable | AK.NSViewMaxXMargin)
         self.container.addSubview_positioned_relativeTo_(self.glass, AK.NSWindowAbove, self.detail_view)
 

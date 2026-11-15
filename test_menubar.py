@@ -597,10 +597,6 @@ class AbletonTrackerAppInitTests(_AppTestBase):
         self.assertEqual({item.title: item.key for item in app.menu if item and item.key}, {})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class DeckActionTests(_AppTestBase):
     """On Deck wiring, written before the menubar code.
 
@@ -716,7 +712,218 @@ class DeckActionTests(_AppTestBase):
     def test_model_failure_hides_deck_instead_of_breaking_refresh(self):
         with patch.object(menubar.songs, "load_songs", side_effect=RuntimeError("boom")):
             self.assertIsNone(self.app._build_deck_model())
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.songs.assign_lane(self.db, key, "mix")
+        self.songs.set_lane_deck(self.db, key)
+        self.songs.set_now_lane(self.db, "mix")
+
         model = self.app._build_deck_model()
-        self.assertEqual(model["mode"], "empty")
-        self.assertEqual([s[1] for s in model["suggestions"]][:2],
-                         ["April 2026 - Prince - 130 bpm Emaj", "August 2026 - DANCE - 118 bpm"])
+        self.assertEqual(model["now_lane"], "mix")
+        self.assertEqual(model["now_lane_label"], "Mix")
+        self.assertEqual([(l["key"], l["label"]) for l in model["lanes"]],
+                         [("produce", "Produce"), ("mix", "Mix"), ("master", "Master")])
+        mix_lane = next(l for l in model["lanes"] if l["key"] == "mix")
+        self.assertEqual(mix_lane["deck"]["key"], key)
+        self.assertEqual(model["deck"]["key"], key)
+
+    def test_lane_focus_calls_set_now_lane_and_refreshes(self):
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.songs.assign_lane(self.db, key, "mix")
+        self.songs.set_lane_deck(self.db, key)
+        self.app._totals_key = ("cached",)
+
+        with patch.object(menubar.songs, "set_now_lane", wraps=menubar.songs.set_now_lane) as spy:
+            self.app.lane_focus("mix")
+
+        spy.assert_called_once_with(self.db, "mix")
+        self.assertIsNone(self.app._totals_key)
+        self.app._refresh.assert_called_once_with(None)
+        self.assertEqual(self.deck()["key"], key)
+
+    def test_install_panel_wires_lane_focus_and_sync_panel_signature(self):
+        self.app._nsapp = MagicMock()
+        self.app.open_project_item._menu = MagicMock()
+        fake_panel = MagicMock()
+        with patch("menubar_panel.MenuBarPanel") as mock_panel_cls:
+            mock_panel_cls.attach.return_value = fake_panel
+            self.app._install_panel()
+        actions = mock_panel_cls.attach.call_args[0][3]
+        self.assertIn("lane_focus", actions)
+        self.assertEqual(actions["lane_focus"], self.app.lane_focus)
+        with patch.object(menubar.songs, "set_now_lane", wraps=menubar.songs.set_now_lane) as spy:
+            actions["lane_focus"]("master")
+        spy.assert_called_once_with(self.db, "master")
+        self.app._refresh.assert_called_with(None)
+
+        self.app._deck_model = {"now_lane": "produce", "now_lane_label": "Produce", "lanes": []}
+        self.app._show_open_ableton = True
+        self.app._sync_panel("tracking")
+        fake_panel.update.assert_called_once_with(
+            status=self.app.status_item.title,
+            today=self.app.today_item.title,
+            week=self.app.week_item.title,
+            run=self.app.streak_item.title,
+            show_open_ableton=True,
+            state="tracking",
+            deck=self.app._deck_model,
+        )
+
+
+class PanelTests(unittest.TestCase):
+    """Minimal Three Decks Now-lane popover panel contract."""
+
+    def setUp(self):
+        import AppKit as AK
+        from menubar_panel import MenuBarPanel
+
+        self.AK = AK
+        AK.NSApplication.sharedApplication()
+        self.status = AK.NSStatusBar.systemStatusBar().statusItemWithLength_(-1)
+        self.fallback_menu = AK.NSMenu.alloc().initWithTitle_("Fallback")
+        self.project_menu = AK.NSMenu.alloc().initWithTitle_("Open Project")
+        self.project_menu.addItem_(AK.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Recent", None, ""))
+        owner_item = AK.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Open Project", None, "")
+        owner_item.setSubmenu_(self.project_menu)
+        self.fallback_menu.addItem_(owner_item)
+        self.status.setMenu_(self.fallback_menu)
+
+        self.calls = []
+        self.actions = {
+            name: (lambda n: (lambda *args: self.calls.append((n, *args))))(name)
+            for name in ("tracker", "ableton", "quit", "deck_open", "deck_next_save", "deck_next_complete", "lane_focus")
+        }
+        self.panel = MenuBarPanel.attach(self.status, self.project_menu, lambda: self.calls.append(("refresh",)), self.actions)
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        self.panel.dispose()
+        self.AK.NSStatusBar.systemStatusBar().removeStatusItem_(self.status)
+
+    def _deck_model(self, now_lane="mix", with_song=True, next_task="Tame vocals"):
+        song = {
+            "key": "song-1",
+            "title": "Midnight Sketch",
+            "stage": "Mixing",
+            "next_task": next_task,
+            "due_value": "",
+            "seconds": 3600.0,
+        } if with_song else None
+        return {
+            "now_lane": now_lane,
+            "now_lane_label": {"produce": "Produce", "mix": "Mix", "master": "Master"}[now_lane],
+            "lanes": [
+                {"key": "produce", "label": "Produce", "deck": None},
+                {"key": "mix", "label": "Mix", "deck": song if now_lane == "mix" else None},
+                {"key": "master", "label": "Master", "deck": song if now_lane == "master" else None},
+            ],
+            "deck": song,
+        }
+
+    def test_update_signature_and_now_lane_deck_layout(self):
+        self.panel.update(
+            status="Working on: Midnight Sketch",
+            today="Today: 1h 20m",
+            week="This week: 6h",
+            run="Streak: 4 days",
+            show_open_ableton=False,
+            state="tracking",
+            deck=self._deck_model(now_lane="mix", with_song=True, next_task="Tame vocals"),
+        )
+        self.assertEqual(self.panel.deck_caption.stringValue(), "Now \u00b7 Mix")
+        self.assertEqual(self.panel.deck_title_button.title(), "Midnight Sketch")
+        self.assertTrue(self.panel.deck_title_button.primary)
+        self.assertFalse(self.panel.deck_check_button.isHidden())
+        self.assertEqual(self.panel.deck_next_button.title(), "Tame vocals")
+        self.assertEqual(self.panel.stats_label.stringValue(), "Today 1h 20m \u00b7 Week 6h")
+        self.assertEqual(self.panel.tracker_button.title(), "Open Tracker")
+        self.assertTrue(self.panel.tracker_button.primary)
+        self.assertEqual(self.panel.more_button.title(), "\u22ef")
+
+        # Removed controls are absent.
+        for removed in (
+            "header", "status_label", "run_caption", "run_label",
+            "today_caption", "week_caption", "today_label", "week_label",
+            "deck_stage_button", "deck_due_button", "deck_change_button",
+            "deck_pick_buttons", "deck_all_button", "project_button",
+            "ableton_button", "quit_button", "scroller",
+        ):
+            self.assertFalse(hasattr(self.panel, removed), f"{removed} should be removed")
+
+        # Panel fits without scrolling.
+        self.assertEqual(
+            self.panel.popover.contentSize().height,
+            self.panel.root.frame().size.height,
+        )
+        self.assertIs(self.panel.view_controller.view(), self.panel.root)
+
+        # Segmented lane buttons have equal width and highlight current lane.
+        widths = [b.frame().size.width for b in self.panel.lane_buttons]
+        self.assertEqual(len(widths), 3)
+        self.assertEqual(len(set(widths)), 1)
+        self.assertEqual([b.title() for b in self.panel.lane_buttons], ["Produce", "Mix", "Master"])
+        self.assertEqual([b.primary for b in self.panel.lane_buttons], [False, True, False])
+
+        # Clicking a lane button calls lane_focus with that lane key.
+        self.panel.lane_buttons[2].performClick_(None)
+        self.assertEqual(self.calls[-1], ("lane_focus", "master"))
+
+        # Clicking deck title calls deck_open; check calls deck_next_complete.
+        self.panel.deck_title_button.performClick_(None)
+        self.assertEqual(self.calls[-1], ("deck_open",))
+        self.panel.deck_check_button.performClick_(None)
+        self.assertIn(("deck_next_complete",), self.calls)
+
+    def test_empty_lane_hint_and_focus_order_and_more_menu(self):
+        self.panel.update(
+            status="Ableton not running",
+            today="Today: 0m",
+            week="This week: 2h",
+            run="Streak: \u2014",
+            show_open_ableton=True,
+            state="idle",
+            deck=self._deck_model(now_lane="produce", with_song=False),
+        )
+        self.assertEqual(self.panel.deck_caption.stringValue(), "Now \u00b7 Produce")
+        self.assertEqual(
+            self.panel.deck_empty_button.title(),
+            "Nothing on deck in Produce. Pick one in Tracker.",
+        )
+        self.assertTrue(self.panel.deck_title_button.isHidden())
+        self.assertTrue(self.panel.deck_check_button.isHidden())
+        self.panel.deck_empty_button.performClick_(None)
+        self.assertEqual(self.calls[-1], ("tracker",))
+
+        # Every focus button has an accessibility label and forms a closed key-view ring.
+        buttons = self.panel._focus_buttons
+        self.assertEqual(
+            buttons,
+            [
+                self.panel.deck_empty_button,
+                *self.panel.lane_buttons,
+                self.panel.tracker_button,
+                self.panel.more_button,
+            ],
+        )
+        for i, btn in enumerate(buttons):
+            self.assertTrue(btn.accessibilityLabel())
+            self.assertIs(btn.nextKeyView(), buttons[(i + 1) % len(buttons)])
+
+        # More menu includes Open Project, Open Ableton when show_open_ableton=True, and Quit.
+        entries_with_ableton = [e[0] for e in self.panel._more_entries() if e is not None]
+        self.assertEqual(entries_with_ableton, ["Open Project", "Open Ableton", "Quit"])
+
+        self.panel.update(
+            status="Working",
+            today="Today: 0m",
+            week="This week: 2h",
+            run="Streak: \u2014",
+            show_open_ableton=False,
+            state="tracking",
+            deck=self._deck_model(now_lane="produce", with_song=False),
+        )
+        entries_without_ableton = [e[0] for e in self.panel._more_entries() if e is not None]
+        self.assertEqual(entries_without_ableton, ["Open Project", "Quit"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -20,7 +20,7 @@ win = AK.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(FN.NSMake
 detail = AK.NSView.alloc().initWithFrame_(FN.NSMakeRect(0, 0, 600, 400))
 detail.setWantsLayer_(True); detail.layer().setBackgroundColor_(AK.NSColor.systemTealColor().CGColor())
 picked = []
-sb = ns.NativeSidebar(win, detail, picked.append); sb.install(); win.makeKeyAndOrderFront_(None); app.activateIgnoringOtherApps_(True)
+sb = ns.NativeSidebar(win, detail, picked.append); sb.install(collapsed=False); win.makeKeyAndOrderFront_(None); app.activateIgnoringOtherApps_(True)
 
 def pump(t=0.4):
     end = time.time() + t
