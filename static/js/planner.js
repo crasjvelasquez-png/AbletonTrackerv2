@@ -208,7 +208,7 @@ window.Planner = (() => {
     const held = p.status === 'on_hold' && !p.hold_expired;
     const chips = [];
     if (held && p.hold_until) chips.push(`<span class="pl-chip">Back ${esc(fmtDate(p.hold_until))}</span>`);
-    else if (p.due_value) chips.push(`<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(fmtDate(p.due_value))}</span>`);
+    else if (p.due_value && !p.settled) chips.push(`<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(fmtDate(p.due_value))}</span>`);
     const total = p.todo_open + p.todo_done;
     if (total) chips.push(`<span class="pl-count" title="To-dos done">${p.todo_done}/${total}</span>`);
     if (p.stale && p.group !== 'archive') chips.push(`<span class="pl-idle" title="Not opened in ${p.days_idle} days">idle ${p.days_idle}d</span>`);
@@ -387,7 +387,7 @@ window.Planner = (() => {
         <form class="pl-todo-edit" data-pl-form="todo-edit" data-todo-id="${t.id}">
           <input class="text-input" name="text" maxlength="200" value="${esc(t.text)}" aria-label="To-do text" data-pl-enter>
           <input class="text-input pl-date" name="due_date" type="date" value="${esc(t.due_date)}" aria-label="Due date">
-          <button type="submit" class="btn is-primary small">Save</button>
+          <button type="submit" class="btn small">Save</button>
           <button type="button" class="btn small subtle" data-pl="todo-cancel">Cancel</button>
         </form>
       </li>`;
@@ -432,7 +432,7 @@ window.Planner = (() => {
         html += `<form class="pl-person-new" data-pl-form="person-new">
           <input class="text-input" id="plNewName" maxlength="120" placeholder="Name" aria-label="New contact name" required data-pl-enter>
           <input class="text-input" id="plNewRole" maxlength="80" placeholder="Role (optional)" aria-label="New contact role" data-pl-enter>
-          <button type="submit" class="btn is-primary small" data-pl="person-create">Create and add</button>
+          <button type="submit" class="btn small" data-pl="person-create">Create and add</button>
         </form>`;
       }
     }
@@ -508,7 +508,7 @@ window.Planner = (() => {
         <form class="pl-quick" data-pl-form="todo-add" autocomplete="off">
           <input class="text-input" id="plTodoText" maxlength="200" placeholder="Add a to-do…" aria-label="New to-do" value="${esc(state.drafts.todoText)}" data-pl-enter>
           <input class="text-input pl-date" id="plTodoDate" type="date" aria-label="Due date (optional)" value="${esc(state.drafts.todoDate)}">
-          <button class="btn is-primary small" type="submit">Add</button>
+          <button class="btn small" type="submit">Add</button>
         </form>
         ${p.todo_done ? `<details class="pl-done" data-pl-done ${state.doneOpen ? 'open' : ''}><summary>Done (${p.todo_done})</summary>
           <ul class="pl-todos">${done.map(t => todoRowHtml(t, true)).join('')}</ul></details>` : ''}

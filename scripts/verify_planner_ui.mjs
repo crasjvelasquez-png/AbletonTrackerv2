@@ -191,6 +191,7 @@ async function main() {
     check('On Deck reminder shows the deck song', (await text('.pl-deck')) ?.includes('Planner Delta'), await text('.pl-deck'));
     check('Overdue bucket is shown with seeded overdue to-do', await ev(`[...document.querySelectorAll('#plannerRoot .pl-bucket h3')].some(h => /overdue/i.test(h.textContent))`));
     check('Archive group exists and is collapsed', await ev(`(() => { const t = ${q('[data-pl-group="archive"]')}; return !!t && t.getAttribute('aria-expanded') === 'false' && !${q(row('planner echo - zed'))}; })()`));
+    check('every list group head computes 12px (Archive toggle matches)', await ev(`(() => { const h = [...document.querySelectorAll('#plannerRoot .pl-group-head')]; return h.length >= 2 && h.every(e => getComputedStyle(e).fontSize === '12px' && getComputedStyle(e).fontWeight === '600'); })()`));
     check('held project sits in On hold group', await ev(`!!${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`));
     check('starred project is in Active group', await ev(`!!${q(`[data-pl-list="active"] ${row('planner alpha - zed')}`)}`));
     await shot('agenda-light');
