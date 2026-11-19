@@ -4,6 +4,7 @@
 import os
 import subprocess
 import sqlite3
+import planner
 import songs
 from songs import ensure_song_schema
 import json
@@ -778,6 +779,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     ensure_activity_schema(conn)
     ensure_indexes(conn)
     ensure_song_schema(conn)
+    planner.ensure_planner_schema(conn)
     purge_legacy_categories(conn)
 
 
@@ -2133,6 +2135,83 @@ def song_planner_action(payload: dict, now: float | None = None) -> dict:
     return get_song_planner_song(key, now=now)
 
 
+def get_planner(key=None, contact=None, now: float | None = None) -> dict:
+    """Planner overview, one project's detail (key) or one contact's detail (contact)."""
+    if key is not None:
+        return planner.get_project(DB_PATH, key, now=now)
+    if contact is not None:
+        return planner.get_contact(DB_PATH, planner._id(contact, "Contact"), now=now)
+    return planner.get_overview(DB_PATH, now=now)
+
+
+PLANNER_ACTIONS = ("hold", "resume", "priority", "notes", "due", "stage", "todo_add", "todo_update", "todo_delete",
+                   "contact_save", "contact_delete", "contact_link", "contact_unlink", "list", "open")
+
+
+def _planner_project(key: str, now) -> dict:
+    return {"view": "project", **planner.get_project(DB_PATH, key, now=now)}
+
+
+def _planner_overview(now) -> dict:
+    return {"view": "overview", **planner.get_overview(DB_PATH, now=now)}
+
+
+def planner_action(payload: dict, now: float | None = None) -> dict:
+    action = payload.get("action")
+    if action not in PLANNER_ACTIONS:
+        raise ValueError("Unknown planner action")
+    key = planner._key(payload.get("key"))
+    if action == "hold":
+        planner.set_hold(DB_PATH, key, payload.get("reason"), payload.get("until"), payload.get("waiting_on"), now=now)
+    elif action == "resume":
+        planner.resume(DB_PATH, key, now=now)
+    elif action == "priority":
+        planner.set_priority(DB_PATH, key, payload.get("value"), now=now)
+    elif action == "notes":
+        planner.set_notes(DB_PATH, key, payload.get("text"), now=now)
+    elif action == "due":
+        planner.set_due(DB_PATH, key, payload.get("date"), now=now)
+    elif action == "stage":
+        planner.set_stage(DB_PATH, key, payload.get("stage"), now=now)
+    elif action == "list":
+        planner.set_list(DB_PATH, key, payload.get("value"), now=now)
+    elif action == "todo_add":
+        planner.add_todo(DB_PATH, key, payload.get("text"), payload.get("due_date"), now=now)
+        return _planner_project(key, now) if key else _planner_overview(now)
+    elif action in ("todo_update", "todo_delete"):
+        task_id = _parse_task_id(payload.get("id"))
+        if action == "todo_delete":
+            songs.delete_song_task(DB_PATH, key, task_id, now=now)
+        else:
+            text, due, done = payload.get("text"), payload.get("due_date"), payload.get("done")
+            if done is not None and not isinstance(done, bool):
+                raise ValueError("done must be a boolean")
+            if (text is not None and not isinstance(text, str)) or (due is not None and not isinstance(due, str)):
+                raise ValueError("text and due_date must be text")
+            songs.update_song_task(DB_PATH, key, task_id, text=text, due_date=due, done=done, now=now)
+        if key and key in planner.known_song_keys(DB_PATH, now=now):
+            return _planner_project(key, now)
+        return _planner_overview(now)
+    elif action == "contact_save":
+        contact_id = planner.save_contact(DB_PATH, payload.get("id"), payload.get("name"), payload.get("role"),
+                                          payload.get("email"), payload.get("phone"), payload.get("notes"), now=now)
+        return {"view": "contact", **planner.get_contact(DB_PATH, contact_id, now=now)}
+    elif action == "contact_delete":
+        planner.delete_contact(DB_PATH, payload.get("id"), now=now)
+        return _planner_overview(now)
+    elif action == "contact_link":
+        planner.link_contact(DB_PATH, payload.get("id"), key, now=now)
+    elif action == "contact_unlink":
+        planner.unlink_contact(DB_PATH, payload.get("id"), key, now=now)
+        if payload.get("from") == "contact" or key not in planner.known_song_keys(DB_PATH, now=now):
+            return {"view": "contact", **planner.get_contact(DB_PATH, planner._id(payload.get("id")), now=now)}
+    elif action == "open":
+        song = planner._require_song(DB_PATH, key, time.time() if now is None else now)
+        open_project(resolve_song_path(DB_PATH, song, resolver=resolve_project_path), find_ableton_app())
+        return {}
+    return _planner_project(key, now)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # silence access logs
@@ -2250,6 +2329,19 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 q = query.get("q", [""])[0]
                 self._json(get_song_planner_list(q))
+        elif parsed.path == "/api/planner":
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            try:
+                if "key" in query:
+                    self._json(get_planner(key=query["key"][0]))
+                elif "contact" in query:
+                    self._json(get_planner(contact=query["contact"][0]))
+                else:
+                    self._json(get_planner())
+            except LookupError as exc:
+                self._json({"error": str(exc)}, status=404)
+            except ValueError as exc:
+                self._json({"error": str(exc)}, status=400)
         elif parsed.path == "/api/app-settings":
             self._json(get_all_app_settings())
         elif parsed.path == "/api/project-templates":
@@ -2535,6 +2627,19 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self._json({"ok": True, **song_planner_action(payload)})
             except (ValueError, LookupError) as exc:
+                self._json({"error": str(exc)}, status=400)
+        elif self.path == "/api/planner":
+            try:
+                payload = self._request_json()
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._json({"error": "invalid json"}, status=400)
+                return
+            if not isinstance(payload, dict):
+                self._json({"error": "request body is required"}, status=400)
+                return
+            try:
+                self._json({"ok": True, **planner_action(payload)})
+            except (ValueError, LookupError, RuntimeError, OSError, subprocess.TimeoutExpired, sqlite3.Error, OverflowError) as exc:
                 self._json({"error": str(exc)}, status=400)
         elif self.path == "/api/app-settings":
             try:

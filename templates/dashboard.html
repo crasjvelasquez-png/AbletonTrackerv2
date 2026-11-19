@@ -137,29 +137,11 @@ header{
 }
 .logo-text h1 em{font-style:normal;color:var(--ink-3);font-weight:500}
 
-.header-nav{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:4px;border-radius:999px;
-  background:var(--control-bg);border:1px solid var(--border);
-}
-html.native-sidebar .header-nav{display:none}
 /* Native window: content sits below the unified toolbar (52px) */
 html.native-sidebar body{padding-top:52px}
 html.native-sidebar header{top:52px}
 html.native-sidebar .settings-sidebar{top:142px}
 .planner-empty{padding:48px 0;color:var(--ink-3)}
-.nav-tab{
-  border:none;background:transparent;color:var(--ink-3);
-  font-size:13px;font-weight:600;padding:9px 14px;border-radius:999px;cursor:pointer;
-  transition:background .18s ease, color .18s ease, transform .15s cubic-bezier(.22,1,.36,1);
-  user-select:none;
-}
-.nav-tab:hover{color:var(--ink);background:var(--surface-hover)}
-.nav-tab:active{transform:scale(.96)}
-.nav-tab.is-active{
-  color:var(--ink);background:var(--control-bg-strong);
-  box-shadow:0 1px 2px rgba(15,23,42,.06);
-}
 
 .header-right{display:flex;align-items:center;gap:14px}
 .theme-toggle{
@@ -1494,10 +1476,8 @@ button:focus-visible{
   .monthly-campaign .campaign-project-name span{white-space:normal;overflow-wrap:anywhere}
   .monthly-campaign .campaign-time{font-size:18px;white-space:nowrap}
   header .header-right{flex-wrap:nowrap;gap:8px}
-  header .header-nav{order:0;width:auto}
   .logo{gap:9px}
   .logo-text h1{font-size:18px}
-  .nav-tab{padding:9px 10px}
   .live-badge{max-width:100px;overflow:hidden}
   #liveProject{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
@@ -2333,7 +2313,6 @@ tbody tr:hover .row-note{opacity:1}
 @media(max-width:640px){
   header{padding:0 20px;height:62px}
   .header-right{gap:10px;flex-wrap:wrap;justify-content:flex-end}
-  .header-nav{order:2;width:100%;justify-content:center}
   .page{padding:28px 20px 60px}
   .section-head{flex-wrap:wrap}
   .target-card{min-height:auto;padding:20px 18px 18px}
@@ -2501,7 +2480,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 .row-note{width:auto;min-width:48px;height:32px;padding:0 6px;opacity:1}
 .short-session-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);margin:12px 0}
 [hidden]{display:none!important}
-@media(max-width:520px){.header{gap:8px}.header-right{gap:8px}.nav-tab{padding:8px}.logo-text{display:none}.quest-head{flex-wrap:wrap}.run-summary{line-height:1.6}}
+@media(max-width:520px){.header{gap:8px}.header-right{gap:8px}.logo-text{display:none}.quest-head{flex-wrap:wrap}.run-summary{line-height:1.6}}
 
 .settings-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:24px;align-items:start}
 .settings-sidebar{display:grid;gap:6px;position:sticky;top:90px}
@@ -2540,8 +2519,9 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 .color-error{color:var(--danger);font-size:12px}
 @media(max-width:700px){.settings-layout{grid-template-columns:1fr;gap:16px}.settings-sidebar{position:static;display:flex;flex-wrap:wrap}.settings-nav-tab{font-size:12px;padding:10px}.text-input{font-size:16px}.settings-content .goal-form-row{flex-wrap:wrap}}
 </style>
-<link rel="stylesheet" href="/static/css/dashboard.css?v=song-popup-1">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=planner-3">
 <link rel="stylesheet" href="/static/css/lanes.css?v=lanes-1">
+<link rel="stylesheet" href="/static/css/planner.css?v=planner-3">
 </head>
 <body>
 <div class="page-bg" aria-hidden="true"></div>
@@ -2561,11 +2541,6 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
     </div>
   </div>
   <div class="header-right">
-    <div class="header-nav" role="tablist" aria-label="Pages">
-      <button class="nav-tab is-active" id="navDashboard" type="button" role="tab" aria-selected="true" data-view-tab="dashboard">Dashboard</button>
-      <button class="nav-tab" id="navSettings" type="button" role="tab" aria-selected="false" data-view-tab="settings">Settings</button>
-      <button class="nav-tab" id="navPlanner" type="button" role="tab" aria-selected="false" data-view-tab="planner">Planner</button>
-    </div>
     <button class="btn small command-trigger" id="commandTrigger" type="button" aria-label="Search projects and actions" title="Search projects and actions (⌘K / Ctrl+K)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><kbd>⌘K</kbd></button>
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
       <svg class="moon" viewBox="0 0 24 24" aria-hidden="true">
@@ -2611,7 +2586,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
   </div>
   <div id="app">
     <div id="appSettings" hidden></div>
-    <div id="appPlanner" hidden><div class="empty planner-empty"><p>Planner</p><small>Nothing planned yet</small></div></div>
+    <div id="appPlanner" hidden><div id="plannerRoot"></div></div>
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
   </div>
   <div class="mark">
@@ -2966,11 +2941,6 @@ let showShortSessions = false;
 function updateHeaderForView() {
   const isSettings = activeView === 'settings';
   window.__nativeNavSync?.(activeView);
-  document.querySelectorAll('[data-view-tab]').forEach(button => {
-    const selected = button.dataset.viewTab === activeView;
-    button.classList.toggle('is-active', selected);
-    button.setAttribute('aria-selected', String(selected));
-  });
   document.getElementById('pageTitle').textContent = {settings: 'Settings', planner: 'Planner'}[activeView] || 'Dashboard';
   setIntroDates();
   updateMonthNav(latestDashboardData?.summary || null);
@@ -2980,6 +2950,7 @@ async function setActiveView(view = 'dashboard') {
   updateHeaderForView();
   document.getElementById('appDashboard').hidden = view !== 'dashboard';
   document.getElementById('appPlanner').hidden = view !== 'planner';
+  if (view === 'planner') window.Planner?.show();
   const mount = document.getElementById('appSettings');
   mount.hidden = view !== 'settings';
   if (view !== 'settings') return;
@@ -3000,18 +2971,6 @@ async function setActiveView(view = 'dashboard') {
     toast(error.message);
   }
 }
-document.querySelectorAll('[data-view-tab]').forEach(button => {
-  button.addEventListener('click', () => setActiveView(button.dataset.viewTab));
-  button.addEventListener('keydown', event => {
-    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-    event.preventDefault();
-    const order = ['dashboard', 'settings', 'planner'];
-    const step = event.key === 'ArrowRight' ? 1 : -1;
-    const next = order[(order.indexOf(button.dataset.viewTab) + step + order.length) % order.length];
-    document.querySelector(`[data-view-tab="${next}"]`).focus();
-    setActiveView(next);
-  });
-});
 
 document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 systemTheme.addEventListener('change', () => {
@@ -5577,9 +5536,10 @@ const dashboardRefreshTimer = setInterval(() => {
   }
 }, 15_000);
 </script>
-<script src="/static/js/dashboard.js?v=on-deck-4"></script>
+<script src="/static/js/dashboard.js?v=planner-3"></script>
 <script src="/static/js/on_deck.js?v=on-deck-5"></script>
 <script src="/static/js/song_planner.js?v=song-popup-1"></script>
 <script src="/static/js/lanes.js?v=lanes-1"></script>
+<script src="/static/js/planner.js?v=planner-3"></script>
 </body>
 </html>

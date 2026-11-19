@@ -43,6 +43,7 @@ window.DashboardExtras = (() => {
     const actions = [
       { name: 'Dashboard', type: 'Page', run: () => setActiveView('dashboard') },
       { name: 'Settings', type: 'Page', run: () => setActiveView('settings') },
+      { name: 'Planner', type: 'Page', run: () => setActiveView('planner') },
       { name: 'Weekly review', type: 'View', run: () => reveal('weeklyReview') },
       { name: 'Year activity', type: 'View', run: () => reveal('yearActivity') },
       { name: 'Recent sessions', type: 'View', run: async () => { await setActiveView('dashboard'); const d = document.querySelector('.history-card details'); if (d) { d.open = true; d.querySelector('summary').focus(); d.scrollIntoView({ block: 'center' }); } } },
