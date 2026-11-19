@@ -208,7 +208,7 @@ window.Planner = (() => {
     const held = p.status === 'on_hold' && !p.hold_expired;
     const chips = [];
     if (held && p.hold_until) chips.push(`<span class="pl-chip">Back ${esc(fmtDate(p.hold_until))}</span>`);
-    else if (p.due_value) chips.push(`<span class="pl-chip${p.overdue ? ' is-overdue' : ''}">${esc(fmtDate(p.due_value))}</span>`);
+    else if (p.due_value) chips.push(`<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(fmtDate(p.due_value))}</span>`);
     const total = p.todo_open + p.todo_done;
     if (total) chips.push(`<span class="pl-count" title="To-dos done">${p.todo_done}/${total}</span>`);
     if (p.stale && p.group !== 'archive') chips.push(`<span class="pl-idle" title="Not opened in ${p.days_idle} days">idle ${p.days_idle}d</span>`);
@@ -488,7 +488,7 @@ window.Planner = (() => {
           <select class="text-input pl-select" id="plStage" aria-label="Stage">${stageOptions}</select></label>
         <button type="button" class="btn small" data-pl="open-live">Open in Live</button>
         ${held ? `<button type="button" class="btn small" data-pl="resume">${p.hold_expired ? 'Clear hold' : 'Resume'}</button>`
-          : state.holdOpen ? '' : '<button type="button" class="btn small" data-pl="hold">Put on hold</button>'}
+          : (state.holdOpen || p.settled) ? '' : '<button type="button" class="btn small" data-pl="hold">Put on hold</button>'}
         ${menu}
       </div>
       ${holdPanelHtml(p, d)}
@@ -496,7 +496,7 @@ window.Planner = (() => {
         <div class="pl-fact"><dt>Due</dt><dd>
           <input class="text-input pl-date" id="plDue" type="date" value="${esc(p.due_source === 'song' ? p.due_value : p.due_source === 'legacy' ? p.due_value : '')}" aria-label="Due date">
           ${p.due_source === 'song' ? '<button type="button" class="pl-icon-btn" data-pl="due-clear" aria-label="Clear due date" title="Clear"><span aria-hidden="true">×</span></button>' : ''}
-          ${p.due_value ? `<span class="pl-chip${p.overdue ? ' is-overdue' : ''}">${esc(p.due)}</span>` : ''}</dd></div>
+          ${p.due_value ? `<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(p.due)}</span>` : ''}</dd></div>
         <div class="pl-fact"><dt>Activity</dt><dd>${esc(worked)}</dd></div>
         <div class="pl-fact"><dt>To-dos</dt><dd>${total ? `${p.todo_done}/${total} done` : 'None yet'}</dd></div>
         ${p.next_task ? `<div class="pl-fact"><dt>On Deck next step</dt><dd>${esc(p.next_task)}</dd></div>` : ''}

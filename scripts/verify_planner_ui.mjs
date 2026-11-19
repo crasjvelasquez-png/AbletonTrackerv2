@@ -3,6 +3,12 @@
  * End-to-end Planner UI check: headless Chrome driven over the DevTools protocol (Node 24, no npm deps).
  *
  * Failure modes this run is written to catch (listed before the planner UI code existed):
+ *  - Choosing Released and pressing Cancel still changes the stage (UI or server); Confirm does not
+ *    release the song or leave it outside Archive; the confirm dialog stays open after either button.
+ *  - Contact Delete skips the confirm, Cancel still deletes, or Confirm leaves the contact in the list,
+ *    on a song's People, or leaves "Waiting on <name>" on a project that was waiting on them.
+ *  - Native window mode (html.native-sidebar, 52px top bar): the left list scrolls away with the page,
+ *    or sits under the top bar / header after scrolling a long project.
  *  - The Planner tab opens on something other than Agenda, never leaves the skeleton, or shows an
  *    empty-state while seeded to-dos exist.
  *  - Quick-adding a general to-do does not appear in the agenda, loses its text on error, or the
@@ -22,7 +28,9 @@
  *  - Any uncaught exception, console.error, or failed same-origin request (zero tolerated).
  *  - Chrome is left running after the test.
  *
- * Usage: node scripts/verify_planner_ui.mjs --url http://127.0.0.1:PORT --output DIR
+ * Usage: node scripts/verify_planner_ui.mjs --url http://127.0.0.1:PORT --output DIR [--allow-real]
+ * --allow-real relaxes count-specific assertions so the run also works on a copy of real data
+ * (server started WITHOUT --synthetic). Seeded songs and contacts must still exist.
  * Needs a server from: python3 scripts/verify_planner_dashboard.py --serve 0 --synthetic --output DIR
  * (fresh server per run; the UI test mutates its database copy).
  * Artifacts: DIR/results.json and PNG screenshots.
@@ -40,6 +48,7 @@ if (!args.url || !args.output) {
   console.error('usage: verify_planner_ui.mjs --url URL --output DIR');
   process.exit(2);
 }
+const ALLOW_REAL = 'allow-real' in args;
 const BASE = args.url.replace(/#.*$/, '').replace(/\/$/, '');
 const OUT = resolve(args.output);
 if (OUT === homedir() || OUT === parse(OUT).root || OUT.includes('.ableton_tracker')) {
@@ -199,8 +208,8 @@ async function main() {
 
   // 3. Search filters, then open project by click.
   await step('search filters the list', async () => {
-    await setValue('#plSearch', 'charlie');
-    await waitFor(`document.querySelectorAll('#plannerRoot [data-pl-project]').length === 1`, 'search narrows to one row');
+    await setValue('#plSearch', ALLOW_REAL ? 'planner charlie' : 'charlie');
+    await waitFor(`document.querySelectorAll('#plannerRoot [data-pl-project]').length ${ALLOW_REAL ? '>= 1' : '=== 1'}`, 'search narrows to the matching rows');
     check('search narrows the project list', true);
     await ev(`${q('#plSearch')}.focus()`);
     await press('Escape');
@@ -337,12 +346,114 @@ async function main() {
     await waitFor(`${q(row('planner echo - zed'))}`, 'archive rows');
     check('Archive group expands on click', true);
     await click(row('planner alpha - zed'));
-    await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length === 2`, 'alpha detail');
+    await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length ${ALLOW_REAL ? '>= 2' : '=== 2'}`, 'alpha detail');
     await shot('project-alpha');
     await click(row('planner echo - zed'));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Echo')`, 'echo detail');
     check('archived project offers Move to Active', await ev(`(async () => { document.querySelector('[data-pl="more"]').click(); await new Promise(r => setTimeout(r, 50)); return /Move to Active/.test(document.querySelector('.pl-menu')?.textContent || ''); })()`));
     await shot('project-archived');
+  });
+
+  // 12c. Released confirm: Cancel leaves the stage alone, Confirm releases and archives.
+  const REL = 'planner foxtrot - zed';   // seeded, active, not On Deck, not in a lane: safe to release
+  const apiStage = key => ev(`fetch('/api/planner?key=' + encodeURIComponent(${JSON.stringify(key)})).then(r => r.json()).then(d => ({ stage: d.project.stage, settled: d.project.settled, group: d.project.group }))`);
+  const modalOpen = () => ev(`document.getElementById('modal').classList.contains('show')`);
+  await step('released confirm', async () => {
+    await click(row(REL));
+    await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Foxtrot')`, 'foxtrot detail');
+    const before = await apiStage(REL);
+    check('release target is not yet released', !before.settled && before.stage !== 'released', JSON.stringify(before));
+    await setValue('#plStage', 'released');
+    await waitFor(`document.getElementById('modal').classList.contains('show')`, 'confirm dialog');
+    check('choosing Released opens the confirm dialog', /released/i.test(await text('#modalTitle')), await text('#modalTitle'));
+    await shot('release-confirm');
+    await click('#modalCancel');
+    await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Cancel');
+    await sleep(250);
+    const ui = await ev(`${q('#plStage')}.value`);
+    const after = await apiStage(REL);
+    check('Cancel keeps the stage in the UI', ui === before.stage, `${ui} vs ${before.stage}`);
+    check('Cancel keeps the stage on the server', after.stage === before.stage && !after.settled, JSON.stringify(after));
+    await setValue('#plStage', 'released');
+    await waitFor(`document.getElementById('modal').classList.contains('show')`, 'confirm dialog again');
+    await click('#modalConfirm');
+    await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Confirm');
+    await waitFor(`[...document.querySelectorAll('[data-pl-pane="project"] .pl-badge-pill')].some(b => b.textContent.trim() === 'Released')`, 'Released badge');
+    check('Confirm shows the project as Released', true);
+    const done = await apiStage(REL);
+    check('Confirm releases the song on the server and moves it to Archive', done.stage === 'released' && done.settled && done.group === 'archive', JSON.stringify(done));
+    await waitFor(`${q(`[data-pl-list="archive"] ${row(REL)}`)}`, 'row in Archive');
+    check('released project row sits in the Archive group', true);
+    check('released row is no longer in Active', await ev(`!${q(`[data-pl-list="active"] ${row(REL)}`)}`));
+    await shot('project-released');
+  });
+
+  // 12d. Contact delete: Cancel keeps, Confirm removes everywhere (list, People, Waiting on).
+  const GONE = 'Ana Ruiz';
+  const contactRows = () => ev(`[...document.querySelectorAll('[data-pl-contact]')].map(c => c.textContent)`);
+  await step('contact delete', async () => {
+    await click(row(HELD_KEY));
+    await waitFor(`${q('.pl-hold-panel')}`, 'bravo hold panel');
+    check('held project shows Waiting on Ana Ruiz before delete', await ev(`document.querySelector('.pl-hold-panel').textContent.includes('Waiting on Ana Ruiz')`));
+    check('bravo row subtitle says Waiting on Ana Ruiz', await ev(`${q(row(HELD_KEY))}.textContent.includes('Waiting on Ana Ruiz')`));
+    check('Ana Ruiz is listed in bravo People', await ev(`[...document.querySelectorAll('[data-pl-pane="project"] .pl-person')].some(p => p.textContent.includes('Ana Ruiz'))`));
+    await click('[data-pl-nav="contacts"]');
+    await waitFor(`${q('[data-pl-pane="contacts"]')} && document.querySelectorAll('[data-pl-contact]').length`, 'contacts list');
+    const before = (await contactRows()).length;
+    await ev(`[...document.querySelectorAll('[data-pl-contact]')].find(c => c.textContent.includes('Ana Ruiz')).click()`);
+    await waitFor(`${q('#plContactName')}?.value === 'Ana Ruiz'`, 'Ana detail');
+    await click('[data-pl="contact-delete"]');
+    await waitFor(`document.getElementById('modal').classList.contains('show')`, 'delete confirm');
+    check('Delete opens the confirm dialog naming the contact', (await text('#modalBody')).includes('Ana Ruiz'), await text('#modalBody'));
+    await click('#modalCancel');
+    await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Cancel');
+    await sleep(250);
+    check('Cancel keeps the contact in the list and form open', (await contactRows()).length === before && (await ev(`${q('#plContactName')}?.value`)) === 'Ana Ruiz');
+    check('Cancel keeps the contact on the server', await ev(`fetch('/api/planner').then(r => r.json()).then(d => d.contacts.some(c => c.name === 'Ana Ruiz'))`));
+    await click('[data-pl="contact-delete"]');
+    await waitFor(`document.getElementById('modal').classList.contains('show')`, 'delete confirm again');
+    await click('#modalConfirm');
+    await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Confirm');
+    await waitFor(`![...document.querySelectorAll('[data-pl-contact]')].some(c => c.textContent.includes('Ana Ruiz'))`, 'Ana gone from the list');
+    check('Confirm removes the contact from the list', (await contactRows()).length === before - 1, (await contactRows()).length);
+    check('Contacts nav count dropped by one', await ev(`Number(document.querySelector('[data-pl-nav="contacts"] .pl-count').textContent) === ${before - 1}`));
+    await shot('contact-deleted');
+    await click(row(HELD_KEY));
+    await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Bravo')`, 'bravo detail');
+    await waitFor(`${q('.pl-hold-panel')}`, 'bravo hold panel');
+    check('Ana Ruiz is gone from bravo People', await ev(`![...document.querySelectorAll('[data-pl-pane="project"] .pl-person')].some(p => p.textContent.includes('Ana Ruiz'))`));
+    check('bravo no longer shows Waiting on Ana Ruiz (panel and row)', await ev(`!document.querySelector('[data-pl-pane="project"]').textContent.includes('Waiting on Ana Ruiz') && !document.querySelector('[data-pl-list="on_hold"]').textContent.includes('Waiting on Ana Ruiz')`));
+    const srv = await ev(`fetch('/api/planner?key=' + encodeURIComponent(${JSON.stringify(HELD_KEY)})).then(r => r.json()).then(d => ({ w: d.project.waiting_on, people: d.people.map(p => p.name), status: d.project.status }))`);
+    check('server cleared waiting_on and People for bravo, hold stays', srv.w === null && !srv.people.includes('Ana Ruiz') && srv.status === 'on_hold', JSON.stringify(srv));
+  });
+
+  // 12e. Native window layout: 52px top bar, long project scrolled, left list stays sticky and visible.
+  await step('native sidebar layout', async () => {
+    const LONG = 'planner alpha - zed';
+    await ev(`(async () => { for (let i = 1; i <= 30; i += 1) await fetch('/api/planner', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'todo_add', key: ${JSON.stringify(LONG)}, text: 'Native layout filler to-do ' + i, due_date: '' }) }); return true; })()`);
+    await ev(`document.documentElement.classList.add('native-sidebar'); true`);
+    await click(row(LONG));
+    await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length >= 30`, 'long alpha detail');
+    check('native-sidebar adds the 52px body offset', (await ev(`parseFloat(getComputedStyle(document.body).paddingTop)`)) === 52);
+    const tall = await ev(`document.documentElement.scrollHeight - window.innerHeight`);
+    check('long project is taller than the window', tall > 600, tall);
+    await ev(`window.scrollTo(0, 700); true`);
+    await sleep(200);
+    const m = await ev(`(() => {
+      const l = document.querySelector('.pl-list').getBoundingClientRect(), h = document.querySelector('header')?.getBoundingClientRect();
+      const s = document.querySelector('#plSearch').getBoundingClientRect();
+      const hit = document.elementFromPoint(s.left + s.width / 2, s.top + s.height / 2);
+      return { scrollY: window.scrollY, listTop: l.top, listBottom: l.bottom, headerBottom: h ? h.bottom : 0, searchHit: !!hit && (hit.id === 'plSearch' || !!hit.closest('.pl-list')),
+               navHit: (() => { const r = [...document.querySelectorAll('.pl-nav button')].map(b => b.getBoundingClientRect()).find(b => b.top >= s.bottom && b.bottom <= l.bottom);
+                        if (!r) return false; const e = document.elementFromPoint(r.left + 20, r.top + r.height / 2); return !!e && !!e.closest('.pl-list'); })() };
+    })()`);
+    await shot('native-scrolled');
+    check('page actually scrolled down', m.scrollY > 300, JSON.stringify(m));
+    check('left list stays on screen (sticky) after scrolling', m.listTop > 0 && m.listTop < 400 && m.listBottom > 200, JSON.stringify(m));
+    check('left list is not hidden under the 52px top offset or header', m.listTop >= 52 && m.listTop >= m.headerBottom - 1, JSON.stringify(m));
+    check('search box and a visible list row are the topmost elements at their position', m.searchHit && m.navHit, JSON.stringify(m));
+    await ev(`window.scrollTo(0, 0); document.documentElement.classList.remove('native-sidebar'); true`);
   });
 
   // 13. Dark mode + reduced motion + overflow.
