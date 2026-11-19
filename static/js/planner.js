@@ -3,6 +3,16 @@
    Three Decks stay on the Dashboard. Vanilla JS, no dependencies. */
 window.Planner = (() => {
   const esc = value => escapeHtml(String(value ?? ''));
+  // Inline lucide icons (stroke 1.8, round caps, currentColor), same style as the dashboard's SVGs.
+  const ICON_PATHS = {
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+    more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  };
+  const icon = (name, { size = 16, filled = false } = {}) =>
+    `<svg class="pl-ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name]}</svg>`;
   const STAGES = [
     ['idea', 'Idea'], ['production', 'Production'], ['recording', 'Recording'],
     ['mixing', 'Mixing'], ['mastering', 'Mastering'], ['released', 'Released'],
@@ -214,7 +224,7 @@ window.Planner = (() => {
     if (p.stale && p.group !== 'archive') chips.push(`<span class="pl-idle" title="Not opened in ${p.days_idle} days">idle ${p.days_idle}d</span>`);
     return `<button type="button" class="pl-row${selected ? ' is-active' : ''}" data-pl-project="${esc(p.key)}" title="${esc(p.full_title)}" ${selected ? 'aria-current="true"' : ''}>
       <span class="pl-row-main">
-        <span class="pl-row-title">${p.priority ? '<span class="pl-star" aria-label="Starred">★</span>' : ''}<span class="pl-trunc">${esc(p.title)}</span></span>
+        <span class="pl-row-title">${p.priority ? `<span class="pl-star" aria-label="Starred">${icon('star', { size: 14, filled: true })}</span>` : ''}<span class="pl-trunc">${esc(p.title)}</span></span>
         <span class="pl-row-sub pl-trunc">${esc(rowSub(p))}</span>
       </span>
       <span class="pl-row-side">${chips.join('')}</span>
@@ -247,7 +257,7 @@ window.Planner = (() => {
         const open = state.archiveOpen || searching;
         html += `<div class="pl-group">
           <button type="button" class="pl-group-head is-toggle" data-pl-group="archive" aria-expanded="${open}">
-            <span class="pl-chevron" aria-hidden="true">›</span><span>${label}</span><span class="pl-count">${items.length}</span>
+            <span class="pl-chevron" aria-hidden="true">${icon('chevron-right', { size: 14 })}</span><span>${label}</span><span class="pl-count">${items.length}</span>
           </button>
           ${open ? `<div class="pl-rows" data-pl-list="archive">${items.map(rowHtml).join('')}</div>` : ''}
         </div>`;
@@ -258,7 +268,7 @@ window.Planner = (() => {
         </div>`;
       }
     }
-    if (searching && !filtered.length) html += '<p class="pl-muted pl-pad">No songs match.</p>';
+    if (searching && !filtered.length) html += '<p class="pl-muted pl-pad">No songs match</p>';
     else if (!searching && !(ov.projects || []).length) html += '<p class="pl-muted pl-pad">No songs yet. They appear once Ableton sessions are tracked.</p>';
     const attrs = ['data-pl-project', 'data-pl-nav', 'data-pl-group'];
     const focused = navEl.contains(document.activeElement) ? document.activeElement : null;
@@ -268,7 +278,7 @@ window.Planner = (() => {
   }
 
   // ---- rendering: detail pane ---------------------------------------------
-  const backButton = '<button type="button" class="pl-back" data-pl="back" aria-label="Back to the list"><span aria-hidden="true">‹</span> Back</button>';
+  const backButton = `<button type="button" class="pl-back" data-pl="back" aria-label="Back to the list">${icon('chevron-left', { size: 14 })}<span>Back</span></button>`;
 
   function detailBusy() {
     const el = document.activeElement;
@@ -325,12 +335,12 @@ window.Planner = (() => {
         <span class="pl-muted">· ${esc(deck.stage_label)}${deck.due ? ` · ${esc(deck.due)}` : ''}</span></p>`;
     }
     html += `<form class="pl-quick" data-pl-form="quick-add" autocomplete="off">
-      <input class="text-input" id="plQuickText" maxlength="200" placeholder="Add a to-do…" aria-label="New to-do" value="${esc(state.drafts.quickText)}" data-pl-enter>
+      <input class="text-input" id="plQuickText" maxlength="200" placeholder="Add a to-do" aria-label="New to-do" value="${esc(state.drafts.quickText)}" data-pl-enter>
       <input class="text-input pl-date" id="plQuickDate" type="date" aria-label="Due date (optional)" value="${esc(state.drafts.quickDate)}">
       <button class="btn is-primary small" type="submit">Add</button>
     </form>`;
     if (!agenda.length) {
-      html += '<div class="pl-empty"><p>Nothing due. Enjoy the session.</p></div>';
+      html += '<div class="pl-empty"><p>No open to-dos</p></div>';
     } else {
       for (const [bucket, label] of BUCKETS) {
         const items = agenda.filter(i => i.bucket === bucket);
@@ -398,7 +408,7 @@ window.Planner = (() => {
         ? `<span class="pl-todo-text">${esc(t.text)}</span>`
         : `<button type="button" class="pl-todo-text is-editable" data-pl="todo-edit" data-todo-id="${t.id}" title="Edit">${esc(t.text)}</button>`}
       <span class="pl-todo-meta">${dateChip(t.due_date, overdue)}
-        <button type="button" class="pl-icon-btn" data-pl="todo-delete" data-todo-id="${t.id}" aria-label="Delete to-do: ${esc(t.text)}" title="Delete"><span aria-hidden="true">×</span></button>
+        <button type="button" class="pl-icon-btn" data-pl="todo-delete" data-todo-id="${t.id}" aria-label="Delete to-do: ${esc(t.text)}" title="Delete">${icon('x')}</button>
       </span>
     </li>`;
   }
@@ -414,17 +424,17 @@ window.Planner = (() => {
       html += '<ul class="pl-people">' + people.map(c => `<li class="pl-person" data-person-id="${c.id}">
         <div class="pl-person-main"><span class="pl-person-name">${esc(c.name)}</span>${c.role ? `<span class="pl-muted"> · ${esc(c.role)}</span>` : ''}
           <div class="pl-person-contact">${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}${c.phone ? `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ''}</div></div>
-        <button type="button" class="pl-icon-btn" data-pl="person-remove" data-id="${c.id}" aria-label="Remove ${esc(c.name)} from this song" title="Remove"><span aria-hidden="true">×</span></button>
+        <button type="button" class="pl-icon-btn" data-pl="person-remove" data-id="${c.id}" aria-label="Remove ${esc(c.name)} from this song" title="Remove">${icon('x')}</button>
       </li>`).join('') + '</ul>';
     } else if (!state.personOpen) {
-      html += '<p class="pl-muted">No one linked yet.</p>';
+      html += '<p class="pl-muted">No one linked yet</p>';
     }
     if (state.personOpen) {
       html += `<div class="pl-person-add">
         <select class="text-input" id="plPersonSelect" aria-label="Choose a person">
-          <option value="">Choose…</option>
+          <option value="">Choose a person</option>
           ${choices.map(c => `<option value="${c.id}">${esc(c.name)}${c.role ? ` · ${esc(c.role)}` : ''}</option>`).join('')}
-          <option value="__new"${state.personNew ? ' selected' : ''}>New contact…</option>
+          <option value="__new"${state.personNew ? ' selected' : ''}>New contact</option>
         </select>
         <button type="button" class="btn small subtle" data-pl="person-cancel">Cancel</button>
       </div>`;
@@ -465,7 +475,7 @@ window.Planner = (() => {
     const canMove = !p.settled;
     const moveTo = p.group === 'archive' ? 'active' : 'archive';
     const menu = canMove ? `<div class="pl-menu-wrap">
-        <button type="button" class="pl-icon-btn is-boxed" data-pl="more" aria-label="More actions" aria-haspopup="menu" aria-expanded="${state.menuOpen}">•••</button>
+        <button type="button" class="pl-icon-btn is-boxed" data-pl="more" aria-label="More actions" aria-haspopup="menu" aria-expanded="${state.menuOpen}">${icon('more')}</button>
         ${state.menuOpen ? `<div class="pl-menu" role="menu"><button type="button" role="menuitem" data-pl="list-set" data-value="${moveTo}">${moveTo === 'archive' ? 'Move to Archive' : 'Move to Active'}</button></div>` : ''}
       </div>` : '';
 
@@ -481,7 +491,7 @@ window.Planner = (() => {
           <h2 class="pl-h1" id="plTitle" title="${esc(p.full_title)}">${esc(p.title)}</h2>
           ${badges.length ? `<div class="pl-badges">${badges.join('')}</div>` : ''}
         </div>
-        <button type="button" class="pl-star-btn${p.priority ? ' is-on' : ''}" data-pl="star" aria-pressed="${p.priority ? 'true' : 'false'}" aria-label="${p.priority ? 'Remove star' : 'Star this song'}" title="${p.priority ? 'Starred' : 'Star'}"><span aria-hidden="true">${p.priority ? '★' : '☆'}</span></button>
+        <button type="button" class="pl-star-btn${p.priority ? ' is-on' : ''}" data-pl="star" aria-pressed="${p.priority ? 'true' : 'false'}" aria-label="${p.priority ? 'Remove star' : 'Star this song'}" title="${p.priority ? 'Starred' : 'Star'}"><span aria-hidden="true">${icon('star', { filled: !!p.priority })}</span></button>
       </div>
       <div class="pl-toolbar">
         <label class="pl-inline"><span class="pl-muted">Stage</span>
@@ -495,7 +505,7 @@ window.Planner = (() => {
       <dl class="pl-facts">
         <div class="pl-fact"><dt>Due</dt><dd>
           <input class="text-input pl-date" id="plDue" type="date" value="${esc(p.due_source === 'song' ? p.due_value : p.due_source === 'legacy' ? p.due_value : '')}" aria-label="Due date">
-          ${p.due_source === 'song' ? '<button type="button" class="pl-icon-btn" data-pl="due-clear" aria-label="Clear due date" title="Clear"><span aria-hidden="true">×</span></button>' : ''}
+          ${p.due_source === 'song' ? `<button type="button" class="pl-icon-btn" data-pl="due-clear" aria-label="Clear due date" title="Clear">${icon('x')}</button>` : ''}
           ${p.due_value ? `<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(p.due)}</span>` : ''}</dd></div>
         <div class="pl-fact"><dt>Activity</dt><dd>${esc(worked)}</dd></div>
         <div class="pl-fact"><dt>To-dos</dt><dd>${total ? `${p.todo_done}/${total} done` : 'None yet'}</dd></div>
@@ -506,11 +516,11 @@ window.Planner = (() => {
         <div class="pl-section-head"><h3 class="pl-h3" id="plTodosH">To-dos</h3></div>
         ${open.length ? `<ul class="pl-todos pl-todos-open">${open.map(t => todoRowHtml(t)).join('')}</ul>` : '<ul class="pl-todos pl-todos-open"></ul>'}
         <form class="pl-quick" data-pl-form="todo-add" autocomplete="off">
-          <input class="text-input" id="plTodoText" maxlength="200" placeholder="Add a to-do…" aria-label="New to-do" value="${esc(state.drafts.todoText)}" data-pl-enter>
+          <input class="text-input" id="plTodoText" maxlength="200" placeholder="Add a to-do" aria-label="New to-do" value="${esc(state.drafts.todoText)}" data-pl-enter>
           <input class="text-input pl-date" id="plTodoDate" type="date" aria-label="Due date (optional)" value="${esc(state.drafts.todoDate)}">
           <button class="btn small" type="submit">Add</button>
         </form>
-        ${p.todo_done ? `<details class="pl-done" data-pl-done ${state.doneOpen ? 'open' : ''}><summary>Done (${p.todo_done})</summary>
+        ${p.todo_done ? `<details class="pl-done" data-pl-done ${state.doneOpen ? 'open' : ''}><summary>${icon('chevron-right', { size: 14 })}<span>Done (${p.todo_done})</span></summary>
           <ul class="pl-todos">${done.map(t => todoRowHtml(t, true)).join('')}</ul></details>` : ''}
       </section>
       ${peopleHtml(d)}
@@ -546,7 +556,7 @@ window.Planner = (() => {
           ${songs.length ? `<ul class="pl-people">${songs.map(s => `<li class="pl-person">
             <div class="pl-person-main">${s.orphan ? `<span class="pl-muted" title="This song is no longer in the tracker">${esc(s.title)}</span>` : `<button type="button" class="pl-link" data-pl-open="${esc(s.key)}">${esc(s.title)}</button>`}
               ${s.stage_label ? `<span class="pl-muted"> · ${esc(s.stage_label)}</span>` : ''}</div>
-            <button type="button" class="pl-icon-btn" data-pl="contact-unlink" data-key="${esc(s.key)}" aria-label="Unlink ${esc(s.title)}" title="Unlink"><span aria-hidden="true">×</span></button>
+            <button type="button" class="pl-icon-btn" data-pl="contact-unlink" data-key="${esc(s.key)}" aria-label="Unlink ${esc(s.title)}" title="Unlink">${icon('x')}</button>
           </li>`).join('')}</ul>` : '<p class="pl-muted">Not linked to any song. Add them from a song\'s People section.</p>'}
         </section>`}
       </form>`;
@@ -555,7 +565,7 @@ window.Planner = (() => {
     } else if (typeof sel === 'number') {
       form = '<div class="pl-skel"></div><div class="pl-skel"></div>';
     } else {
-      form = `<div class="pl-empty"><p>${list.length ? 'Choose a person to see their details.' : 'No contacts yet. Add the people you work with.'}</p></div>`;
+      form = `<div class="pl-empty"><p>${list.length ? 'Choose a person to see their details' : 'No contacts yet. Add the people you work with.'}</p></div>`;
     }
     return `<div class="pl-pane" data-pl-pane="contacts">
       <div class="pl-head">${backButton}<h2 class="pl-h1">Contacts</h2>
