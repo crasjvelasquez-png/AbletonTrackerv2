@@ -218,6 +218,47 @@ class DeckTests(SongTestCase):
         self.assertEqual(len(titles), 2)
         self.assertNotIn("August 2026 - DANCE - 118 bpm", titles)
 
+    def test_suggestions_skip_held_songs(self):
+        """Planner holds hide a song from suggestions until the hold expires."""
+        self.add("Held Forever - Zenny", 1, 2)
+        self.add("Held Until - Zenny", 1, 2)
+        self.add("Held Expired - Zenny", 1, 2)
+        self.add("Free Song - Zenny", 1, 2)
+
+        def titles():
+            return [s["title"] for s in songs.suggestions(songs.load_songs(self.db, now=NOW), today=TODAY, limit=10)]
+
+        # No planner table at all: unchanged behavior, plan_status defaults to active.
+        baseline = titles()
+        self.assertIn("Held Forever - Zenny", baseline)
+        self.assertIn("Held Until - Zenny", baseline)
+        self.assertEqual(self.by_title("Free Song - Zenny")["plan_status"], "active")
+        self.assertEqual(self.by_title("Free Song - Zenny")["hold_until"], "")
+
+        k = {t: songs.song_key(t) for t in ("Held Forever - Zenny", "Held Until - Zenny", "Held Expired - Zenny")}
+        future = (TODAY + timedelta(days=5)).isoformat()
+        past = (TODAY - timedelta(days=1)).isoformat()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("""CREATE TABLE project_plan (song_key TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'active',
+                hold_reason TEXT NOT NULL DEFAULT '', hold_until TEXT NOT NULL DEFAULT '', hold_since REAL,
+                waiting_on INTEGER, priority INTEGER NOT NULL DEFAULT 0, notes TEXT NOT NULL DEFAULT '',
+                list_override TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL)""")
+            conn.executemany("INSERT INTO project_plan(song_key, status, hold_until, updated_at) VALUES(?, 'on_hold', ?, 0)",
+                             [(k["Held Forever - Zenny"], ""), (k["Held Until - Zenny"], future),
+                              (k["Held Expired - Zenny"], past)])
+        got = titles()
+        self.assertNotIn("Held Forever - Zenny", got)
+        self.assertNotIn("Held Until - Zenny", got)
+        self.assertIn("Held Expired - Zenny", got)
+        self.assertIn("Free Song - Zenny", got)
+        self.assertEqual(self.by_title("Held Until - Zenny")["plan_status"], "on_hold")
+        self.assertEqual(self.by_title("Held Until - Zenny")["hold_until"], future)
+        # The hold expires on its own: a week later the song is suggested again.
+        later = [s["title"] for s in songs.suggestions(songs.load_songs(self.db, now=NOW + 6 * DAY),
+                                                       today=TODAY + timedelta(days=6), limit=10)]
+        self.assertIn("Held Until - Zenny", later)
+        self.assertNotIn("Held Forever - Zenny", later)
+
     def test_next_task_done_and_events(self):
         k = self.keys()["April 2026 - Prince - 130 bpm Emaj"]
         songs.put_on_deck(self.db, k, now=NOW)

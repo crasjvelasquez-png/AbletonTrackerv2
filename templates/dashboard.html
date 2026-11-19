@@ -2542,6 +2542,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
 </style>
 <link rel="stylesheet" href="/static/css/dashboard.css?v=song-popup-1">
 <link rel="stylesheet" href="/static/css/lanes.css?v=lanes-1">
+<link rel="stylesheet" href="/static/css/planner.css?v=planner-1">
 </head>
 <body>
 <div class="page-bg" aria-hidden="true"></div>
@@ -2611,7 +2612,7 @@ html[data-hide-rhythm="true"] #rhythmCard { display: none !important; }
   </div>
   <div id="app">
     <div id="appSettings" hidden></div>
-    <div id="appPlanner" hidden><div class="empty planner-empty"><p>Planner</p><small>Nothing planned yet</small></div></div>
+    <div id="appPlanner" hidden><div id="plannerRoot"></div></div>
     <div id="appDashboard"><div class="empty"><p>Loading data…</p><small>one moment</small></div></div>
   </div>
   <div class="mark">
@@ -2980,6 +2981,7 @@ async function setActiveView(view = 'dashboard') {
   updateHeaderForView();
   document.getElementById('appDashboard').hidden = view !== 'dashboard';
   document.getElementById('appPlanner').hidden = view !== 'planner';
+  if (view === 'planner') window.Planner?.show();
   const mount = document.getElementById('appSettings');
   mount.hidden = view !== 'settings';
   if (view !== 'settings') return;
@@ -5581,5 +5583,6 @@ const dashboardRefreshTimer = setInterval(() => {
 <script src="/static/js/on_deck.js?v=on-deck-5"></script>
 <script src="/static/js/song_planner.js?v=song-popup-1"></script>
 <script src="/static/js/lanes.js?v=lanes-1"></script>
+<script src="/static/js/planner.js?v=planner-1"></script>
 </body>
 </html>

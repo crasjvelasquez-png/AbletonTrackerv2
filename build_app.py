@@ -30,6 +30,7 @@ SOURCE_FILES = (
     "menubar_panel.py",
     "native_sidebar.py",
     "notifications.py",
+    "planner.py",
     "projects.py",
     "songs.py",
     "tracker.py",

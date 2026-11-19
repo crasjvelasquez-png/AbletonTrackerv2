@@ -165,6 +165,8 @@ def load_songs(db_path, now: float | None = None) -> list[dict]:
         states = {row[0]: row for row in _optional_rows(conn, """
             SELECT song_key, stage, on_deck, on_deck_since, snoozed_until, due_date, next_task
             FROM song_state""")}
+        plans = {row[0]: (row[1] or "active", row[2] or "") for row in _optional_rows(
+            conn, "SELECT song_key, status, hold_until FROM project_plan")}
     conn.close()
 
     grouped: dict[str, dict] = {}
@@ -211,6 +213,8 @@ def load_songs(db_path, now: float | None = None) -> list[dict]:
             due_date=due or "",
             legacy_due_date=legacy_due,
             next_task=task or "",
+            plan_status=plans.get(key, ("active", ""))[0],
+            hold_until=plans.get(key, ("active", ""))[1],
             settled=stage == "released" or (legacy_settled and not on_deck and not manual),
         )
         result.append(song)
@@ -233,6 +237,9 @@ def suggestions(songs, today: date, limit: int = 3) -> list[dict]:
         snoozed = _parse_date(song["snoozed_until"])
         if song["on_deck"] or song["settled"] or song["seconds"] < MIN_SUGGEST_SECONDS or (snoozed and snoozed >= today):
             continue
+        hold_until = _parse_date(song.get("hold_until"))
+        if song.get("plan_status") == "on_hold" and not (hold_until and hold_until <= today):
+            continue  # Planner hold; it ends on its own once the back-on date arrives.
         due = _effective_due(song)
         if due:
             rank = (0, due.toordinal(), 0, 0)
