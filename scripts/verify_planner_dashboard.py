@@ -78,7 +78,7 @@ K = {name: songs.song_key(title) for name, (title, _, _) in zip(
 SEED_GENERAL_TODOS = ("Back up the sample library", "Renew plugin licence")
 OVERVIEW_KEYS = {"today", "counts", "deck", "projects", "agenda", "contacts"}
 PROJECT_KEYS = {"key", "title", "full_title", "stage", "stage_label", "status", "effective_status", "hold_expired",
-                "hold_reason", "hold_until", "hold_since", "waiting_on", "waiting_on_name", "priority", "due_value",
+                "hold_reason", "hold_until", "hold_since", "waiting_on", "waiting_on_name", "list_override", "priority", "due_value",
                 "due", "overdue", "days_idle", "stale", "todo_open", "todo_done", "next_todo", "in_lane", "is_deck",
                 "on_deck", "settled", "group", "last_seen"}
 DETAIL_EXTRA_KEYS = {"notes", "next_task", "seconds", "inferred_stage", "due_source", "list_override"}

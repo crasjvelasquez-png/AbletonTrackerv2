@@ -10,6 +10,10 @@ window.Planner = (() => {
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   };
   const icon = (name, { size = 16, filled = false } = {}) =>
     `<svg class="pl-ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name]}</svg>`;
@@ -19,7 +23,6 @@ window.Planner = (() => {
   ];
   const LANE_LABELS = { produce: 'Produce', mix: 'Mix', master: 'Master' };
   const BUCKETS = [['overdue', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['later', 'Later'], ['someday', 'Someday']];
-  const ARCHIVE_KEY = 'planner.archiveOpen';
   const GENERIC_ERROR = 'Planner could not load.';
 
   const state = {
@@ -33,7 +36,7 @@ window.Planner = (() => {
     contact: null,         // GET ?contact= payload
     contacts: { error: '' },
     query: '',
-    archiveOpen: false,
+    drawer: null,          // null | 'on_hold' | 'archive': the pinned list opened from the bottom of the sidebar
     holdOpen: false,       // inline "Put on hold" form
     holdEdit: false,       // editing an existing hold
     personOpen: false,
@@ -48,14 +51,13 @@ window.Planner = (() => {
   };
   let root = null;
   let navEl = null;
+  let footEl = null;
   let detailEl = null;
   let searchEl = null;
   let overviewSeq = 0;
   let detailSeq = 0;
   let contactSeq = 0;
   let notesTimer = null;
-
-  try { state.archiveOpen = localStorage.getItem(ARCHIVE_KEY) === '1'; } catch (_) { /* storage may be blocked */ }
 
   // ---- helpers -------------------------------------------------------------
   const localIso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -184,6 +186,33 @@ window.Planner = (() => {
     loadProject(key);
   }
 
+  // The list is sticky; until the page scrolls it starts lower than its sticky top, so size it
+  // to what is actually visible and the pinned On hold / Settled rows stay on screen.
+  let fitFrame = 0;
+  function fitList() {
+    fitFrame = 0;
+    const list = root?.querySelector('.pl-list');
+    if (!list || !list.offsetParent) return;
+    if (getComputedStyle(list).position !== 'sticky') { list.style.height = ''; return; }
+    const top = Math.max(list.getBoundingClientRect().top, 0);
+    list.style.height = `${Math.max(240, window.innerHeight - top - 20)}px`;
+  }
+  function queueFit() { if (!fitFrame) fitFrame = requestAnimationFrame(fitList); }
+
+  function openDrawer(group) {
+    if (!PINNED_GROUPS.includes(group)) return;
+    state.drawer = group;
+    drawNav();
+    q('[data-pl-drawer-back]')?.focus();
+  }
+
+  function closeDrawer() {
+    const was = state.drawer;
+    state.drawer = null;
+    drawNav();
+    if (was) q(`[data-pl-group="${was}"]`)?.focus();
+  }
+
   function selectContacts(id = null) {
     state.view = 'contacts'; state.key = '';
     state.contactId = id; state.contact = null;
@@ -218,7 +247,7 @@ window.Planner = (() => {
     return esc(rowSub(p));
   }
 
-  function rowHtml(p) {
+  function rowButtonHtml(p) {
     const selected = state.view === 'project' && state.key === p.key;
     const held = p.status === 'on_hold' && !p.hold_expired;
     const chips = [];
@@ -236,49 +265,114 @@ window.Planner = (() => {
     </button>`;
   }
 
+  // One-click moves between Active, On hold and Settled, shown on row hover / focus (like T3's list).
+  const MOVES = {
+    hold: { label: 'Put on hold', icon: 'pause' },
+    resume: { label: 'Resume', icon: 'play' },
+    settle: { label: 'Move to Settled', icon: 'check' },
+    activate: { label: 'Move to Active', icon: 'undo' },
+  };
+  function rowMoves(p) {
+    if (p.settled) return [];
+    if (p.group === 'archive') return ['activate'];
+    if (p.group === 'on_hold') return ['resume', 'settle'];
+    return ['hold', 'settle'];
+  }
+  function rowHtml(p) {
+    const moves = rowMoves(p);
+    const acts = moves.map(m => `<button type="button" class="pl-act" data-pl-move="${m}" data-key="${esc(p.key)}" aria-label="${MOVES[m].label}: ${esc(p.title)}" title="${MOVES[m].label}">${icon(MOVES[m].icon, { size: 14 })}</button>`).join('');
+    return `<div class="pl-row-wrap${moves.length ? ' has-acts' : ''}">${rowButtonHtml(p)}${acts ? `<span class="pl-row-acts">${acts}</span>` : ''}</div>`;
+  }
+
+  async function moveSong(move, key) {
+    const p = (state.overview?.projects || []).find(x => x.key === key);
+    if (!p) return;
+    const title = p.title;
+    const refresh = () => { if (state.view === 'project' && state.key === key) loadProject(key, { quiet: true }); };
+    const undoHold = { action: 'hold', key, reason: p.hold_reason || '', until: p.hold_until || '', waiting_on: p.waiting_on ?? null };
+    const plan = {
+      hold: [{ action: 'hold', key, reason: '', until: '', waiting_on: null }, { action: 'resume', key }, `Put on hold: ${title}`],
+      resume: [{ action: 'resume', key }, undoHold, `Resumed: ${title}`],
+      settle: [{ action: 'list', key, value: 'archive' }, { action: 'list', key, value: p.list_override || '' }, `Moved to Settled: ${title}`],
+      activate: [{ action: 'list', key, value: 'active' }, { action: 'list', key, value: p.list_override || '' }, `Moved to Active: ${title}`],
+    }[move];
+    if (!plan) return;
+    const [doBody, undoBody, message] = plan;
+    const res = await act(doBody);
+    if (!res) return;
+    refresh();
+    notify(message, { label: 'Undo', onClick: async () => { if (await act(undoBody)) refresh(); } });
+  }
+
+  const GROUP_LABELS = { active: 'Active', on_hold: 'On hold', archive: 'Settled' };
+  const PINNED_GROUPS = ['on_hold', 'archive'];
+
+  function groupHtml(group, items) {
+    return `<div class="pl-group">
+      <div class="pl-group-head"><span>${GROUP_LABELS[group]}</span><span class="pl-count">${items.length}</span></div>
+      <div class="pl-rows" data-pl-list="${group}">${items.map(rowHtml).join('')}</div>
+    </div>`;
+  }
+
+  // Bottom of the sidebar: On hold and Settled stay pinned there, each opening its own list.
+  function drawFoot(hidden) {
+    if (!footEl) return;
+    footEl.hidden = hidden;
+    if (hidden) { footEl.innerHTML = ''; return; }
+    const projects = state.overview?.projects || [];
+    footEl.innerHTML = PINNED_GROUPS.map(group => {
+      const n = projects.filter(p => p.group === group).length;
+      return `<button type="button" class="pl-navrow pl-foot-row" data-pl-group="${group}" aria-expanded="false">
+        <span>${GROUP_LABELS[group]}</span><span class="pl-foot-end"><span class="pl-count">${n}</span><span class="pl-chevron" aria-hidden="true">${icon('chevron-right', { size: 14 })}</span></span>
+      </button>`;
+    }).join('');
+  }
+
   function drawNav() {
     if (!navEl) return;
     const ov = state.overview;
     if (!ov) {
       navEl.innerHTML = state.loadError ? '' : '<div class="pl-skel" aria-hidden="true"></div><div class="pl-skel" aria-hidden="true"></div><div class="pl-skel" aria-hidden="true"></div>';
+      drawFoot(true);
       return;
     }
     const overdue = ov.counts?.overdue_todos || 0;
     const filtered = filteredProjects();
     const searching = Boolean(state.query.trim());
-    const groups = [['active', 'Active'], ['on_hold', 'On hold'], ['archive', 'Settled']];
+    const drawer = searching ? null : state.drawer;
     let html = `<div class="pl-navgroup">
-      <button type="button" class="pl-navrow${state.view === 'agenda' ? ' is-active' : ''}" data-pl-nav="agenda" ${state.view === 'agenda' ? 'aria-current="true"' : ''}>
-        <span>Agenda</span>${overdue ? `<span class="pl-badge" title="Overdue to-dos" aria-label="${overdue} overdue">${overdue}</span>` : ''}
-      </button>
-      <button type="button" class="pl-navrow${state.view === 'contacts' ? ' is-active' : ''}" data-pl-nav="contacts" ${state.view === 'contacts' ? 'aria-current="true"' : ''}>
-        <span>Contacts</span><span class="pl-count">${(ov.contacts || []).length}</span>
-      </button>
-    </div>`;
-    for (const [group, label] of groups) {
-      const items = filtered.filter(p => p.group === group);
-      if (!items.length) continue;
-      if (group === 'archive') {
-        const open = state.archiveOpen || searching;
-        html += `<div class="pl-group">
-          <button type="button" class="pl-group-head is-toggle" data-pl-group="archive" aria-expanded="${open}">
-            <span class="pl-chevron" aria-hidden="true">${icon('chevron-right', { size: 14 })}</span><span>${label}</span><span class="pl-count">${items.length}</span>
-          </button>
-          ${open ? `<div class="pl-rows" data-pl-list="archive">${items.map(rowHtml).join('')}</div>` : ''}
-        </div>`;
-      } else {
-        html += `<div class="pl-group">
-          <div class="pl-group-head"><span>${label}</span><span class="pl-count">${items.length}</span></div>
-          <div class="pl-rows" data-pl-list="${group}">${items.map(rowHtml).join('')}</div>
-        </div>`;
+        <button type="button" class="pl-navrow${state.view === 'agenda' ? ' is-active' : ''}" data-pl-nav="agenda" ${state.view === 'agenda' ? 'aria-current="true"' : ''}>
+          <span>Agenda</span>${overdue ? `<span class="pl-badge" title="Overdue to-dos" aria-label="${overdue} overdue">${overdue}</span>` : ''}
+        </button>
+        <button type="button" class="pl-navrow${state.view === 'contacts' ? ' is-active' : ''}" data-pl-nav="contacts" ${state.view === 'contacts' ? 'aria-current="true"' : ''}>
+          <span>Contacts</span><span class="pl-count">${(ov.contacts || []).length}</span>
+        </button>
+      </div>`;
+    if (drawer) {
+      const items = filtered.filter(p => p.group === drawer);
+      html += `<div class="pl-group">
+        <button type="button" class="pl-group-head is-toggle pl-drawer-head" data-pl-drawer-back="${drawer}" aria-label="Back to all songs from ${GROUP_LABELS[drawer]}">
+          <span class="pl-chevron" aria-hidden="true">${icon('chevron-left', { size: 14 })}</span><span>${GROUP_LABELS[drawer]}</span><span class="pl-count">${items.length}</span>
+        </button>
+        ${items.length ? `<div class="pl-rows" data-pl-list="${drawer}">${items.map(rowHtml).join('')}</div>`
+          : `<p class="pl-muted pl-pad">${drawer === 'on_hold' ? 'No songs on hold' : 'No settled songs yet'}</p>`}
+      </div>`;
+    } else {
+      // Searching looks through every group; otherwise only Active lives in the main list.
+      for (const group of searching ? ['active', ...PINNED_GROUPS] : ['active']) {
+        const items = filtered.filter(p => p.group === group);
+        if (items.length) html += groupHtml(group, items);
       }
+      if (searching && !filtered.length) html += '<p class="pl-muted pl-pad">No songs match</p>';
+      else if (!searching && !(ov.projects || []).length) html += '<p class="pl-muted pl-pad">No songs yet. They appear once Ableton sessions are tracked.</p>';
+      else if (!searching && !filtered.some(p => p.group === 'active')) html += '<p class="pl-muted pl-pad">No active songs</p>';
     }
-    if (searching && !filtered.length) html += '<p class="pl-muted pl-pad">No songs match</p>';
-    else if (!searching && !(ov.projects || []).length) html += '<p class="pl-muted pl-pad">No songs yet. They appear once Ableton sessions are tracked.</p>';
-    const attrs = ['data-pl-project', 'data-pl-nav', 'data-pl-group'];
-    const focused = navEl.contains(document.activeElement) ? document.activeElement : null;
+    const attrs = ['data-pl-project', 'data-pl-nav', 'data-pl-group', 'data-pl-drawer-back', 'data-pl-move'];
+    const focused = root?.contains(document.activeElement) && document.activeElement.closest?.('.pl-list') ? document.activeElement : null;
     const keep = focused && attrs.map(a => [a, focused.getAttribute(a)]).find(([, v]) => v !== null);
     navEl.innerHTML = html;
+    drawFoot(Boolean(searching || drawer));
+    queueFit();
     if (keep) qa(`[${keep[0]}]`).find(el => el.getAttribute(keep[0]) === keep[1])?.focus();
   }
 
@@ -676,6 +770,14 @@ window.Planner = (() => {
     if (state.menuOpen && !t.closest('.pl-menu-wrap')) { state.menuOpen = false; drawDetail(); }
     const nav = t.closest('[data-pl-nav]');
     if (nav) { nav.dataset.plNav === 'agenda' ? selectAgenda() : selectContacts(); return; }
+    const move = t.closest('[data-pl-move]');
+    if (move) {
+      const sibling = move.closest('.pl-row-wrap')?.querySelector('[data-pl-project]');
+      await moveSong(move.dataset.plMove, move.dataset.key);
+      // The row has moved lists; keep keyboard focus somewhere sensible.
+      if (sibling && !root.contains(sibling)) (q(`[data-pl-project="${CSS.escape(move.dataset.key)}"]`) || q('[data-pl-drawer-back]') || q('[data-pl-nav="agenda"]'))?.focus();
+      return;
+    }
     const projectRow = t.closest('[data-pl-project]');
     if (projectRow) { selectProject(projectRow.dataset.plProject); return; }
     const open = t.closest('[data-pl-open]');
@@ -683,13 +785,9 @@ window.Planner = (() => {
     const contactRow = t.closest('[data-pl-contact]');
     if (contactRow) { selectContacts(Number(contactRow.dataset.plContact)); return; }
     const group = t.closest('[data-pl-group]');
-    if (group) {
-      state.archiveOpen = !state.archiveOpen;
-      try { localStorage.setItem(ARCHIVE_KEY, state.archiveOpen ? '1' : '0'); } catch (_) { /* ignore */ }
-      drawNav();
-      q('[data-pl-group="archive"]')?.focus();
-      return;
-    }
+    if (group) { openDrawer(group.dataset.plGroup); return; }
+    const back = t.closest('[data-pl-drawer-back]');
+    if (back) { closeDrawer(); return; }
     const check = t.closest('[data-pl-check]');
     if (check) {
       const li = check.closest('.pl-todo');
@@ -882,6 +980,7 @@ window.Planner = (() => {
     }
     if (event.key === 'Escape') {
       if (t.id === 'plSearch') { t.value = ''; state.query = ''; drawNav(); return; }
+      if (state.drawer && t.closest?.('.pl-list')) { closeDrawer(); return; }
       if (state.menuOpen) { state.menuOpen = false; drawDetail(); q('[data-pl="more"]')?.focus(); return; }
       if (t.closest?.('.pl-todo-edit')) { state.editingTodo = null; drawDetail(); return; }
       if (t.closest?.('[data-pl-form="hold"]')) { state.holdOpen = false; state.holdEdit = false; drawDetail(); return; }
@@ -895,8 +994,8 @@ window.Planner = (() => {
       }
       return;
     }
-    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && navEl && (navEl.contains(t) || t.id === 'plSearch')) {
-      const items = [searchEl, ...navEl.querySelectorAll('button')].filter(Boolean);
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && navEl && (navEl.contains(t) || footEl?.contains(t) || t.id === 'plSearch')) {
+      const items = [searchEl, ...navEl.querySelectorAll('button:not(.pl-act)'), ...(footEl?.querySelectorAll('button') || [])].filter(Boolean);
       const i = items.indexOf(t);
       if (i < 0) return;
       const next = items[Math.max(0, Math.min(items.length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))];
@@ -920,11 +1019,13 @@ window.Planner = (() => {
       <aside class="pl-list" aria-label="Planner">
         <div class="pl-search"><input class="text-input" id="plSearch" type="search" placeholder="Search songs" aria-label="Search songs" autocomplete="off" spellcheck="false"></div>
         <nav class="pl-nav" id="plNav" aria-label="Songs"></nav>
+        <div class="pl-foot" id="plFoot" hidden></div>
       </aside>
       <section class="pl-detail" id="plDetail"></section>
     </div>`;
     root = host.firstElementChild;
     navEl = root.querySelector('#plNav');
+    footEl = root.querySelector('#plFoot');
     detailEl = root.querySelector('#plDetail');
     searchEl = root.querySelector('#plSearch');
     root.addEventListener('click', onClick);
@@ -934,6 +1035,8 @@ window.Planner = (() => {
     root.addEventListener('keydown', onKeydown);
     root.addEventListener('focusout', onFocusOut);
     root.addEventListener('toggle', onToggle, true);
+    window.addEventListener('scroll', queueFit, { passive: true });
+    window.addEventListener('resize', queueFit);
     return true;
   }
 
@@ -941,6 +1044,7 @@ window.Planner = (() => {
     try {
       if (!mount()) return;
       if (!state.overview) { drawNav(); drawDetail(); }
+      queueFit();
       if (state.view === 'project' && state.key) loadProject(state.key, { quiet: Boolean(state.detail) });
       else if (state.view === 'contacts' && typeof state.contactId === 'number') loadContact(state.contactId, { quiet: true });
       loadOverview();

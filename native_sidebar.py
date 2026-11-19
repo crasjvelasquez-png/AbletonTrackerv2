@@ -245,7 +245,12 @@ class NativeSidebar:
     def __init__(self, window, detail_view, on_select: Callable[[str], None]):
         self.window = window
         self.detail_view = detail_view
-        self.controller = SidebarController.alloc().initWithSelect_(on_select)
+        def _picked(view_id):
+            # Picking a tab hides the sidebar so the page gets the full window.
+            on_select(view_id)
+            self.set_collapsed(True)
+
+        self.controller = SidebarController.alloc().initWithSelect_(_picked)
         self._collapsed = False
 
         outline = AK.NSOutlineView.alloc().init()

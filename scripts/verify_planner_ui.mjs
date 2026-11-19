@@ -13,6 +13,11 @@
  *    empty-state while seeded to-dos exist.
  *  - Quick-adding a general to-do does not appear in the agenda, loses its text on error, or the
  *    Enter key does nothing.
+ *  - Quick moves on list rows (written before the row buttons existed): the buttons show without hover
+ *    or focus, or on a released song; Put on hold / Resume / Move to Settled / Move to Active lands in
+ *    the wrong list or is not saved on the server; clicking a move also opens the song; Undo does not
+ *    put the song back where it was (including a hold's reason and back-on date); On hold and Settled
+ *    stop being pinned at the bottom of the list.
  *  - Project rows are missing, grouped wrongly (held rows outside "On hold", archived rows outside
  *    the collapsed Settled group), or clicking / keyboard Enter does not open the detail pane.
  *  - Star, hold (reason + back-on date + waiting-on), resume, to-do add / check, inline new contact
@@ -157,6 +162,18 @@ const press = key => send('Input.dispatchKeyEvent', { type: 'keyDown', key, code
 const isoIn = days => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const overflowX = () => ev('document.documentElement.scrollWidth > window.innerWidth + 1');
 const row = key => `[data-pl-project="${key}"]`;
+// The sidebar shows Active songs; On hold and Settled open from rows pinned at its bottom.
+async function showGroup(g) {
+  const cur = await ev(`document.querySelector('#plannerRoot [data-pl-drawer-back]')?.dataset.plDrawerBack || 'active'`);
+  if (cur === g) return;
+  if (cur !== 'active') await click('[data-pl-drawer-back]');
+  if (g !== 'active') await click(`[data-pl-group="${g}"]`);
+}
+async function reveal(sel) {
+  for (const g of ['active', 'on_hold', 'archive']) { await showGroup(g); if (await exists(sel)) return true; }
+  return false;
+}
+const clickRow = async sel => { await reveal(sel); return click(sel); };
 
 async function step(name, fn) {
   try {
@@ -194,11 +211,21 @@ async function main() {
     check('On Deck reminder shows the deck song', (await text('.pl-deck')) ?.includes('Planner Delta'), await text('.pl-deck'));
     check('Overdue bucket is shown with seeded overdue to-do', await ev(`[...document.querySelectorAll('#plannerRoot .pl-bucket h3')].some(h => /overdue/i.test(h.textContent))`));
     check('Settled group exists and is collapsed', await ev(`(() => { const t = ${q('[data-pl-group="archive"]')}; return !!t && t.getAttribute('aria-expanded') === 'false' && !${q(row('planner echo - zed'))}; })()`));
-    check('every list group head computes 12px (Settled toggle matches)', await ev(`(() => { const h = [...document.querySelectorAll('#plannerRoot .pl-group-head')]; return h.length >= 2 && h.every(e => getComputedStyle(e).fontSize === '12px' && getComputedStyle(e).fontWeight === '600'); })()`));
-    check('group head text says Settled (not Archive)', (await text('[data-pl-group="archive"] span:nth-of-type(2)')) === 'Settled', await text('[data-pl-group="archive"]'));
+    check('every list group head computes 12px', await ev(`(() => { const h = [...document.querySelectorAll('#plannerRoot .pl-group-head')]; return h.length >= 1 && h.every(e => getComputedStyle(e).fontSize === '12px' && getComputedStyle(e).fontWeight === '600'); })()`));
+    check('group head text says Settled (not Archive)', (await text('[data-pl-group="archive"] > span:first-child')) === 'Settled', await text('[data-pl-group="archive"]'));
     check('no top pill nav (.header-nav) in the DOM', await ev(`!document.querySelector('.header-nav, .nav-tab, [data-view-tab]')`));
-    check('every list group head shares one text colour', await ev(`(() => { const c = [...document.querySelectorAll('#plannerRoot .pl-group-head')].map(e => getComputedStyle(e).color); return c.length >= 2 && c.every(x => x === c[0]); })()`));
-    check('held project sits in On hold group', await ev(`!!${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`));
+    check('every list group head shares one text colour', await ev(`(() => { const c = [...document.querySelectorAll('#plannerRoot .pl-group-head')].map(e => getComputedStyle(e).color); return c.length >= 1 && c.every(x => x === c[0]); })()`));
+    const pin = await ev(`(() => { const l = document.querySelector('.pl-list').getBoundingClientRect(); const b = ['on_hold', 'archive'].map(g => document.querySelector('#plFoot [data-pl-group="' + g + '"]')?.getBoundingClientRect());
+      return { ok: b.every(r => r && r.height > 0 && r.bottom <= window.innerHeight + 1), gap: b[1] ? l.bottom - b[1].bottom : null }; })()`);
+    check('On hold and Settled rows are pinned on screen at the bottom of the list', pin.ok && pin.gap !== null && pin.gap < 24, JSON.stringify(pin));
+    check('held project is not in the main list', !(await exists(`#plNav ${row(HELD_KEY)}`)));
+    check('On hold row shows the held count', (await text('[data-pl-group="on_hold"] .pl-count')) === '1', await text('[data-pl-group="on_hold"] .pl-count'));
+    await showGroup('on_hold');
+    check('held project sits in On hold list', await ev(`!!${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`));
+    check('opening On hold hides the pinned rows and the Active list, keeps Agenda', await ev(`document.getElementById('plFoot').hidden && !${q('[data-pl-list="active"]')} && !!${q('[data-pl-nav="agenda"]')}`));
+    await shot('on-hold-open');
+    await showGroup('active');
+    check('back row returns to the Active list and the pinned rows', await ev(`!document.getElementById('plFoot').hidden && !!${q('[data-pl-list="active"]')}`));
     check('starred project is in Active group', await ev(`!!${q(`[data-pl-list="active"] ${row('planner alpha - zed')}`)}`));
     await shot('agenda-light');
   });
@@ -225,7 +252,7 @@ async function main() {
   });
 
   await step('open project', async () => {
-    await click(row(KEY));
+    await clickRow(row(KEY));
     await waitFor(`${q('[data-pl-pane="project"]')} && ${q('#plTitle')}?.textContent.includes('Planner Charlie')`, 'project pane');
     check('clicking a project row opens its detail pane', true);
   });
@@ -303,7 +330,9 @@ async function main() {
     await waitFor(`${q('[data-pl="resume"]')} && ${q('.pl-hold-panel')}`, 'hold saved and resume offered');
     check('hold saves and offers Resume', true);
     check('hold reason is escaped, not injected as HTML', await ev(`!${q('.pl-hold-panel b')} && document.body.innerHTML.includes('&lt;b&gt;vocal')`));
-    check('project moves to the On hold group', await ev(`!!${q(`[data-pl-list="on_hold"] ${row(KEY)}`)}`));
+    await showGroup('on_hold');
+    await waitFor(`${q(`[data-pl-list="on_hold"] ${row(KEY)}`)}`, 'row in On hold');
+    check('project moves to the On hold group', true);
     await shot('project-hold');
   });
 
@@ -346,8 +375,8 @@ async function main() {
   await step('reload persistence', async () => {
     await send('Page.navigate', { url: `${BASE}/#planner` });
     await send('Page.reload');
-    await waitFor(`${q('[data-pl-pane="agenda"]')} && ${q(row(KEY))}`, 'planner after reload');
-    await click(row(KEY));
+    await waitFor(`${q('[data-pl-pane="agenda"]')} && ${q('#plFoot [data-pl-group="on_hold"]')}`, 'planner after reload');
+    await clickRow(row(KEY));
     await waitFor(`${q('[data-pl-pane="project"] .pl-hold-panel')} && ${q('#plNotes')}`, 'project detail after reload');
     const state = await ev(`({
       starred: ${q('[data-pl="star"]')}.getAttribute('aria-pressed') === 'true',
@@ -369,12 +398,14 @@ async function main() {
 
   // 11. Held project from seed shows waiting-on; resume works.
   await step('resume', async () => {
-    await click(row(KEY));
+    await clickRow(row(KEY));
     await waitFor(`${q('[data-pl="resume"]')}`, 'resume button');
     await click('[data-pl="resume"]');
-    await waitFor(`!${q('[data-pl="resume"]')} && ${q(`[data-pl-list="active"] ${row(KEY)}`)}`, 'resumed to Active');
+    await waitFor(`!${q('[data-pl="resume"]')} && !${q(`[data-pl-list="on_hold"] ${row(KEY)}`)}`, 'resumed out of On hold');
+    await showGroup('active');
+    await waitFor(`${q(`[data-pl-list="active"] ${row(KEY)}`)}`, 'resumed to Active');
     check('Resume returns the project to Active', true);
-    await click(row(HELD_KEY));
+    await clickRow(row(HELD_KEY));
     await waitFor(`${q('.pl-hold-panel')}`, 'seeded hold panel');
     check('seeded hold shows Waiting on Ana Ruiz', (await ev(`document.querySelector('.pl-hold-panel').textContent.includes('Ana Ruiz') || document.querySelector('#plHoldWaiting')?.selectedOptions[0]?.textContent.includes('Ana Ruiz')`)));
   });
@@ -397,13 +428,14 @@ async function main() {
 
   // 12b. Richer project (starred, overdue to-do, due date, linked person) with Settled expanded.
   await step('project with Settled open', async () => {
+    await showGroup('active');
     await click('[data-pl-group="archive"]');
     await waitFor(`${q(row('planner echo - zed'))}`, 'archive rows');
-    check('Settled group expands on click', true);
-    await click(row('planner alpha - zed'));
+    check('Settled row opens the Settled list', true);
+    await clickRow(row('planner alpha - zed'));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length ${ALLOW_REAL ? '>= 2' : '=== 2'}`, 'alpha detail');
     await shot('project-alpha');
-    await click(row('planner echo - zed'));
+    await clickRow(row('planner echo - zed'));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Echo')`, 'echo detail');
     check('settled-list project offers Move to Active', await ev(`(async () => { document.querySelector('[data-pl="more"]').click(); await new Promise(r => setTimeout(r, 50)); return /Move to Active/.test(document.querySelector('.pl-menu')?.textContent || ''); })()`));
     await shot('project-archived');
@@ -416,7 +448,7 @@ async function main() {
   const apiStage = key => ev(`fetch('/api/planner?key=' + encodeURIComponent(${JSON.stringify(key)})).then(r => r.json()).then(d => ({ stage: d.project.stage, settled: d.project.settled, group: d.project.group }))`);
   const modalOpen = () => ev(`document.getElementById('modal').classList.contains('show')`);
   await step('released confirm', async () => {
-    await click(row(REL));
+    await clickRow(row(REL));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Foxtrot')`, 'foxtrot detail');
     const before = await apiStage(REL);
     check('release target is not yet released', !before.settled && before.stage !== 'released', JSON.stringify(before));
@@ -444,8 +476,10 @@ async function main() {
     check('Confirm shows the project as Released', true);
     const done = await apiStage(REL);
     check('Confirm releases the song on the server and moves it to Settled', done.stage === 'released' && done.settled && done.group === 'archive', JSON.stringify(done));
+    await showGroup('archive');
     await waitFor(`${q(`[data-pl-list="archive"] ${row(REL)}`)}`, 'row in Settled');
     check('released project row sits in the Settled group', true);
+    await showGroup('active');
     check('released row is no longer in Active', await ev(`!${q(`[data-pl-list="active"] ${row(REL)}`)}`));
     await shot('project-released');
     const rel = await stageState();
@@ -462,7 +496,7 @@ async function main() {
   const GONE = 'Ana Ruiz';
   const contactRows = () => ev(`[...document.querySelectorAll('[data-pl-contact]')].map(c => c.textContent)`);
   await step('contact delete', async () => {
-    await click(row(HELD_KEY));
+    await clickRow(row(HELD_KEY));
     await waitFor(`${q('.pl-hold-panel')}`, 'bravo hold panel');
     check('held project shows Waiting on Ana Ruiz before delete', await ev(`document.querySelector('.pl-hold-panel').textContent.includes('Waiting on Ana Ruiz')`));
     check('bravo row subtitle says Waiting on Ana Ruiz', await ev(`${q(row(HELD_KEY))}.textContent.includes('Waiting on Ana Ruiz')`));
@@ -488,7 +522,7 @@ async function main() {
     check('Confirm removes the contact from the list', (await contactRows()).length === before - 1, (await contactRows()).length);
     check('Contacts nav count dropped by one', await ev(`Number(document.querySelector('[data-pl-nav="contacts"] .pl-count').textContent) === ${before - 1}`));
     await shot('contact-deleted');
-    await click(row(HELD_KEY));
+    await clickRow(row(HELD_KEY));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Bravo')`, 'bravo detail');
     await waitFor(`${q('.pl-hold-panel')}`, 'bravo hold panel');
     check('Ana Ruiz is gone from bravo People', await ev(`![...document.querySelectorAll('[data-pl-pane="project"] .pl-person')].some(p => p.textContent.includes('Ana Ruiz'))`));
@@ -497,13 +531,68 @@ async function main() {
     check('server cleared waiting_on and People for bravo, hold stays', srv.w === null && !srv.people.includes('Ana Ruiz') && srv.status === 'on_hold', JSON.stringify(srv));
   });
 
+  // 12d. One-click moves from list rows, each with Undo.
+  await step('quick moves from the list', async () => {
+    const info = k => ev(`fetch('/api/planner').then(r => r.json()).then(d => { const p = d.projects.find(x => x.key === ${JSON.stringify(k)}); return p ? { group: p.group, status: p.status, reason: p.hold_reason, until: p.hold_until } : null; })`);
+    const undo = async () => { await waitFor(`${q('#toast.show .toast-action')}`, 'Undo in toast'); await click('#toast .toast-action'); };
+    const moveBtn = (m, k) => `[data-pl-move="${m}"][data-key="${k}"]`;
+    await click('[data-pl-nav="agenda"]');
+    await showGroup('active');
+    await waitFor(`${q(row(KEY))}`, 'charlie in Active');
+    const acts = sel => ev(`getComputedStyle(${q(row(KEY))}.closest('.pl-row-wrap').querySelector('.pl-row-acts')).opacity`);
+    check('row quick moves are hidden until hover or focus', (await acts()) === '0', await acts());
+    const r = await ev(`(() => { const b = ${q(row(KEY))}.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r.x, y: r.y });
+    await sleep(250);
+    check('hovering an Active row shows Put on hold and Move to Settled', (await acts()) === '1' && await exists(moveBtn('hold', KEY)) && await exists(moveBtn('settle', KEY)), await acts());
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
+    await click(moveBtn('hold', KEY));
+    await waitFor(`${q('#toast.show')}`, 'hold toast');
+    check('Put on hold from the row saves on the server', (await info(KEY))?.group === 'on_hold', JSON.stringify(await info(KEY)));
+    check('a row move does not open the song', await ev(`!!${q('[data-pl-pane="agenda"]')}`));
+    check('the moved row leaves Active and the On hold count goes up', !(await exists(`[data-pl-list="active"] ${row(KEY)}`)) && (await text('[data-pl-group="on_hold"] .pl-count')) === '2', await text('[data-pl-group="on_hold"] .pl-count'));
+    await undo();
+    await waitFor(`${q(`[data-pl-list="active"] ${row(KEY)}`)}`, 'undo hold');
+    check('Undo after Put on hold returns the song to Active', (await info(KEY))?.group === 'active', JSON.stringify(await info(KEY)));
+    await click(moveBtn('settle', KEY));
+    await waitFor(`!${q(`[data-pl-list="active"] ${row(KEY)}`)}`, 'settled from row');
+    check('Move to Settled from the row saves on the server', (await info(KEY))?.group === 'archive', JSON.stringify(await info(KEY)));
+    await undo();
+    await waitFor(`${q(`[data-pl-list="active"] ${row(KEY)}`)}`, 'undo settle');
+    check('Undo after Move to Settled returns the song to Active', (await info(KEY))?.group === 'active', JSON.stringify(await info(KEY)));
+    const ECHO = 'planner echo - zed';
+    await showGroup('archive');
+    await waitFor(`${q(row(ECHO))}`, 'echo in Settled');
+    check('Settled row offers only Move to Active', await exists(moveBtn('activate', ECHO)) && !(await exists(moveBtn('hold', ECHO))) && !(await exists(moveBtn('settle', ECHO))));
+    check('released song row has no quick moves', !(await exists(`[data-pl-move][data-key="${REL}"]`)));
+    await click(moveBtn('activate', ECHO));
+    await waitFor(`!${q(`[data-pl-list="archive"] ${row(ECHO)}`)}`, 'echo out of Settled');
+    check('Move to Active from a Settled row saves on the server', (await info(ECHO))?.group === 'active', JSON.stringify(await info(ECHO)));
+    await undo();
+    await waitFor(`${q(`[data-pl-list="archive"] ${row(ECHO)}`)}`, 'undo activate');
+    check('Undo after Move to Active returns the song to Settled', (await info(ECHO))?.group === 'archive', JSON.stringify(await info(ECHO)));
+    await showGroup('on_hold');
+    await waitFor(`${q(row(HELD_KEY))}`, 'bravo in On hold');
+    const held = await info(HELD_KEY);
+    await click(moveBtn('resume', HELD_KEY));
+    await waitFor(`!${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`, 'bravo resumed');
+    check('Resume from the row saves on the server', (await info(HELD_KEY))?.group === 'active', JSON.stringify(await info(HELD_KEY)));
+    await undo();
+    await waitFor(`${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`, 'undo resume');
+    const back = await info(HELD_KEY);
+    check('Undo after Resume restores the hold with its reason and back-on date', back?.group === 'on_hold' && back.reason === held.reason && back.until === held.until, JSON.stringify({ held, back }));
+    await showGroup('active');
+    check('On hold and Settled stay pinned after moves', await exists('#plFoot [data-pl-group="on_hold"]') && await exists('#plFoot [data-pl-group="archive"]'));
+    await shot('quick-moves');
+  });
+
   // 12e. Native window layout: 52px top bar, long project scrolled, left list stays sticky and visible.
   await step('native sidebar layout', async () => {
     const LONG = 'planner alpha - zed';
     await ev(`(async () => { for (let i = 1; i <= 30; i += 1) await fetch('/api/planner', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'todo_add', key: ${JSON.stringify(LONG)}, text: 'Native layout filler to-do ' + i, due_date: '' }) }); return true; })()`);
     await ev(`document.documentElement.classList.add('native-sidebar'); true`);
-    await click(row(LONG));
+    await clickRow(row(LONG));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length >= 30`, 'long alpha detail');
     check('native-sidebar adds the 52px body offset', (await ev(`parseFloat(getComputedStyle(document.body).paddingTop)`)) === 52);
     const tall = await ev(`document.documentElement.scrollHeight - window.innerHeight`);
@@ -561,7 +650,7 @@ async function main() {
     await waitFor(`${q('[data-pl-pane="agenda"]')}`, 'agenda narrow');
     await shot('narrow');
     check('narrow layout shows a single column (list first)', await ev(`(() => { const l = ${q('.pl-list')}, d = ${q('.pl-detail')}; if (!l || !d) return false; const lr = l.getBoundingClientRect(), dr = d.getBoundingClientRect(); return dr.width === 0 || lr.width === 0 || Math.abs(lr.left - dr.left) < 2 || getComputedStyle(l).display === 'none' || getComputedStyle(d).display === 'none'; })()`));
-    await click(row(KEY));
+    await clickRow(row(KEY));
     await waitFor(`${q('[data-pl="back"]')} && ${q('#plTitle')}`, 'Back button');
     check('narrow detail shows a Back button', true);
     check('no horizontal overflow at 700px', !(await overflowX()));
@@ -598,8 +687,8 @@ async function main() {
       await send('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile: false });
       await waitFor(`window.innerWidth === ${w}`, `viewport ${w}`);
       await ev(`location.hash = '#planner'; true`);
-      await waitFor(`${q(row(KEY))}`, 'planner list');
-      await click(row(KEY));
+      await waitFor(`${q('#plFoot [data-pl-group="archive"]')} || ${q('[data-pl-drawer-back]')}`, 'planner list');
+      await clickRow(row(KEY));
       await waitFor(`${q('[data-pl="stage"]')}`, 'stage track');
       const m = await ev(`(() => { const c = document.querySelector('.deck-stage.is-current span'); const t = document.querySelector('.deck-stages').getBoundingClientRect();
         const b = document.querySelector('.deck-stage.is-current').getBoundingClientRect();

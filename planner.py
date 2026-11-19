@@ -221,6 +221,7 @@ def _project(song: dict, ctx: dict, today: date) -> dict:
         "hold_since": plan["hold_since"],
         "waiting_on": plan["waiting_on"],
         "waiting_on_name": contact["name"] if contact else "",
+        "list_override": plan["list_override"],
         "priority": plan["priority"],
         "due_value": due.isoformat() if due else "",
         "due": disp["due"],
