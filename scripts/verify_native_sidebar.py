@@ -47,8 +47,13 @@ r["initial_selection_silent"] = picked == [] and ov.itemAtRow_(ov.selectedRow())
 for name in ("Settings", "Planner", "Dashboard"):
     ov.selectRowIndexes_byExtendingSelection_(FN.NSIndexSet.indexSetWithIndex_(titles.index(name)), False); pump(0.1)
 r["callback_sequence_ok"] = picked == ["settings", "planner", "dashboard"]
+pump(0.5)
+r["hides_after_user_pick"] = sb.collapsed and sb.glass.frame().origin.x < 0 and sb.glass.alphaValue() == 0
+shot("after_pick.png")
+sb.set_collapsed(False, animate=False)
 n = len(picked); sb.select("settings"); pump(0.1)
 r["programmatic_select_silent"] = len(picked) == n
+r["programmatic_select_keeps_open"] = not sb.collapsed
 sb.select("dashboard"); pump(0.2)
 shot("open.png")
 w_open = detail.frame().size.width

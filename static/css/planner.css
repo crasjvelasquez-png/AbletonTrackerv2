@@ -23,15 +23,24 @@ html.native-sidebar .pl { --pl-top: 142px; }
 .pl-list {
   position: sticky;
   top: var(--pl-top);
-  max-height: calc(100vh - var(--pl-top) - 20px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
-  scrollbar-width: thin;
+  height: calc(100vh - var(--pl-top) - 20px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .pl-search { position: sticky; top: 0; z-index: 1; padding-bottom: 8px; background: var(--bg); }
 .pl-search .text-input { min-height: 36px; font-size: 14px; }
-.pl-nav { display: grid; gap: 16px; }
+.pl-nav {
+  flex: 1 1 auto; min-height: 0; display: grid; gap: 16px; align-content: start;
+  overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; scrollbar-width: thin;
+}
+/* On hold and Settled stay pinned at the bottom of the list; each opens its own list. */
+.pl-foot { flex: 0 0 auto; display: grid; gap: 2px; padding: 8px 4px 0 0; }
+.pl-foot[hidden] { display: none; }
+.pl-foot-row { font-weight: 500; color: var(--ink-2); }
+.pl-foot-row:hover { color: var(--ink); }
+.pl-foot-end { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.pl-drawer-head { height: 32px; }
 .pl-navgroup { display: grid; gap: 2px; }
 .pl-navrow, .pl-row, .pl-group-head.is-toggle {
   appearance: none; border: 0; background: transparent; color: var(--ink);
@@ -65,6 +74,30 @@ html.native-sidebar .pl { --pl-top: 142px; }
 .pl-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 6px 12px; min-height: 48px;
+}
+/* Quick moves (Put on hold / Resume / Move to Settled / Move to Active) appear on hover or focus. */
+.pl-row-wrap { position: relative; }
+.pl-row-acts {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  display: flex; gap: 2px; opacity: 0; pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pl-row-wrap.has-acts:hover .pl-row-acts, .pl-row-wrap.has-acts:focus-within .pl-row-acts { opacity: 1; pointer-events: auto; }
+.pl-row-wrap.has-acts:hover .pl-row-side, .pl-row-wrap.has-acts:focus-within .pl-row-side { visibility: hidden; }
+.pl-row-wrap.has-acts:hover .pl-row, .pl-row-wrap.has-acts:focus-within .pl-row { padding-right: 76px; }
+.pl-row-wrap:hover .pl-row { background: color-mix(in srgb, var(--surface-hover) 60%, transparent); }
+.pl-row-wrap:hover .pl-row.is-active { background: var(--accent-soft); }
+.pl-act {
+  appearance: none; border: 0; background: transparent; color: var(--ink-3); cursor: pointer;
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-control);
+  transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms cubic-bezier(0.22, 1, 0.36, 1), scale 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pl-act:hover, .pl-act:focus-visible { color: var(--ink); background: color-mix(in srgb, var(--surface-hover) 90%, transparent); }
+.pl-act:active { scale: 0.96; }
+@media (hover: none) {
+  .pl-row-wrap.has-acts .pl-row-acts { opacity: 1; pointer-events: auto; }
+  .pl-row-wrap.has-acts .pl-row-side { visibility: hidden; }
+  .pl-row-wrap.has-acts .pl-row { padding-right: 76px; }
 }
 .pl-row-main { display: grid; min-width: 0; flex: 1 1 auto; gap: 0; }
 .pl-row-title { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
@@ -264,7 +297,8 @@ button.pl-todo-text:hover { background: var(--surface-hover); }
 /* ---- narrow: single column ---- */
 @media (max-width: 759px) {
   .pl { grid-template-columns: 1fr; gap: 16px; }
-  .pl-list { position: static; max-height: none; overflow: visible; padding-right: 0; }
+  .pl-list { position: static; height: auto; max-height: none; overflow: visible; padding-right: 0; }
+  .pl-nav { overflow: visible; padding-right: 0; }
   .pl-search { position: static; background: transparent; }
   .pl[data-mobile="list"] .pl-detail { display: none; }
   .pl[data-mobile="detail"] .pl-list { display: none; }
