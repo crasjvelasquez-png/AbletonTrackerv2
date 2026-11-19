@@ -8,7 +8,10 @@ import threading
 import subprocess
 import os
 import fcntl
-from datetime import date, datetime
+import math
+import struct
+import zlib
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import rumps
@@ -24,12 +27,14 @@ from tracker import (
     STATE_TRACKING,
     day_seconds,
     is_ableton_running,
-    streak_days,
+    production_run_days,
     week_seconds,
     yesterday_seconds,
     Tracker,
 )
 from notifications import NotificationCoordinator, NotificationMessage
+from projects import ProjectCatalog, find_ableton_app, open_project, resolve_project_path, resolve_song_path
+import songs
 
 DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
@@ -38,9 +43,52 @@ DASHBOARD_WINDOW_SCRIPT = APP_DIR / "dashboard_window.py"
 PAUSE_FILE = Path.home() / ".ableton_tracker" / "paused"
 REFRESH_INTERVAL = 5
 TRACKER_WAKE_INTERVAL = 5
-NOTIFICATION_CHECK_INTERVAL = 5 * 60
+NOTIFICATION_CHECK_INTERVAL = 30
 NOTIFICATION_STATE_PATH = Path.home() / ".ableton_tracker" / "notification_state.json"
 INSTANCE_LOCK_PATH = Path.home() / ".ableton_tracker" / "tracker-app.lock"
+BADGE_DIR = Path.home() / ".ableton_tracker" / "menubar-badges"
+BADGE_PX = 40  # rumps sizes status icons to 20pt; draw at 2x.
+BADGE_STEPS = 24
+BADGE_ACCENT = (164, 178, 246)
+BADGE_GLYPHS = {"tracking": "●", "open": "◐", "idle": "○"}
+STATUS_ITEM_AUTOSAVE_NAME = "TrackerStatusItem"
+STATUS_ITEM_DEFAULT_POSITION = 400.0  # points from the screen's right edge
+
+
+def render_badge_png(state: str, progress: float) -> bytes:
+    """Draw the minimal status badge: a thin goal ring, filled clockwise from 12."""
+    progress = min(max(progress or 0.0, 0.0), 1.0)
+    color = BADGE_ACCENT if state == "tracking" else (0, 0, 0)
+    arc_alpha = 0.55 if state == "idle" else 1.0
+    center, radius, half_stroke, dot = BADGE_PX / 2, 12.0, 1.5, 3.0
+    sub = 4
+
+    def alpha_at(x: float, y: float) -> float:
+        dx, dy = x - center, y - center
+        dist = math.hypot(dx, dy)
+        if abs(dist - radius) <= half_stroke:
+            angle = math.atan2(dx, -dy) % math.tau
+            return arc_alpha if angle < progress * math.tau else 0.28
+        if state == "tracking" and dist <= dot:
+            return 1.0
+        return 0.0
+
+    rows = bytearray()
+    for py in range(BADGE_PX):
+        rows.append(0)
+        for px in range(BADGE_PX):
+            total = sum(
+                alpha_at(px + (i + 0.5) / sub, py + (j + 0.5) / sub)
+                for i in range(sub) for j in range(sub)
+            )
+            rows += bytes((*color, round(255 * total / (sub * sub))))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    header = struct.pack(">IIBBBBB", BADGE_PX, BADGE_PX, 8, 6, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b""))
 
 
 def acquire_instance_lock(path: Path = INSTANCE_LOCK_PATH):
@@ -53,6 +101,40 @@ def acquire_instance_lock(path: Path = INSTANCE_LOCK_PATH):
         lock_file.close()
         return None
     return lock_file
+
+
+def pin_status_item_position(status_item, defaults=None) -> None:
+    """Remember the status item's slot, seeding one beside the clock on first run.
+
+    macOS puts a new status item leftmost, which on notched MacBooks lands it
+    under the notch where it is silently hidden. A saved position (which
+    Cmd-dragging later updates) keeps it in view across relaunches.
+    """
+    if defaults is None:
+        from Foundation import NSUserDefaults
+        defaults = NSUserDefaults.standardUserDefaults()
+    key = f"NSStatusItem Preferred Position {STATUS_ITEM_AUTOSAVE_NAME}"
+    if defaults.objectForKey_(key) is None:
+        defaults.setDouble_forKey_(STATUS_ITEM_DEFAULT_POSITION, key)
+    status_item.setAutosaveName_(STATUS_ITEM_AUTOSAVE_NAME)
+
+
+def install_reopen_handler(on_reopen) -> None:
+    """Open the Tracker window when Tracker.app is launched while already running.
+
+    LaunchServices routes a second launch to this process as a "reopen" event
+    instead of starting a new copy, so without a handler it does nothing.
+    """
+    import objc
+
+    class NSApp(objc.Category(rumps.rumps.NSApp)):  # PyObjC requires the class's own name
+        @objc.typedSelector(b"Z@:@Z")
+        def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible):
+            try:
+                on_reopen()
+            except Exception as exc:
+                print(f"[reopen] could not open Tracker: {exc}", file=sys.stderr)
+            return True
 
 
 def fmt_dur(seconds: float) -> str:
@@ -108,14 +190,7 @@ def _get_default_goals() -> tuple[float | None, float | None]:
         return None, None
 
 
-def _find_ableton_app() -> str | None:
-    from glob import glob
-    candidates = sorted(glob("/Applications/Ableton Live *.app"))
-    if candidates:
-        return candidates[-1]
-    if Path("/Applications/Ableton Live.app").exists():
-        return "/Applications/Ableton Live.app"
-    return None
+_find_ableton_app = find_ableton_app
 
 
 class TrackerThread(threading.Thread):
@@ -125,38 +200,42 @@ class TrackerThread(threading.Thread):
         super().__init__(daemon=True)
         self.tracker = Tracker()
         self._lock = threading.Lock()
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
+        if sys.platform == 'darwin' and 'unittest' not in sys.modules:
+            from activity_observer import NativeObserver
+            self.tracker.observer = NativeObserver()
+            self.tracker.observer.start()
 
     @property
     def consecutive_failures(self) -> int:
-        with self._lock:
-            return self.tracker._consecutive_failures
+        return self.tracker._consecutive_failures
 
     @property
     def last_error(self) -> str | None:
-        with self._lock:
-            return self.tracker._last_error
+        return self.tracker._last_error
 
     def stop(self):
-        self._stop.set()
-        with self._lock:
-            self.tracker._close()
+        self._stop_event.set()
+        if self.tracker.observer is not None:
+            self.tracker.observer.wake.set()
+        if self.is_alive():
+            self.join(timeout=5)
+        if not self.is_alive():
+            self.tracker.shutdown()
 
     def poll_now(self, paused: bool):
         with self._lock:
             self.tracker.poll_once(paused=paused)
 
     def current_project(self) -> str | None:
-        with self._lock:
-            return self.tracker.project_name
+        return self.tracker.status().project_name
 
     def status(self):
-        with self._lock:
-            return self.tracker.status()
+        return self.tracker.status()
 
     def run(self):
         self.tracker.run(
-            stop_event=self._stop,
+            stop_event=self._stop_event,
             wake_interval=TRACKER_WAKE_INTERVAL,
             _lock=self._lock,
         )
@@ -180,6 +259,7 @@ class DashboardProcess:
             if self.server_proc is not None and self.server_proc.poll() is None:
                 return
             env = os.environ.copy()
+            env.pop("ABLETON_TRACKER_BACKGROUND", None)
             env["ABLETON_TRACKER_NO_BROWSER"] = "1"
             self.server_proc = subprocess.Popen(
                 [sys.executable, str(APP_DIR / "dashboard.py")],
@@ -191,12 +271,35 @@ class DashboardProcess:
 
     def open(self):
         if self.proc is None or self.proc.poll() is not None:
+            env = os.environ.copy()
+            env.pop("ABLETON_TRACKER_BACKGROUND", None)
             self.proc = subprocess.Popen(
                 [sys.executable, str(DASHBOARD_WINDOW_SCRIPT), "tracker"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=APP_DIR,
+                env=env,
             )
+        elif sys.platform == "darwin" and "unittest" not in sys.modules:
+            activated = False
+            try:
+                from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+                app = NSRunningApplication.runningApplicationWithProcessIdentifier_(self.proc.pid)
+                if app is not None:
+                    activated = bool(app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps))
+            except Exception:
+                activated = False
+            if not activated:
+                subprocess.Popen(
+                    [
+                        "osascript",
+                        "-e",
+                        'tell application id "com.abletontracker.tracker"\nreopen\nactivate\nend tell',
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
@@ -217,6 +320,19 @@ class AbletonTrackerApp(rumps.App):
             enabled="unittest" not in sys.modules,
         )
         self._next_notification_check = 0.0
+        # The manual pause control is hidden; do not strand an old paused run.
+        try:
+            PAUSE_FILE.unlink(missing_ok=True)
+        except OSError as exc:
+            print(f"[startup] could not clear manual pause: {exc}", file=sys.stderr)
+        from tracker import DB_PATH
+        self.project_catalog = ProjectCatalog(DB_PATH)
+        self._next_project_refresh = 0.0
+        self._project_snapshot = None
+        self.open_project_item = rumps.MenuItem("Open Project")
+        self.open_project_item.add(rumps.MenuItem("Loading projects…"))
+        self.open_project_item.add(None)
+        self.open_project_item.add(rumps.MenuItem("Customize…", callback=self.customize_projects))
 
         self.open_ableton_item = rumps.MenuItem(
             "Open Ableton", callback=self.open_ableton
@@ -231,26 +347,23 @@ class AbletonTrackerApp(rumps.App):
         self.week_item.set_callback(None)
         self.streak_item = rumps.MenuItem("Streak: —")
         self.streak_item.set_callback(None)
-        self.pause_item = rumps.MenuItem(
-            "Pause tracking" if not PAUSE_FILE.exists() else "Resume tracking",
-            callback=self.toggle_pause,
-            key="p",
-        )
-
         self.menu = [
             self.open_ableton_item,
-            None,
             self.status_item,
             self.today_item,
-            self.yesterday_item,
             self.week_item,
             self.streak_item,
             None,
-            rumps.MenuItem("Open Tracker", callback=self.open_dashboard, key="d"),
-            self.pause_item,
+            self.open_project_item,
+            rumps.MenuItem("Open Tracker", callback=self.open_dashboard),
             None,
-            rumps.MenuItem("Quit", callback=self.quit_app, key="q"),
+            rumps.MenuItem("Quit", callback=self.quit_app),
         ]
+        self.panel = None
+        self._show_open_ableton = False
+        # rumps creates its native status item immediately before this event.
+        if hasattr(rumps, "events"):
+            rumps.events.before_start.register(self._install_panel)
 
         self.tracker_thread.start()
         self.dashboard.prewarm()
@@ -261,31 +374,45 @@ class AbletonTrackerApp(rumps.App):
         self._refresh(None)
 
     def _refresh(self, _):
-        paused = PAUSE_FILE.exists()
-        self.pause_item.title = "Resume tracking" if paused else "Pause tracking"
+        self._refresh_projects()
 
         daily_goal, weekly_goal = _get_default_goals()
-        today = today_seconds()
-        yesterday = yesterday_seconds()
-        streak = 0
-        week = 0.0
-        try:
-            streak = streak_days()
-            week = week_seconds()
-        except Exception as e:
-            print(f"[refresh] streak/week error: {e}", file=sys.stderr)
+        from tracker import DB_PATH
+        revision = []
+        for path in (DB_PATH, Path(str(DB_PATH)+'-wal')):
+            try:
+                stat = path.stat()
+                revision.append((stat.st_mtime_ns,stat.st_size))
+            except FileNotFoundError:
+                revision.append(None)
+        key = (tuple(revision),date.today(),time.tzname)
+        if getattr(self,'_totals_key',None) != key or 'unittest' in sys.modules:
+            today = today_seconds()
+            yesterday = yesterday_seconds()
+            streak,week = 0,0.0
+            try:
+                streak = production_run_days()
+                week = week_seconds()
+            except Exception as e:
+                print(f"[refresh] streak/week error: {e}",file=sys.stderr)
+            self._totals = today,yesterday,streak,week
+            self._deck_model = self._build_deck_model()
+            self._totals_key = key
+        today,yesterday,streak,week = self._totals
 
         self._check_notifications(
             today=today,
             week=week,
             weekly_goal=weekly_goal,
+            daily_goal=daily_goal,
             streak=streak,
         )
 
         failures = self.tracker_thread.consecutive_failures
         last_error = self.tracker_thread.last_error
         if failures > 0:
-            self.title = self._build_title("⚠", today, daily_goal, streak, active=False)
+            self.icon, self._badge_key = None, None
+            self.title = f"⚠ {fmt_goal_time(today, None)}"
             trunc = (last_error or "unknown")[:60]
             self.status_item.title = f"Error ({failures}): {trunc}"
             self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
@@ -293,16 +420,17 @@ class AbletonTrackerApp(rumps.App):
             self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
             self._update_streak(streak)
             self._update_open_ableton(False)
+            self._sync_panel("error")
             return
 
         status = self.tracker_thread.status()
         ableton_up = status.state not in (STATE_ABLETON_CLOSED,)
 
         if status.state == STATE_PAUSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Paused"
         elif status.state == STATE_IDLE_PAUSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             idle_seconds = int(status.hid_idle_seconds)
             if idle_seconds < 60:
                 idle_label = f"{idle_seconds}s"
@@ -311,23 +439,88 @@ class AbletonTrackerApp(rumps.App):
             project = status.resume_hint_project or "last project"
             self.status_item.title = f"Idle {idle_label} — {project}"
         elif status.state == STATE_TRACKING and status.project_name:
-            self.title = self._build_title("●", today, daily_goal, streak, active=True)
+            self.title = self._build_title("tracking", today, daily_goal, streak, active=True)
             self.status_item.title = f"Working on: {status.project_name}"
         elif status.state == STATE_ABLETON_OPEN:
-            self.title = self._build_title("◐", today, daily_goal, streak, active=False)
+            self.title = self._build_title("open", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton open (no project)"
         elif status.state == STATE_ABLETON_CLOSED:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Ableton not running"
         else:
-            self.title = self._build_title("○", today, daily_goal, streak, active=False)
+            self.title = self._build_title("idle", today, daily_goal, streak, active=False)
             self.status_item.title = "Idle"
+        if status.checked_at and status.message:
+            self.status_item.title = status.message
+        # Without Accessibility the tracker cannot read Live's project title and
+        # records nothing; macOS drops the grant when the app's signature changes.
+        needs_accessibility = (ableton_up and status.running and not status.paused
+                               and status.state != STATE_TRACKING
+                               and "Accessibility permission" in (status.source_error or ""))
+        if needs_accessibility:
+            self.icon, self._badge_key = None, None
+            self.title = f"⚠ {fmt_goal_time(today, None)}"
+            self.status_item.title = "Not tracking: allow Tracker in Accessibility settings"
 
         self.today_item.title = f"Today: {fmt_goal_time(today, daily_goal)}"
         self.yesterday_item.title = f"Yesterday: {fmt_dur(yesterday)}"
         self.week_item.title = f"This week: {fmt_goal_time(week, weekly_goal)}"
         self._update_streak(streak)
         self._update_open_ableton(not ableton_up)
+        self._sync_panel("error" if needs_accessibility else "tracking" if status.state == STATE_TRACKING else "idle")
+
+    def _install_panel(self):
+        """Attach presentation only after rumps has initialized the native menu."""
+        if "unittest" not in sys.modules:
+            try:
+                pin_status_item_position(self._nsapp.nsstatusitem)
+                install_reopen_handler(lambda: self.open_dashboard(None))
+            except Exception as exc:
+                print(f"[startup] status item setup failed: {exc}", file=sys.stderr)
+        try:
+            from menubar_panel import MenuBarPanel
+            self.panel = MenuBarPanel.attach(
+                self._nsapp.nsstatusitem,
+                self.open_project_item._menu,
+                lambda: self._refresh(None),
+                {
+                    "tracker": lambda: self.open_dashboard(None),
+                    "ableton": lambda: self.open_ableton(None),
+                    "quit": lambda: self.quit_app(None),
+                    "deck_open": self.deck_open,
+                    "deck_pick": self.deck_pick,
+                    "deck_stage": self.deck_stage,
+                    "deck_next_save": self.deck_next_save,
+                    "deck_next_complete": self.deck_next_complete,
+                    "deck_due": self.deck_due,
+                    "deck_snooze": self.deck_snooze,
+                    "lane_focus": self.lane_focus,
+                },
+            )
+            self._refresh(None)
+        except Exception as exc:
+            if self.panel is not None:
+                self.panel.dispose()
+                self.panel = None
+            print(f"[panel] using native menu fallback: {exc}", file=sys.stderr)
+
+    def _sync_panel(self, state):
+        if self.panel is None:
+            return
+        try:
+            self.panel.update(
+                status=self.status_item.title,
+                today=self.today_item.title,
+                week=self.week_item.title,
+                run=self.streak_item.title,
+                show_open_ableton=self._show_open_ableton,
+                state=state,
+                deck=getattr(self, "_deck_model", None),
+            )
+        except Exception as exc:
+            self.panel.dispose()
+            self.panel = None
+            print(f"[panel] using native menu fallback: {exc}", file=sys.stderr)
 
     def _check_notifications(
         self,
@@ -336,17 +529,27 @@ class AbletonTrackerApp(rumps.App):
         week: float,
         weekly_goal: float | None,
         streak: int,
+        daily_goal: float | None = None,
     ) -> None:
         now_monotonic = time.monotonic()
         if now_monotonic < self._next_notification_check:
             return
         self._next_notification_check = now_monotonic + NOTIFICATION_CHECK_INTERVAL
         try:
+            try:
+                pause_token = str(PAUSE_FILE.stat().st_mtime_ns)
+            except FileNotFoundError:
+                pause_token = None
+            status = self.tracker_thread.status()
             self.notification_coordinator.check(
                 now=datetime.now(),
                 today_seconds=today,
                 week_seconds=week,
                 weekly_goal_hours=weekly_goal,
+                daily_goal_hours=daily_goal,
+                pause_token=pause_token,
+                ableton_running=status.running and self.tracker_thread.consecutive_failures == 0,
+                tracker_status=status,
                 streak_days=streak,
                 deliver=self._deliver_notification,
             )
@@ -355,38 +558,62 @@ class AbletonTrackerApp(rumps.App):
 
     @staticmethod
     def _deliver_notification(notification: NotificationMessage) -> None:
-        rumps.notification(
-            notification.title,
-            notification.subtitle,
-            notification.message,
-            sound=False,
-        )
+        packaged = APP_DIR.parent / "Tracker Notifications.app" / "Contents" / "MacOS" / "tracker-notify"
+        development = APP_DIR / "dist" / "Tracker.app" / "Contents" / "Resources" / "Tracker Notifications.app" / "Contents" / "MacOS" / "tracker-notify"
+        sender = packaged if packaged.exists() else development
+        if not sender.exists():
+            raise RuntimeError("Build Tracker.app to enable Tracker notifications")
+        args = [str(sender), notification.title, notification.subtitle, notification.message]
+        if notification.category:
+            args += [notification.category, notification.day]
+        result = subprocess.run(args,
+                                timeout=15, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or f"Tracker notification sender exited {result.returncode}")
 
     def _build_title(
-        self, icon: str, seconds: float, goal: float | None, streak: int, active: bool
+        self, state: str, seconds: float, goal: float | None, streak: int, active: bool
     ) -> str:
-        time_str = fmt_goal_time(seconds, goal)
-        parts = [icon, time_str]
-        if goal is not None and goal > 0 and (seconds or 0) >= goal * 3600:
-            parts.append("✓")
-        if streak > 0:
-            parts.append(f"💿{streak}")
-        return " ".join(parts)
+        time_str = fmt_goal_time(seconds, None)
+        progress = seconds / (goal * 3600) if goal and goal > 0 else 1.0
+        if self._set_badge(state, progress):
+            return time_str
+        return f"{BADGE_GLYPHS[state]} {time_str}"
+
+    def _set_badge(self, state: str, progress: float) -> bool:
+        """Swap the status icon only when the drawn badge changes; False means use glyphs."""
+        key = (state, round(min(max(progress, 0.0), 1.0) * BADGE_STEPS))
+        if getattr(self, "_badge_key", None) == key:
+            return True
+        path = BADGE_DIR / f"{key[0]}-{key[1]}-{bytes(BADGE_ACCENT).hex()}.png"
+        try:
+            if not path.exists():
+                BADGE_DIR.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_bytes(render_badge_png(key[0], key[1] / BADGE_STEPS))
+                tmp.replace(path)
+            self.template = state != "tracking"
+            self.icon = str(path)
+        except Exception as exc:
+            print(f"[badge] falling back to glyph title: {exc}", file=sys.stderr)
+            self._badge_key = None
+            self.icon = None
+            return False
+        self._badge_key = key
+        return True
 
     def _update_streak(self, streak: int):
         if streak > 0:
             day_word = "day" if streak == 1 else "days"
-            self.streak_item.title = f"💿 Streak: {streak} {day_word}"
+            self.streak_item.title = f"Streak: {streak} {day_word}"
         else:
             self.streak_item.title = "Streak: —"
 
     def _update_open_ableton(self, show: bool):
-        if show:
-            self.open_ableton_item.title = "Open Ableton"
-            self.open_ableton_item.set_callback(self.open_ableton)
-        else:
-            self.open_ableton_item.title = "Ableton is running"
-            self.open_ableton_item.set_callback(None)
+        self._show_open_ableton = show
+        native_item = getattr(self.open_ableton_item, "_menuitem", None)
+        if native_item is not None:
+            native_item.setHidden_(not show)
 
     def open_ableton(self, _):
         app_path = _find_ableton_app()
@@ -406,6 +633,170 @@ class AbletonTrackerApp(rumps.App):
     def open_dashboard(self, _):
         self.dashboard.open()
 
+    def customize_projects(self, _):
+        # Always reaches Projects, even when the embedded dashboard is open.
+        import webbrowser
+        self.dashboard.start_server()
+        webbrowser.open(f"{DASHBOARD_URL}/#settings-projects")
+
+    def _refresh_projects(self):
+        now = time.monotonic()
+        if now >= self._next_project_refresh:
+            self._next_project_refresh = now + 30
+            self.project_catalog.refresh_async()
+        snapshot = self.project_catalog.take_snapshot()
+        if snapshot is None or snapshot == self._project_snapshot:
+            return
+        self._project_snapshot = snapshot
+        menu = self.open_project_item
+        menu.clear()
+        # Explicit keys avoid collisions with headings or identically named sets.
+        def add(parent, key, title, path=None):
+            item = rumps.MenuItem(title, callback=(lambda _: self._open_project(path)) if path else None)
+            parent[key] = item
+        menu.add(rumps.MenuItem("New from Template"))
+        for index, template in enumerate(snapshot.get("templates", [])):
+            add(menu, f"template-{index}", template["name"], template["path"])
+        if not snapshot.get("templates"):
+            menu["template-hint"] = rumps.MenuItem("Choose templates in Customize…", callback=self.customize_projects)
+        menu.add(None)
+        menu.add(rumps.MenuItem("Recent"))
+        for index, project in enumerate(snapshot["recent"]):
+            add(menu, f"recent-{index}", project["name"] if project["path"] else project["name"] + " (not found)", project["path"])
+        if not snapshot["recent"]:
+            menu.add(rumps.MenuItem("No saved projects tracked yet"))
+        menu.add(None)
+        menu.add(rumps.MenuItem("Pinned Folders"))
+        for index, folder in enumerate(snapshot["folders"]):
+            item = rumps.MenuItem(folder["label"] + (" (missing)" if folder["missing"] else ""))
+            menu[f"folder-{index}"] = item
+            if folder["missing"]:
+                continue
+            for project_index, project in enumerate(folder["projects"]):
+                label = os.path.relpath(project["path"], folder["path"])
+                add(item, f"set-{project_index}", label, project["path"])
+            if not folder["projects"]:
+                item.add(rumps.MenuItem("No Live sets found"))
+            if folder["more"]:
+                item.add(rumps.MenuItem("Showing the 25 newest sets"))
+            if folder["warning"]:
+                item.add(rumps.MenuItem(folder["warning"]))
+        if not snapshot["folders"]:
+            menu.add(rumps.MenuItem("Pin folders in Customize…"))
+        if snapshot.get("warning"):
+            menu.add(rumps.MenuItem(snapshot["warning"]))
+        menu.add(None)
+        menu.add(rumps.MenuItem("Customize…", callback=self.customize_projects))
+
+    def _open_project(self, path):
+        try:
+            open_project(path, _find_ableton_app())
+        except Exception as exc:
+            rumps.alert(title="Could not open project", message=str(exc))
+
+    # -- On Deck ----------------------------------------------------------
+
+    @staticmethod
+    def _db_path():
+        import tracker
+        return tracker.DB_PATH
+
+    def _build_deck_model(self):
+        """Display-only snapshot for the panel; None hides the section on failure."""
+        try:
+            model = songs.lanes_model(self._db_path())
+            now_lane = model.get("now_lane", "produce")
+            lanes = model.get("lanes") or []
+            active = next((lane for lane in lanes if lane.get("key") == now_lane), None)
+            if active is None and lanes:
+                active = lanes[0]
+            now_label = active["label"] if active else now_lane.capitalize()
+            deck_song = active.get("deck") if active else None
+            return {
+                "now_lane": now_lane,
+                "now_lane_label": now_label,
+                "lanes": [
+                    {
+                        "key": lane["key"],
+                        "label": lane["label"],
+                        "deck": lane.get("deck"),
+                    }
+                    for lane in lanes
+                ],
+                "deck": deck_song,
+            }
+        except Exception as exc:
+            print(f"[deck] unavailable: {exc}", file=sys.stderr)
+            return None
+
+    def _deck_song(self):
+        return songs.current_deck(songs.load_songs(self._db_path()))
+
+    def _deck_changed(self):
+        self._totals_key = None
+        self._refresh(None)
+
+    def lane_focus(self, lane):
+        songs.set_now_lane(self._db_path(), lane)
+        self._deck_changed()
+
+    def _open_song(self, song):
+        try:
+            open_project(resolve_song_path(self._db_path(), song, resolver=resolve_project_path), _find_ableton_app())
+        except Exception as exc:
+            rumps.alert(title="Could not open the On Deck song", message=str(exc))
+
+    def deck_pick(self, key):
+        current = self._deck_song()
+        snooze_days = None
+        if current and current["key"] != key:
+            choice = rumps.alert(
+                title=f"Snooze \u201c{current['title']}\u201d?",
+                message="Only one song is On Deck at a time. The snoozed song returns to your suggestions when the snooze ends.",
+                ok="Snooze 1 week", cancel="Cancel", other="Snooze 1 month")
+            if choice == 0:
+                return
+            snooze_days = 7 if choice == 1 else 30
+        songs.put_on_deck(self._db_path(), key, snooze_previous_days=snooze_days)
+        self._deck_changed()
+        song = self._deck_song()
+        if song:
+            self._open_song(song)
+
+    def deck_open(self):
+        song = self._deck_song()
+        if song:
+            self._open_song(song)
+
+    def deck_stage(self, stage):
+        song = self._deck_song()
+        if song:
+            songs.set_stage(self._db_path(), song["key"], stage)
+            self._deck_changed()
+
+    def deck_next_save(self, text):
+        song = self._deck_song()
+        if song:
+            songs.set_next_task(self._db_path(), song["key"], text)
+            self._deck_changed()
+
+    def deck_next_complete(self):
+        song = self._deck_song()
+        if song:
+            songs.complete_next_task(self._db_path(), song["key"])
+            self._deck_changed()
+
+    def deck_due(self, days):
+        song = self._deck_song()
+        if song:
+            value = (date.today() + timedelta(days=days)).isoformat() if days else ""
+            songs.set_due_date(self._db_path(), song["key"], value)
+            self._deck_changed()
+
+    def deck_snooze(self, days):
+        songs.snooze_deck(self._db_path(), days)
+        self._deck_changed()
+
     def toggle_pause(self, sender):
         if PAUSE_FILE.exists():
             PAUSE_FILE.unlink()
@@ -419,15 +810,24 @@ class AbletonTrackerApp(rumps.App):
         self._refresh(None)
 
     def quit_app(self, _):
+        if self.panel is not None:
+            self.panel.dispose()
         self.tracker_thread.stop()
         self.dashboard.stop()
         rumps.quit_application()
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
     instance_lock = acquire_instance_lock()
     if instance_lock is None:
+        if os.environ.get("ABLETON_TRACKER_OPEN_WINDOW") == "1":
+            DashboardProcess().open()
         print("Tracker is already running; ignoring duplicate launch.")
         sys.exit(0)
-    AbletonTrackerApp().run()
+    app = AbletonTrackerApp()
+    signal.signal(signal.SIGTERM, lambda *args: app.quit_app(None))
+    try:
+        app.run()
+    finally:
+        app.tracker_thread.stop()
+        app.dashboard.stop()

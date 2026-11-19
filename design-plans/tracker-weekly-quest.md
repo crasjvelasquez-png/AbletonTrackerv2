@@ -50,7 +50,7 @@ No new shared primitive or dependency is required. Keep the implementation in th
 
 - Inherit: Tracker Dashboard weekly progress and weekly-target detail presentation.
 - Verify: card spacing at `1280x860`, minimum app size `900x650`, narrow viewport, light/dark themes, increased UI scale, reduced motion.
-- Exclude: daily-goal API behavior, Planner goals, notifications, database migrations, project rankings, session correction, and production-run rules.
+- Exclude: daily-goal API behavior, notifications, database migrations, project rankings, session correction, and production-run rules.
 
 ## Validation
 
@@ -66,4 +66,3 @@ No new shared primitive or dependency is required. Keep the implementation in th
 ## Design documentation
 
 - After acceptance and validation: record that Tracker represents weekly engagement through one truthful `Weekly Quest` using real recorded time and fixed percentage checkpoints. Destination: future Tracker surface brief or `DESIGN.md` when one exists.
-

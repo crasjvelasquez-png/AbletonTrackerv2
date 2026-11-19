@@ -49,8 +49,8 @@ Extend the existing project row contract rather than introducing a new endpoint.
 ## Scope
 
 - Inherit: Tracker selected-month project analytics.
-- Verify: project aliases, categories, live project, month navigation, Recent Entries pagination, light/dark themes, long project names.
-- Exclude: Planner project statuses/tasks, public leaderboards, cross-user comparison, XP, project renaming, category editing, and session mutation.
+- Verify: categories, live project, month navigation, Recent Entries pagination, light/dark themes, long project names.
+- Exclude: project-management workflows, public leaderboards, cross-user comparison, XP, project renaming, category editing, and session mutation.
 
 ## Validation
 
@@ -61,9 +61,8 @@ Extend the existing project row contract rather than introducing a new endpoint.
 
 ## Stop conditions
 
-- Stop if alias canonicalization cannot be reconciled with existing totals without a wider data-correctness change. Stop before changing session rows, saved metadata, or API fields used by Planner.
+- Stop before changing session rows, saved metadata, or API fields used by the dashboard.
 
 ## Design documentation
 
 - After acceptance and validation: record that Tracker project ranking is always scoped to the selected month, compares against the immediately previous calendar month, and uses truthful recorded-time allocation. Destination: future Tracker surface brief or `DESIGN.md` when one exists.
-

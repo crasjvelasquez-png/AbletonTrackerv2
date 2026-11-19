@@ -50,7 +50,7 @@ Add a backend helper because the existing zero-threshold streak contract cannot 
 
 - Inherit: Tracker Production Run card and detail only.
 - Verify: menu-bar or notification consumers of `summary.streak_days` remain unchanged.
-- Exclude: notifications, user-configurable thresholds, freezes/streak protection, XP, badges, social comparison, Weekly Quest calculations, and Planner goals.
+- Exclude: notifications, user-configurable thresholds, freezes/streak protection, XP, badges, social comparison, and Weekly Quest calculations.
 
 ## Validation
 
@@ -66,4 +66,3 @@ Add a backend helper because the existing zero-threshold streak contract cannot 
 ## Design documentation
 
 - After acceptance and validation: record the 15-minute local-day qualification rule, midnight grace, neutral failure treatment, and compatibility boundary for `streak_days`. Destination: future Tracker surface brief or `DESIGN.md` when one exists.
-

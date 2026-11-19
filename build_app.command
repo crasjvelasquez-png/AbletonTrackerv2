@@ -17,6 +17,5 @@ python3 "$DIR/build_app.py"
 echo
 echo "Built standalone app bundles:"
 echo "  $DIR/dist/Tracker.app"
-echo "  $DIR/dist/Planner.app"
 echo ""
 read -rp "Press Enter to close..."

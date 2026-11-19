@@ -7,12 +7,21 @@ import time
 import signal
 import sys
 import re
-import tempfile
 import threading
 import ctypes
 import ctypes.util
+import fcntl
+import json
+import math
+import uuid
+
+from tracking_policy import (Observation, POLICY_VERSION, INPUT_ALLOWANCE, PLAY_ALLOWANCE,
+                             BACKGROUND_ALLOWANCE,
+                             LISTENING_ALLOWANCE, PROJECT_GRACE,
+                             EVIDENCE_TTL, POLICY_TEXT)
+from activity_store import ensure_activity_schema, load_activity_rows
 from collections import defaultdict
-from contextlib import closing, suppress
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -23,20 +32,13 @@ STATE_PAUSED = "paused"
 STATE_ABLETON_OPEN = "ableton_open"
 STATE_ABLETON_CLOSED = "ableton_closed"
 
-POLL_INTERVAL = 30  # seconds between checks
-IDLE_THRESHOLD = 30  # seconds of HID + audio idle before tracking pauses
-AUDIO_POLL_TIMEOUT = 3  # seconds before giving up on the audio probe subprocess
-AUDIO_LEVEL_POLL_SECONDS = 1.0
-# -70 dBFS peak (≈0.000316 linear) — low enough to clear plugin white-noise
-# residue without missing real playback. RMS uses the same floor; the probe
-# treats audio as active when either peak or RMS crosses it.
-AUDIO_LEVEL_ACTIVE_THRESHOLD = 0.000316
+POLL_INTERVAL = 5  # lightweight reconciliation; native events wake the loop sooner
+IDLE_THRESHOLD = INPUT_ALLOWANCE  # compatibility alias; policy lives in tracking_policy.py
 CLEANUP_INTERVAL = 15 * 60  # seconds between background cleanup passes
 SESSION_CONDENSE_GAP_SECONDS = 5 * 60  # Deprecated, use DEFAULT_CONDENSE_GAP_MINUTES
 DEFAULT_CONDENSE_GAP_MINUTES = 15
 TRACKER_MAX_RETRIES = 5
 TRACKER_MAX_BACKOFF = 60
-WAKE_GRACE_MULTIPLIER = 3  # poll-interval multiplier to detect sleep/wake cycles
 # Gaps shorter than this are polling/project-switch jitter, not real breaks.
 # 60s keeps focus-break data free of noise while preserving real pauses.
 MIN_PAUSE_SECONDS = 60
@@ -75,6 +77,7 @@ NON_PROJECT_TITLE_PATTERNS = [
     # Generic accessibility/UI labels exposed as transient Live window titles.
     r"^tooltip$",
     r"^missing value$",
+    r"^window$",
 ]
 _NON_PROJECT_TITLE_RES = [re.compile(p, re.IGNORECASE) for p in NON_PROJECT_TITLE_PATTERNS]
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -161,12 +164,6 @@ def setup_db():
             )
         """)
         ensure_pauses_table(conn)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS project_aliases (
-                alias_name     TEXT PRIMARY KEY,
-                canonical_name TEXT NOT NULL
-            )
-        """)
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
         }
@@ -192,6 +189,7 @@ def setup_db():
         conn.execute("""
             UPDATE sessions SET todos_json = COALESCE(todos_json, '[]') WHERE todos_json IS NULL
         """)
+        ensure_activity_schema(conn)
         conn.commit()
 
 
@@ -627,8 +625,9 @@ def get_condense_gap_seconds() -> float:
                 ).fetchone()
                 if row:
                     return float(row["value"]) * 60
-    except Exception as e:
-        print(f"[{_ts()}] Warning: failed to read session_condense_gap_minutes: {e}")
+    except sqlite3.OperationalError as e:
+        if 'no such table' not in str(e):
+            print(f"[{_ts()}] Warning: failed to read session_condense_gap_minutes: {e}")
     return DEFAULT_CONDENSE_GAP_MINUTES * 60
 
 
@@ -720,44 +719,30 @@ def build_activity_rollups(rows) -> tuple[dict[str, float], dict[tuple[str, int]
 
 
 def day_seconds(target_day: date) -> float:
-    """Return tracked seconds allocated to the given local calendar day."""
-    if not DB_PATH.exists():
-        return 0.0
+    return _all_daily_totals().get(target_day.isoformat(), 0.0)
 
-    day_start = datetime.combine(target_day, datetime.min.time()).timestamp()
-    day_end = datetime.combine(target_day + timedelta(days=1), datetime.min.time()).timestamp()
 
-    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT start_time, last_seen_time, end_time, active_seconds
-            FROM sessions
-            WHERE active_seconds > 0
-              AND start_time < ?
-              AND COALESCE(end_time, last_seen_time, start_time) >= ?
-            """,
-            (day_end, day_start),
-        ).fetchall()
-
-    daily, _ = build_activity_rollups(rows)
-    return daily.get(target_day.isoformat(), 0.0)
+_ROLLUP_CACHE = {}
 
 
 def _all_daily_totals() -> dict[str, float]:
-    """Return {iso_date: total_active_seconds} for all tracked days."""
     if not DB_PATH.exists():
         return {}
+    revisions=[]
+    for path in (DB_PATH,Path(str(DB_PATH)+'-wal')):
+        try:
+            stat=path.stat()
+            revisions.append((stat.st_ino,stat.st_mtime_ns,stat.st_size))
+        except FileNotFoundError:
+            revisions.append(None)
+    key=(str(DB_PATH),tuple(revisions),date.today(),time.tzname)
+    if _ROLLUP_CACHE.get('key')==key:
+        return dict(_ROLLUP_CACHE['daily'])
     with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT start_time, last_seen_time, end_time, active_seconds
-            FROM sessions
-            WHERE active_seconds > 0
-            """
-        ).fetchall()
+        rows = load_activity_rows(conn)
     daily, _ = build_activity_rollups(rows)
+    _ROLLUP_CACHE.update(key=key,daily=dict(daily))
     return daily
 
 
@@ -785,6 +770,12 @@ def streak_days(today: date | None = None) -> int:
     return compute_streak_days(_all_daily_totals(), today)
 
 
+def production_run_days(today: date | None = None) -> int:
+    """Use the dashboard's 15-minute qualifying-day rule for menu and reminders."""
+    totals = {day: seconds for day, seconds in _all_daily_totals().items() if seconds >= 900}
+    return compute_streak_days(totals, today)
+
+
 def yesterday_seconds() -> float:
     """Tracked seconds for yesterday."""
     return day_seconds((date.today() - timedelta(days=1)))
@@ -802,23 +793,7 @@ def week_seconds(target_date: date | None = None) -> float:
     )
     week_end = week_start + timedelta(days=7)  # exclusive upper bound
 
-    week_start_ts = datetime.combine(week_start, datetime.min.time()).timestamp()
-    week_end_ts = datetime.combine(week_end, datetime.min.time()).timestamp()
-
-    with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT start_time, last_seen_time, end_time, active_seconds
-            FROM sessions
-            WHERE active_seconds > 0
-              AND start_time < ?
-              AND COALESCE(end_time, last_seen_time, start_time) >= ?
-            """,
-            (week_end_ts, week_start_ts),
-        ).fetchall()
-
-    daily, _ = build_activity_rollups(rows)
+    daily = _all_daily_totals()
     week_days = {(week_start + timedelta(days=i)).isoformat() for i in range(7)}
     return sum(daily.get(day, 0.0) for day in week_days)
 
@@ -831,13 +806,17 @@ def get_app_setting(key: str, default: str | None = None) -> str | None:
 
 
 def _live_pid() -> int | None:
-    r = subprocess.run(["pgrep", "-x", "Live"], capture_output=True, text=True)
-    if r.returncode != 0:
-        return None
     try:
-        return int(r.stdout.strip().splitlines()[0])
-    except (ValueError, IndexError):
-        return None
+        from AppKit import NSRunningApplication
+        apps=NSRunningApplication.runningApplicationsWithBundleIdentifier_('com.ableton.live')
+        return int(apps[0].processIdentifier()) if len(apps)==1 else None
+    except ImportError:
+        try:
+            result=subprocess.run(['pgrep','-x','Live'],capture_output=True,text=True,timeout=1)
+            pids=result.stdout.strip().splitlines()
+            return int(pids[0]) if result.returncode==0 and len(pids)==1 else None
+        except (ValueError,OSError,subprocess.SubprocessError):
+            return None
 
 
 def is_ableton_running() -> bool:
@@ -846,7 +825,6 @@ def is_ableton_running() -> bool:
 
 _error_state: dict[str, str | None] = {}
 _ERROR_STATE_LOCK = threading.Lock()
-_CG_EVENT_SECONDS_SINCE_LAST_EVENT = None
 
 
 def _log_transient_error(
@@ -871,74 +849,6 @@ def _log_transient_error(
         print(f"[{_ts()}] {recover_label}")
 
 
-def _set_idle_error(message: str | None):
-    _log_transient_error(
-        "idle", message, "HIDIdleTime read failed", "HIDIdleTime read recovered"
-    )
-
-
-def _core_graphics_idle_seconds() -> float | None:
-    global _CG_EVENT_SECONDS_SINCE_LAST_EVENT
-
-    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is False:
-        return None
-
-    if _CG_EVENT_SECONDS_SINCE_LAST_EVENT is None:
-        try:
-            core_graphics_path = ctypes.util.find_library("CoreGraphics")
-            if not core_graphics_path:
-                _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-                return None
-            core_graphics = ctypes.CDLL(core_graphics_path)
-            fn = core_graphics.CGEventSourceSecondsSinceLastEventType
-            fn.argtypes = [ctypes.c_int, ctypes.c_uint32]
-            fn.restype = ctypes.c_double
-            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = fn
-        except Exception as e:
-            _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-            _set_idle_error(f"CoreGraphics unavailable: {e}")
-            return None
-
-    try:
-        # kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = 0xffffffff.
-        idle_seconds = _CG_EVENT_SECONDS_SINCE_LAST_EVENT(0, 0xFFFFFFFF)
-    except Exception as e:
-        _CG_EVENT_SECONDS_SINCE_LAST_EVENT = False
-        _set_idle_error(f"CoreGraphics read failed: {e}")
-        return None
-
-    if idle_seconds < 0:
-        _set_idle_error(f"CoreGraphics returned {idle_seconds}")
-        return None
-    _set_idle_error(None)
-    return idle_seconds
-
-
-def get_idle_seconds() -> float:
-    """Seconds since last mouse/keyboard activity (macOS HIDIdleTime)."""
-    core_graphics_idle = _core_graphics_idle_seconds()
-    if core_graphics_idle is not None:
-        return core_graphics_idle
-
-    try:
-        r = subprocess.run(
-            ["/usr/sbin/ioreg", "-c", "IOHIDSystem"],
-            capture_output=True, text=True, timeout=3,
-        )
-    except Exception as e:
-        _set_idle_error(f"subprocess: {e}")
-        return float("inf")
-    if r.returncode != 0:
-        _set_idle_error(f"ioreg exit {r.returncode}: {r.stderr.strip()[:200]}")
-        return float("inf")
-    m = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', r.stdout)
-    if not m:
-        _set_idle_error(f"no HIDIdleTime in {len(r.stdout)} bytes of ioreg output")
-        return float("inf")
-    _set_idle_error(None)
-    return int(m.group(1)) / 1_000_000_000  # ns → s
-
-
 @dataclass(frozen=True)
 class TrackerStatus:
     state: str = STATE_ABLETON_CLOSED
@@ -951,249 +861,57 @@ class TrackerStatus:
     audio_idle_seconds: float = float("inf")
     idle_paused: bool = False
     checked_at: float = 0.0
+    idle_pause_started_at: float | None = None
+    reason: str = "closed"
+    message: str = "Ableton not running"
+    evidence_source: str = "unavailable"
+    cutoff: float | None = None
+    policy_version: int = POLICY_VERSION
+    verified_until: float = 0.0
+    source_error: str | None = None
 
 
-def _parse_audio_level_probe(output: str) -> bool | None:
-    for line in (output or "").splitlines():
-        parts = line.strip().split()
-        if not parts:
-            continue
-        if parts[0] == "active":
-            return True
-        if parts[0] == "quiet":
-            return False
-        if parts[0] == "unavailable":
-            return None
-    return None
-
-
-def _set_audio_probe_error(message: str | None):
-    _log_transient_error(
-        "audio_probe",
-        message,
-        "audio-level probe unavailable",
-        "audio-level probe recovered",
-    )
-
-
-_AUDIO_PROBE_SOURCE = """
-import AVFoundation
-import CoreMedia
-import Foundation
-import ScreenCaptureKit
-
-final class AudioProbe: NSObject, SCStreamOutput {
-    var peak: Float = 0
-    var sumOfSquares: Double = 0
-    var sampleCount: Int = 0
-
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .audio, sampleBuffer.isValid else { return }
-        var blockBuffer: CMBlockBuffer?
-        var audioBufferList = AudioBufferList()
-        CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-            sampleBuffer,
-            bufferListSizeNeededOut: nil,
-            bufferListOut: &audioBufferList,
-            bufferListSize: MemoryLayout<AudioBufferList>.size,
-            blockBufferAllocator: kCFAllocatorDefault,
-            blockBufferMemoryAllocator: kCFAllocatorDefault,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        )
-
-        let buffers = UnsafeMutableAudioBufferListPointer(&audioBufferList)
-        for buffer in buffers {
-            guard let data = buffer.mData else { continue }
-            let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
-            let samples = data.bindMemory(to: Float.self, capacity: count)
-            for index in 0..<count {
-                let sample = samples[index]
-                let absSample = abs(sample)
-                if absSample > peak { peak = absSample }
-                sumOfSquares += Double(sample) * Double(sample)
-                sampleCount += 1
-            }
-        }
-    }
-}
-
-let args = CommandLine.arguments
-let pollSeconds = args.count > 1 ? (Double(args[1]) ?? 1.0) : 1.0
-let activeThreshold = args.count > 2 ? (Double(args[2]) ?? 0.01) : 0.01
-
-let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-guard let display = content.displays.first else {
-    print("quiet 0")
-    exit(0)
-}
-
-let filter = SCContentFilter(display: display, excludingWindows: [])
-let config = SCStreamConfiguration()
-config.capturesAudio = true
-config.excludesCurrentProcessAudio = true
-config.width = 2
-config.height = 2
-config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-
-let probe = AudioProbe()
-let stream = SCStream(filter: filter, configuration: config, delegate: nil)
-try stream.addStreamOutput(probe, type: .audio, sampleHandlerQueue: DispatchQueue(label: "audio-probe"))
-try await stream.startCapture()
-try await Task.sleep(nanoseconds: UInt64(pollSeconds * 1_000_000_000))
-try await stream.stopCapture()
-
-let rms = probe.sampleCount > 0 ? sqrt(probe.sumOfSquares / Double(probe.sampleCount)) : 0
-if probe.sampleCount == 0 {
-    print("unavailable samples=0")
-} else if rms >= activeThreshold || Double(probe.peak) >= activeThreshold {
-    print("active rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
-} else {
-    print("quiet rms=\\(rms) peak=\\(probe.peak) samples=\\(probe.sampleCount)")
-}
-"""
-
-_AUDIO_PROBE_BINARY = DB_PATH.parent / "audio_probe"
-_AUDIO_PROBE_BUILD_LOCK = threading.Lock()
-
-
-def _ensure_audio_probe_binary() -> Path | None:
-    """Compile the Swift audio probe to a cached binary if needed.
-
-    Rebuilds when the binary is missing or older than this source file, so
-    edits to _AUDIO_PROBE_SOURCE take effect on the next launch. Returns the
-    binary path on success, None on compile failure (caller logs).
-    """
-    binary = _AUDIO_PROBE_BINARY
-    tracker_module_mtime = Path(__file__).stat().st_mtime
-    if binary.exists() and binary.stat().st_mtime >= tracker_module_mtime:
-        return binary
-
-    with _AUDIO_PROBE_BUILD_LOCK:
-        if binary.exists() and binary.stat().st_mtime >= tracker_module_mtime:
-            return binary
-        binary.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", suffix=".swift", delete=False) as src:
-            src.write(_AUDIO_PROBE_SOURCE)
-            src_path = src.name
-        try:
-            r = subprocess.run(
-                ["swiftc", "-O", "-o", str(binary), src_path],
-                capture_output=True, text=True, timeout=60,
-            )
-        except Exception as e:
-            _set_audio_probe_error(f"swiftc: {e}")
-            return None
-        finally:
-            with suppress(FileNotFoundError):
-                Path(src_path).unlink()
-        if r.returncode != 0:
-            _set_audio_probe_error(
-                f"swiftc exited {r.returncode}: {(r.stderr or '').strip()[:300]}"
-            )
-            return None
-    return binary
-
-
-def _system_audio_level_active() -> bool | None:
-    """Sample actual macOS system output level using ScreenCaptureKit.
-
-    This is intentionally level-based instead of a Live CPU/process proxy:
-    a stopped transport or idle audio engine should read quiet, while real
-    playback from Live (or any audible system output) keeps auto-idle awake.
-    """
-    binary = _ensure_audio_probe_binary()
-    if binary is None:
-        return None
+def parse_osc_playing(data: bytes) -> bool | None:
+    import struct
+    def read_string(offset):
+        end=data.index(b'\0',offset)
+        value=data[offset:end]
+        padded=(end+4)&~3
+        if padded>len(data) or any(data[end:padded]):
+            raise ValueError('Invalid OSC padding')
+        return value,padded
     try:
-        r = subprocess.run(
-            [str(binary), str(AUDIO_LEVEL_POLL_SECONDS), str(AUDIO_LEVEL_ACTIVE_THRESHOLD)],
-            capture_output=True,
-            text=True,
-            timeout=max(AUDIO_POLL_TIMEOUT, AUDIO_LEVEL_POLL_SECONDS + 4),
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        _set_audio_probe_error(str(e))
-        return None
-
-    if r.returncode != 0:
-        error_lines = (r.stderr or "").strip().splitlines()
-        error = next(
-            (
-                line.strip()
-                for line in error_lines
-                if "TCC" in line
-                or "permission" in line.lower()
-                or "declined" in line.lower()
-                or "SCStreamError" in line
-            ),
-            next(
-                (
-                    line.strip()
-                    for line in error_lines
-                    if "capture" in line.lower()
-                ),
-                error_lines[-1].strip() if error_lines else f"swift exited {r.returncode}",
-            ),
-        )
-        _set_audio_probe_error(error)
-        return None
-    raw_line = next(
-        (line.strip() for line in (r.stdout or "").splitlines() if line.strip()),
-        "",
-    )
-    parsed = _parse_audio_level_probe(r.stdout)
-    if parsed is None:
-        if raw_line.startswith("unavailable"):
-            _set_audio_probe_error(raw_line)
-        else:
-            _set_audio_probe_error("no audio level result")
-        return None
-    _set_audio_probe_error(None)
-    if raw_line:
-        print(f"[{_ts()}] audio probe: {raw_line}")
-    return parsed
+        address,pos=read_string(0)
+        tags,pos=read_string(pos)
+        if address!=b'/live/song/get/is_playing': return None
+        if tags in (b',T',b',F') and len(data)==pos:
+            return tags==b',T'
+        if tags==b',i' and len(data)==pos+4:
+            value=struct.unpack('>i',data[pos:])[0]
+            return bool(value) if value in (0,1) else None
+    except (ValueError,IndexError):
+        pass
+    return None
 
 
 def is_ableton_playing_osc() -> bool | None:
-    """Query AbletonOSC to see if the transport is playing."""
+    """Optional read-only OSC query. The response port belongs to one client."""
     import socket
-    path = b'/live/song/get/is_playing\0\0\0'
-    typetag = b',\0\0\0'
-    msg = path + typetag
-    
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.bind(('127.0.0.1', 11001))
-        sock.settimeout(0.5)
-        sock.sendto(msg, ('127.0.0.1', 11000))
-        data, _ = sock.recvfrom(1024)
-        if b',T' in data:
-            return True
-        if b',F' in data:
-            return False
-    except Exception:
-        pass
-    finally:
-        sock.close()
+    msg=b'/live/song/get/is_playing\0\0\0'+b',\0\0\0'
+    with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+        try:
+            sock.bind(('127.0.0.1',11001))
+            sock.settimeout(0.15)
+            sock.sendto(msg,('127.0.0.1',11000))
+            deadline=time.monotonic()+0.15
+            while time.monotonic()<deadline:
+                data,peer=sock.recvfrom(1024)
+                if peer!=('127.0.0.1',11000): continue
+                parsed=parse_osc_playing(data)
+                if parsed is not None: return parsed
+        except (OSError,ValueError):
+            pass
     return None
-
-
-def is_audio_active() -> bool | None:
-    """True when audible output is present while Ableton Live is open.
-
-    Returns None when the audio probe ran but could not produce a reliable
-    signal. That is different from quiet: treating an unavailable probe as
-    silence can falsely pause long passive listens.
-    """
-    if _live_pid() is None:
-        return False
-
-    osc_playing = is_ableton_playing_osc()
-    if osc_playing is not None:
-        return osc_playing
-
-    return _system_audio_level_active()
 
 
 def get_live_window_titles() -> list[str]:
@@ -1279,7 +997,7 @@ def parse_project_title(title: str) -> str | None:
     return name
 
 
-def get_project_name(current_project: str | None = None) -> str | None:
+def get_project_name(current_project: str | None = None, titles: list[str] | None = None) -> str | None:
     """Resolve the current Ableton project while ignoring transient windows.
 
     Returns None if no reliable project title is visible; callers should keep
@@ -1288,7 +1006,7 @@ def get_project_name(current_project: str | None = None) -> str | None:
     candidates: list[str] = []
     distinct: dict[str, str] = {}
     distinct_live: dict[str, str] = {}
-    for title in get_live_window_titles():
+    for title in (get_live_window_titles() if titles is None else titles):
         parsed = parse_project_title(title)
         if not parsed:
             continue
@@ -1342,19 +1060,58 @@ def get_project_name(current_project: str | None = None) -> str | None:
         # new bare title guess just because the visible windows are transient.
         return None
 
-    for candidate in candidates:
-        if candidate.lower() not in UNTITLED_NAMES:
-            return candidate
-
-    return candidates[0]
+    if len(distinct_live) == 1:
+        return next(iter(distinct_live.values()))
+    if len(distinct_live) > 1:
+        return None
+    return next(iter(distinct.values())) if len(distinct) == 1 else None
 
 
 def _ts() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+def acquire_writer_lock(db_path=None):
+    path = (db_path or DB_PATH).with_suffix('.writer.lock')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open('a+')
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    return handle
+
+
 class Tracker:
-    def __init__(self):
+    def __init__(self, writer_lock=True, observer=None):
+        self._writer_lock = acquire_writer_lock() if writer_lock else None
+        if writer_lock and self._writer_lock is None:
+            raise RuntimeError("Another tracker already owns this database")
+        self.observer = observer
+        self._deadline = None
+        self._previous_observation = None
+        self._input_barrier = float('-inf')
+        self._last_project_at = None
+        self._lost_observability_at = None
+        self._last_play_at = None
+        self._play_mode = False
+        self._front_input_at = None  # last input while Live was the front app
+        self._background_since = None  # Live has been behind other apps since then
+        # Provisional trip to another app: last credited moment before leaving,
+        # and the moment Live came back (counts as attendance like an input).
+        self._away_since = None
+        self._return_at = None
+        self._interval_id = None
+        self._pause_interval_id = None
+        self._interval_start_wall = None
+        self._interval_credit = 0.0
+        self._interval_reason = 'working'
+        self._interval_source = 'direct'
+        self._status = TrackerStatus()
+        self._status_payload = None
+        self._needs_new_input = False
+        self._pending_start = None
         self.session_id = None
         self.project_name = None
         self.last_tick = None
@@ -1391,9 +1148,6 @@ class Tracker:
         if stale:
             print(f"[{_ts()}] closed {stale} stale open session{'s' if stale != 1 else ''}")
         self.maybe_run_cleanup(force=True)
-        # Pay swiftc compile cost up front so the first audio probe doesn't stall a poll.
-        if _ensure_audio_probe_binary() is None:
-            print(f"[{_ts()}] audio probe unavailable at startup — will retry on first use")
 
     def _rename(self, new_project: str):
         if self.session_id is None:
@@ -1445,7 +1199,7 @@ class Tracker:
 
         Opens when input has been idle 60s+ while a session is open;
         finalizes when input resumes (end ≈ last-input time). Spans are
-        approximate to poll granularity (±30s) — precise enough for focus
+        approximate to fallback poll granularity (±5s) — precise enough for focus
         review, and active_seconds accounting is left untouched.
         """
         if self.session_id is None:
@@ -1520,289 +1274,378 @@ class Tracker:
                 next_project=next_project,
             )
 
-    def _start(self, project: str):
-        now = time.time()
+    def _start(self, project: str, at=None, mono=None):
+        now = time.time() if at is None else at
+        now_mono = time.monotonic() if mono is None else mono
+        pause_id=self._pause_interval_id
         self._finalize_pending_pause(project, now)
+        if self._pending_start is None:
+            self._pending_start=(uuid.uuid4().hex,project,now,now_mono)
+        token,project,now,now_mono=self._pending_start
+        # Historical estimates stay separate; covered rows retain exact idle gaps.
+        gap_limit=get_condense_gap_seconds()
         with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-            resumed_row = conn.execute(
-                """
-                SELECT id
-                FROM sessions
-                WHERE project_name = ?
-                  AND end_time IS NOT NULL
-                  AND (? - COALESCE(end_time, last_seen_time, start_time)) < ?
-                ORDER BY COALESCE(end_time, last_seen_time, start_time) DESC
-                LIMIT 1
-                """,
-                (project, now, get_condense_gap_seconds()),
-            ).fetchone()
-
-            if resumed_row:
-                conn.execute(
-                    """
-                    UPDATE sessions
-                    SET last_seen_time=?, end_time=NULL
-                    WHERE id=?
-                    """,
-                    (now, resumed_row[0]),
-                )
-                self.session_id = resumed_row[0]
+            conn.execute('BEGIN IMMEDIATE')
+            existing=conn.execute('SELECT id FROM sessions WHERE start_token=?',(token,)).fetchone()
+            if existing:
+                sid=existing[0]
             else:
-                cur = conn.execute(
-                    """
-                    INSERT INTO sessions (project_name, start_time, last_seen_time)
-                    VALUES (?, ?, ?)
-                    """,
-                    (project, now, now),
-                )
-                self.session_id = cur.lastrowid
+                recent=conn.execute('''SELECT id FROM sessions s WHERE project_name=?
+                    AND policy_version=? AND end_time IS NOT NULL
+                    AND ?-end_time>=0 AND ?-end_time<?
+                    AND EXISTS(SELECT 1 FROM activity_intervals a WHERE a.session_id=s.id
+                               AND a.credited_seconds=0)
+                    ORDER BY end_time DESC LIMIT 1''',
+                    (project,POLICY_VERSION,now,now,gap_limit)).fetchone()
+                if recent:
+                    sid=recent[0]
+                    conn.execute('UPDATE sessions SET last_seen_time=?,end_time=NULL,start_token=? WHERE id=?',
+                                 (now,token,sid))
+                else:
+                    cur=conn.execute('INSERT INTO sessions(project_name,start_time,last_seen_time,policy_version,start_token) VALUES(?,?,?,?,?)',
+                                     (project,now,now,POLICY_VERSION,token))
+                    sid=cur.lastrowid
+            if pause_id:
+                conn.execute('UPDATE activity_intervals SET end_time=MAX(start_time,?) WHERE id=?', (now,pause_id))
             conn.commit()
-        self.project_name = project
-        self.last_tick = now
-        self.last_tick_mono = time.monotonic()
+        self._pending_start=None
+        self.session_id, self.project_name = sid, project
+        self.last_tick, self.last_tick_mono = now, now_mono
+        self._new_interval(now)
         self.resume_hint_project = None
-        if resumed_row:
-            print(f"[{_ts()}] ↺  {project}")
-        else:
-            print(f"[{_ts()}] ▶  {project}")
+        print(f"[{_ts()}] ▶  {project}")
 
-    def _tick(self):
+    def _new_interval(self, wall):
+        self._interval_id = uuid.uuid4().hex
+        self._interval_start_wall = wall
+        self._interval_credit = 0.0
+
+    def _tick(self, at=None, mono=None, until=None):
         if self.session_id is None:
             return
-        now = time.time()
-        now_mono = time.monotonic()
-        # Use monotonic elapsed so system sleep is not counted as active time.
-        elapsed = min(now_mono - self.last_tick_mono, POLL_INTERVAL * 2) if self.last_tick_mono else POLL_INTERVAL
-        self.last_tick = now
-        self.last_tick_mono = now_mono
+        wall = time.time() if at is None else at
+        current_mono = time.monotonic() if mono is None else mono
+        end_mono = min(current_mono, until) if until is not None else current_mono
+        if self._deadline is not None:
+            end_mono = min(end_mono, self._deadline)
+        if self._previous_observation is not None:
+            end_mono = min(end_mono,self._previous_observation.mono+EVIDENCE_TTL)
+        # Direct callers have no observations; never grant an unbounded final gap.
+        if self._previous_observation is None:
+            end_mono = min(end_mono, self.last_tick_mono + INPUT_ALLOWANCE)
+        elapsed = max(0.0, end_mono - self.last_tick_mono)
         if elapsed <= 0:
             return
+        end_wall = self.last_tick + elapsed
+        target = self._interval_credit + elapsed
         with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-            cur = conn.execute(
-                """
-                UPDATE sessions
-                SET last_seen_time=?, active_seconds=active_seconds+?
-                WHERE id=? AND end_time IS NULL
-                """,
-                (now, elapsed, self.session_id),
-            )
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute('SELECT end_time FROM sessions WHERE id=?', (self.session_id,)).fetchone()
+            if row is None or row[0] is not None:
+                conn.rollback()
+                self.session_id = self.project_name = None
+                self.last_tick = self.last_tick_mono = None
+                self._needs_new_input = True
+                return
+            old = conn.execute('SELECT credited_seconds FROM activity_intervals WHERE id=?', (self._interval_id,)).fetchone()
+            stored = old[0] if old else 0.0
+            delta = max(0.0, target - stored)
+            conn.execute('''INSERT INTO activity_intervals
+                (id,session_id,start_time,end_time,credited_seconds,reason,evidence_source)
+                VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+                end_time=excluded.end_time,credited_seconds=excluded.credited_seconds''',
+                (self._interval_id,self.session_id,self._interval_start_wall,end_wall,target,
+                 self._interval_reason,self._interval_source))
+            conn.execute('UPDATE sessions SET active_seconds=active_seconds+?,last_seen_time=? WHERE id=? AND end_time IS NULL',
+                         (delta,end_wall,self.session_id))
             conn.commit()
-        if cur.rowcount == 0:
-            self.session_id = None
-            self.project_name = None
-            self.last_tick = None
-            self.last_tick_mono = None
+        # Only advance after commit. Stable interval IDs reconcile ambiguous commits.
+        self._interval_credit = target
+        self.last_tick, self.last_tick_mono = end_wall, end_mono
 
-    def _close(self, preserve_resume_hint: bool = False, reason: str = PAUSE_REASON_UNKNOWN):
+    def _trim_tail(self, anchor):
+        """Take back credit after the last moment of presence (play, or input with Live in front).
+
+        Absolute targets like _tick, so a retried or ambiguous commit never subtracts twice.
+        Limited to the current interval, which holds the post-stop tail.
+        """
+        if self.session_id is None or anchor is None or self.last_tick_mono is None:
+            return
+        excess = min(self.last_tick_mono - anchor, self._interval_credit)
+        if excess <= 0:
+            return
+        target = self._interval_credit - excess
+        end_wall = self.last_tick - excess
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute('SELECT end_time FROM sessions WHERE id=?', (self.session_id,)).fetchone()
+            if row is None or row[0] is not None:
+                conn.rollback()
+                return
+            old = conn.execute('SELECT credited_seconds FROM activity_intervals WHERE id=?', (self._interval_id,)).fetchone()
+            delta = max(0.0, (old[0] if old else 0.0) - target)
+            conn.execute('UPDATE activity_intervals SET credited_seconds=?,end_time=MAX(start_time,?) WHERE id=?',
+                         (target, end_wall, self._interval_id))
+            conn.execute('UPDATE sessions SET active_seconds=MAX(0,active_seconds-?),last_seen_time=? WHERE id=? AND end_time IS NULL',
+                         (delta, end_wall, self.session_id))
+            conn.commit()
+        self._interval_credit = target
+        self.last_tick, self.last_tick_mono = end_wall, self.last_tick_mono - excess
+        print(f"[{_ts()}] ✂  {self.project_name}: took back {int(excess)}s after you left")
+
+    def _close(self, preserve_resume_hint=False, reason=PAUSE_REASON_UNKNOWN, at=None, mono=None):
         if self.session_id is None:
             if not preserve_resume_hint:
                 self.resume_hint_project = None
             return
-        now = time.time()
-        project_name = self.project_name
-        # Remember where this break started. The pause row is written in
-        # _start() once we know when (and on what project) activity resumes,
-        # so resumed sessions that reopen the same row still keep their gap.
-        # Keep the earliest start across repeated paused polls.
+        self._tick(at=at, mono=mono)
+        if self.session_id is None:
+            return
+        now = self.last_tick
+        project, sid = self.project_name, self.session_id
+        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
+            cur = conn.execute('UPDATE sessions SET last_seen_time=?,end_time=? WHERE id=? AND end_time IS NULL',
+                               (now,now,sid))
+            row = conn.execute('SELECT active_seconds FROM sessions WHERE id=?',(sid,)).fetchone()
+            discarded = bool(row and (row[0]<5 or (not preserve_resume_hint and is_untitled_project_name(project))))
+            if discarded:
+                conn.execute('DELETE FROM sessions WHERE id=?',(sid,))
+            else:
+                pause_id=f'pause-{sid}-{float(now).hex()}'
+                conn.execute('INSERT OR IGNORE INTO activity_intervals(id,session_id,start_time,end_time,credited_seconds,reason,evidence_source) VALUES(?,?,?,?,0,?,?)',
+                             (pause_id,sid,now,now,reason,self._interval_source))
+            conn.commit()
+        if not discarded:
+            self._pause_interval_id=pause_id
         if self._pending_pause_start is None:
             self._pending_pause_start = now
-            self._pending_pause_project = project_name
-            self._pending_pause_reason = reason or PAUSE_REASON_UNKNOWN
-        elapsed = (
-            max(0.0, time.monotonic() - self.last_tick_mono)
-            if self.last_tick_mono is not None
-            else 0.0
-        )
-        # Decided inside the transaction below, acted on after it commits:
-        # record_pause() opens its own connection, so finalizing while this
-        # write transaction is still open would hit "database is locked".
-        discarded = False
-        with closing(sqlite3.connect(DB_PATH, timeout=10)) as conn:
-            cur = conn.execute(
-                """
-                UPDATE sessions
-                SET last_seen_time=?, active_seconds=active_seconds+?, end_time=?
-                WHERE id=? AND end_time IS NULL
-                """,
-                (now, elapsed, now, self.session_id),
-            )
-            if cur.rowcount == 0:
-                conn.commit()
-            else:
-                row = conn.execute(
-                    "SELECT active_seconds FROM sessions WHERE id=?", (self.session_id,)
-                ).fetchone()
-                active = row[0] if row else 0
-                delete = active < 5
-                if not delete and not preserve_resume_hint and is_untitled_project_name(project_name):
-                    delete = True
-                if delete:
-                    conn.execute("DELETE FROM sessions WHERE id=?", (self.session_id,))
-                    reason = "too short — discarded" if active < 5 else "unsaved — discarded"
-                    print(f"[{_ts()}] ✗  {project_name} ({reason})")
-                    discarded = True
-                else:
-                    print(f"[{_ts()}] ■  {project_name}")
-                conn.commit()
+            self._pending_pause_project = project
+            self._pending_pause_reason = reason
         if discarded:
-            # Discarded rows were never real work; drop any idle span
-            # observed inside them rather than attributing a pause to a
-            # ghost session.
             self._discard_within_pause()
         else:
-            # The in-session idle span (if any) ends at this close; the
-            # between-session break starting here is captured via
-            # _pending_pause_start above, so the two sit adjacent without
-            # overlapping.
-            self._finalize_within_pause(now, end=now)
-        if preserve_resume_hint and project_name:
-            self.resume_hint_project = project_name
-        else:
-            self.resume_hint_project = None
-        self.session_id = None
-        self.project_name = None
-        self.last_tick = None
-        self.last_tick_mono = None
+            self._finalize_within_pause(now,end=now)
+        self.resume_hint_project = project if preserve_resume_hint else None
+        self.session_id = self.project_name = None
+        self.last_tick = self.last_tick_mono = None
+        self._away_since = self._return_at = None
+        self._interval_id = None
+        print(f"[{_ts()}] ■  {project} ({reason})")
 
     def status(self) -> TrackerStatus:
-        state = self.last_state
-        return TrackerStatus(
-            state=state,
-            paused=state == STATE_PAUSED,
-            running=self.last_running,
-            project_name=self.project_name,
-            resume_hint_project=self.resume_hint_project,
-            hid_idle_seconds=self.last_hid_idle,
-            audio_active=self.last_audio_is_active,
-            audio_idle_seconds=self.last_audio_idle,
-            idle_paused=state == STATE_IDLE_PAUSED,
-            checked_at=self.last_checked_at,
-        )
+        # Frozen snapshot: menu reads never wait behind detector/network operations.
+        return self._status
 
-    def poll_once(self, paused: bool = False):
-        now = time.time()
-        previous_checked_at = self.last_checked_at
-        self.last_checked_at = now
+    def _publish_status(self, o, reason, cutoff=None):
+        messages = {
+            'working': f"Working on: {self.project_name}",
+            'listening': "Listening: Live is playing",
+            'away': f"Away: counts if back in Live within {max(0, int((cutoff or o.mono)-o.mono))}s",
+            'idle': (f'Paused: no playback for {int(PLAY_ALLOWANCE//60)}m' if self._play_mode
+                     else f'Paused: no activity for {int(INPUT_ALLOWANCE//60)}m'),
+            'listening_limit': 'Paused: listening limit reached',
+            'background': 'Paused: another app is active',
+            'locked': 'Paused: Mac locked or asleep',
+            'manual': 'Paused',
+            'unverified': 'Paused: cannot verify activity',
+            'no_project': 'Ableton open (no verified project)',
+            'awaiting_input': ('Paused: press play in Live to resume' if self._play_mode
+                               else 'Paused: interact with Live to resume'),
+            'closed': 'Ableton not running',
+        }
+        counting = self.session_id is not None and reason in ('working','listening','away')
+        state = (STATE_TRACKING if counting else STATE_PAUSED if reason=='manual'
+                 else STATE_ABLETON_CLOSED if not o.pid else STATE_ABLETON_OPEN
+                 if reason=='no_project' else STATE_IDLE_PAUSED)
+        idle = max(0.0,o.mono-o.input_at) if o.input_at is not None else 0.0
+        cutoff_wall = o.wall + cutoff-o.mono if cutoff is not None else None
+        verified = o.wall + min(EVIDENCE_TTL,max(0,cutoff-o.mono),max(0,(self._deadline or o.mono)-o.mono)) if counting and cutoff is not None else o.wall
+        status = TrackerStatus(state=state,paused=reason=='manual',running=bool(o.pid),
+            project_name=self.project_name,resume_hint_project=self.resume_hint_project,
+            hid_idle_seconds=idle,audio_active=o.audio is True,
+            audio_idle_seconds=max(0,o.mono-o.audio_at) if o.audio_at is not None else 0.0,
+            idle_paused=state==STATE_IDLE_PAUSED,checked_at=o.wall,
+            idle_pause_started_at=self._pending_pause_start if state==STATE_IDLE_PAUSED else None,
+            reason=reason,message=messages[reason],evidence_source=o.source+('/'+o.audio_source if reason=='listening' and o.audio_source else ''),cutoff=cutoff_wall,
+            verified_until=verified,source_error=o.error)
+        from dataclasses import asdict
+        payload=asdict(status)
+        # Paused snapshots do not create recurring heartbeat writes.
+        if not counting:
+            payload.pop('checked_at',None); payload.pop('verified_until',None)
+            payload.pop('hid_idle_seconds',None); payload.pop('audio_idle_seconds',None)
+        encoded=json.dumps(payload,sort_keys=True,allow_nan=False)
+        if encoded!=self._status_payload:
+            with closing(sqlite3.connect(DB_PATH,timeout=10)) as conn:
+                conn.execute('INSERT INTO tracker_status(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',(encoded,))
+                conn.commit()
+            if self._status.reason != reason:
+                print(f"[{_ts()}] {messages[reason]}" + (f" ({o.error})" if o.error else ''))
+            self._status_payload=encoded
+        self._status=status
+        self.last_state=state
+        self.last_running=bool(o.pid)
+        self.last_hid_idle=idle
+        self.last_checked_at=o.wall
 
-        if paused:
-            self.last_running = is_ableton_running()
-            self.last_hid_idle = 0.0
-            self.last_audio_is_active = False
-            self.last_audio_idle = float("inf")
-            self._close(preserve_resume_hint=True, reason=PAUSE_REASON_MANUAL)
-            self.last_state = STATE_PAUSED
-            return
-
-        if not is_ableton_running():
-            self.last_running = False
-            self.last_hid_idle = 0.0
-            self.last_audio_is_active = False
-            self.last_audio_idle = float("inf")
-            self._close(reason=PAUSE_REASON_ABLETON_CLOSED)
-            self.last_state = STATE_ABLETON_CLOSED
-            return
-
-        self.last_running = True
-
-        self.last_hid_idle = get_idle_seconds()
-        if self.last_hid_idle == float("inf"):
-            self.last_audio_is_active = False
-            self.last_audio_idle = float("inf")
-            if self.session_id is None and self.resume_hint_project:
-                self._start(self.resume_hint_project)
-            self._tick()
-            self._within_pause_update(now, self.last_hid_idle)
-            self.last_state = STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
-            return
-        should_check_audio = (
-            self.last_hid_idle >= IDLE_THRESHOLD
-            or self.last_state == STATE_IDLE_PAUSED
-        )
-        if should_check_audio:
-            audio_active = is_audio_active()
-            audio_known = audio_active is not None
-            self.last_audio_is_active = audio_active is True
-            if audio_active is True:
-                self.last_audio_active = now
+    def poll_once(self, paused=False, observation=None):
+        if observation is None:
+            if self.observer is None:
+                from activity_observer import NativeObserver
+                self.observer=NativeObserver()
+            observation=self.observer.snapshot(self.project_name,paused=paused)
+        o=observation
+        if not all(math.isfinite(x) for x in (o.wall,o.mono)):
+            raise ValueError('Non-finite observation clock')
+        prev=self._previous_observation
+        if prev and o.mono < prev.mono:
+            return  # delayed/out-of-order detector response
+        old_session=self.session_id
+        gap=bool(prev and o.mono-prev.mono>EVIDENCE_TTL)
+        changed_pid=bool(prev and prev.pid!=o.pid)
+        # Settle old evidence before new input can extend it. Never bridge a missed heartbeat.
+        if old_session is not None and prev:
+            end=min(o.mono,prev.mono+EVIDENCE_TTL,self._deadline or o.mono)
+            if o.boundary is not None:
+                end=min(end,max(prev.mono,o.boundary))
+            self._tick(at=o.wall,mono=end)
+            if self.session_id is None:  # externally closed/deleted
+                self._input_barrier=max(self._input_barrier,o.mono)
+        if changed_pid:
+            self._last_project_at=None
+        if (gap or changed_pid) and self.session_id is not None:
+            self._close(preserve_resume_hint=not changed_pid,reason='unverified',at=o.wall,mono=self.last_tick_mono)
+        # Policy v3: Live need not be in front. Other apps and background playback
+        # count; only lock/sleep, quit, manual pause and inactivity stop the session.
+        blocked=paused or not o.pid or o.locked or gap or changed_pid
+        if blocked:
+            barrier=(o.boundary if o.boundary is not None else
+                     prev.mono+EVIDENCE_TTL if gap and not (paused or not o.pid or o.locked or changed_pid) else o.mono)
+            self._input_barrier=max(self._input_barrier,barrier)
+            self._needs_new_input=True
+        reason=('manual' if paused else 'closed' if not o.pid else 'locked' if o.locked
+                else 'unverified' if changed_pid or (gap and (o.input_at is None or o.input_at<=self._input_barrier)) else None)
+        if o.observable:
+            self._lost_observability_at=None
+        elif self._lost_observability_at is None:
+            self._lost_observability_at=o.mono
+        project=o.project
+        if project is not None:
+            self._last_project_at=o.project_at if o.project_at is not None else o.mono
+        elif self._last_project_at is not None and o.mono < self._last_project_at+PROJECT_GRACE:
+            # Unreadable or ambiguous titles: same Live process, so keep the known set.
+            project=self.project_name if self.session_id is not None else self.resume_hint_project
+        if not project and reason is None:
+            reason='unverified' if self.session_id is not None or self.resume_hint_project else 'no_project'
+        input_at=(o.input_at if o.input_at is not None and math.isfinite(o.input_at)
+                  and self._input_barrier<o.input_at<=o.mono else None)
+        if (self._return_at is not None and self._input_barrier<self._return_at<=o.mono
+                and (input_at is None or self._return_at>input_at)):
+            input_at=self._return_at
+        fresh_input=input_at is not None
+        # Policy v5: the play button is the work signal. Counts while Live plays, in
+        # front or not, and for PLAY_ALLOWANCE after it stops. Input alone counts only
+        # when play state is unknown (AbletonOSC off), so tracking never goes dark.
+        if fresh_input and o.foreground and (self._front_input_at is None or input_at>self._front_input_at):
+            self._front_input_at=input_at
+        # Live behind other apps: the timer restarts whenever Live comes to the front.
+        if o.foreground or blocked:
+            self._background_since=None
+        elif self._background_since is None:
+            self._background_since=o.mono
+        audio_known=(o.audio is not None and o.audio_at is not None and 0<=o.mono-o.audio_at<EVIDENCE_TTL)
+        audio_fresh=audio_known and o.audio is True
+        if audio_fresh and (self._last_play_at is None or o.audio_at>self._last_play_at):
+            self._last_play_at=o.audio_at
+        self._play_mode=audio_known
+        # Play from before a lock, sleep or manual pause never bridges across it.
+        play_at=(self._last_play_at if self._last_play_at is not None
+                 and self._last_play_at>self._input_barrier else None)
+        play_deadline=play_at+PLAY_ALLOWANCE if play_at is not None else float('-inf')
+        # Fallback (play state unknown): only input with Live in front counts.
+        front_at=(self._front_input_at if self._front_input_at is not None
+                  and self._front_input_at>self._input_barrier else None)
+        input_deadline=front_at+INPUT_ALLOWANCE if front_at is not None and not audio_known else float('-inf')
+        evidence=play_at is not None or input_deadline>float('-inf')
+        # Last moment you were clearly there; an expired tail is trimmed back to it.
+        # Raw values: a lock raises the barrier first but must still trim. The trim
+        # never reaches before this session, since it is capped at the open interval.
+        anchor=max((x for x in (self._last_play_at,self._front_input_at) if x is not None),default=None)
+        if reason is None and not evidence:
+            reason=self._status.reason if self._status.reason in ('idle','listening_limit','unverified','background') else 'awaiting_input'
+        cutoff=None
+        attendance_cutoff=None
+        background_cutoff=(self._background_since+BACKGROUND_ALLOWANCE
+                           if self._background_since is not None else float('inf'))
+        if evidence:
+            attendance_cutoff=min(max(input_deadline,play_deadline),background_cutoff)
+            cutoff=attendance_cutoff
+            project_expired=False
+            if o.project is None and self._last_project_at is not None:
+                cutoff=min(cutoff,self._last_project_at+PROJECT_GRACE)
+                project_expired=o.mono>=self._last_project_at+PROJECT_GRACE
+            if not o.observable:
+                cutoff=min(cutoff,self._lost_observability_at+EVIDENCE_TTL)
+            if reason is None:
+                if o.mono>=cutoff:
+                    reason=('unverified' if not o.observable or project_expired
+                            else 'background' if o.mono>=background_cutoff else 'idle')
+                else:
+                    reason='listening' if audio_fresh and not (fresh_input and o.mono<input_at+INPUT_ALLOWANCE) else 'working'
+        self._deadline=cutoff
+        active=reason in ('working','listening')
+        if active:
+            if self.session_id is not None and self.last_tick_mono < o.mono-0.000001:
+                self._trim_tail(anchor)
+                self._close(preserve_resume_hint=True,reason='idle',at=o.wall,mono=self.last_tick_mono)
+            if self.session_id is not None and project!=self.project_name:
+                if is_untitled_project_name(self.project_name) and not is_untitled_project_name(project):
+                    self._rename(project)
+                else:
+                    self._close(reason=PAUSE_REASON_PROJECT_SWITCH,at=o.wall,mono=self.last_tick_mono)
+            if self.session_id is None:
+                if old_session is not None and self._needs_new_input:
+                    active=False; reason='awaiting_input'
+                else:
+                    self._start(project,at=o.wall,mono=o.mono)
+            if active:
+                self._needs_new_input=False
+                interval_source=o.source+('/'+o.audio_source if reason=='listening' and o.audio_source else '')
+                if (self._interval_reason!=reason or self._interval_source!=interval_source
+                    or (self.last_tick is not None and abs(o.wall-self.last_tick-(o.mono-self.last_tick_mono))>1)):
+                    self._new_interval(o.wall)
+                    self.last_tick=o.wall
+                self._interval_reason,self._interval_source=reason,interval_source
+                self._within_pause_update(o.wall,max(0,o.mono-input_at) if fresh_input else 0)
         else:
-            audio_known = True
-            self.last_audio_is_active = False
-        self.last_audio_idle = (
-            now - self.last_audio_active if self.last_audio_active else float("inf")
-        )
-        idle_paused = should_check_audio and (
-            self.last_hid_idle >= IDLE_THRESHOLD
-            and audio_known
-            and self.last_audio_idle >= IDLE_THRESHOLD
-        )
-        if idle_paused and (self.session_id is not None or self.resume_hint_project):
-            poll_gap = (
-                now - previous_checked_at if previous_checked_at else POLL_INTERVAL
-            )
-            if poll_gap > POLL_INTERVAL * WAKE_GRACE_MULTIPLIER:
-                idle_paused = False
-        if should_check_audio:
-            audio_idle_label = (
-                "inf" if self.last_audio_idle == float("inf")
-                else f"{int(self.last_audio_idle)}s"
-            )
-            audio_label = (
-                str(self.last_audio_is_active) if audio_known else "unknown"
-            )
-            print(
-                f"[{_ts()}] check  hid_idle={int(self.last_hid_idle)}s  "
-                f"audio_active={audio_label}  "
-                f"audio_idle={audio_idle_label}  "
-                f"→ {'pause' if idle_paused else 'continue'}"
-            )
-        if idle_paused:
+            # No final catch-up: the previous snapshot was settled above.
             if self.session_id is not None:
-                print(
-                    f"[{_ts()}] ⏸  {self.project_name} "
-                    f"(idle {int(self.last_hid_idle)}s, audio quiet)"
-                )
-            self._close(preserve_resume_hint=True, reason=PAUSE_REASON_IDLE)
-            self.last_state = (
-                STATE_IDLE_PAUSED if self.resume_hint_project else STATE_ABLETON_OPEN
-            )
-            return
+                if reason in ('idle','locked','background'):
+                    self._trim_tail(anchor)
+                self._close(preserve_resume_hint=bool(o.pid) and not changed_pid,
+                            reason=reason,at=o.wall,mono=self.last_tick_mono)
+            if not o.pid:
+                self.resume_hint_project=None
+            if reason in ('idle','listening_limit','unverified','no_project','background'):
+                self._input_barrier=max(self._input_barrier,input_at or o.input_at or float('-inf'))
+                self._needs_new_input=True
+        if o.audio is True:
+            self.last_audio_active=o.wall
+        self._previous_observation=o
+        self._publish_status(o,reason,attendance_cutoff if active else None)
 
-        if (
-            self.last_state == STATE_IDLE_PAUSED
-            and self.session_id is None
-            and self.resume_hint_project
-        ):
-            self._start(self.resume_hint_project)
-            self._tick()
-            self._within_pause_update(now, self.last_hid_idle)
-            self.last_state = STATE_TRACKING
-            return
-
-        project = get_project_name(self.project_name or self.resume_hint_project)
-        if project is None:
-            # Title lookup failed transiently — keep ticking the
-            # current session rather than rotating to a guess.
-            if self.session_id is None and self.resume_hint_project:
-                self._start(self.resume_hint_project)
-            self._tick()
-            self._within_pause_update(now, self.last_hid_idle)
-            self.last_state = (
-                STATE_TRACKING if self.session_id is not None else STATE_ABLETON_OPEN
-            )
-            return
-
-        if project != self.project_name:
-            if (
-                is_untitled_project_name(self.project_name)
-                and not is_untitled_project_name(project)
-            ):
-                self._rename(project)
-            else:
-                self._close(reason=PAUSE_REASON_PROJECT_SWITCH)
-                self._start(project)
-        self._tick()
-        self._within_pause_update(now, self.last_hid_idle)
-        self.last_state = STATE_TRACKING
+    def shutdown(self):
+        try:
+            if self.session_id is not None:
+                self._close(preserve_resume_hint=True,reason=PAUSE_REASON_APP_RESTART)
+            if self._previous_observation is not None and self._status.state==STATE_TRACKING:
+                self._publish_status(self._previous_observation,'unverified')
+        finally:
+            if self.observer is not None:
+                self.observer.close()
+            if self._writer_lock is not None:
+                self._writer_lock.close()
+                self._writer_lock=None
 
     def maybe_run_cleanup(self, force: bool = False):
         now = time.time()
@@ -1837,7 +1680,7 @@ class Tracker:
 
             def shutdown(sig, frame):
                 print("\nStopping tracker…")
-                self._close()
+                self.shutdown()
                 sys.exit(0)
 
             signal.signal(signal.SIGTERM, shutdown)
@@ -1847,14 +1690,14 @@ class Tracker:
             if stop_event and stop_event.is_set():
                 break
             try:
-                paused = PAUSE_FILE.exists() if _lock is not None else False
+                paused = PAUSE_FILE.exists()
                 if _lock is not None:
                     with _lock:
                         self.poll_once(paused=paused)
-                        self.maybe_run_cleanup()
+
                 else:
                     self.poll_once(paused=paused)
-                    self.maybe_run_cleanup()
+
                 self._consecutive_failures = 0
                 self._last_error = None
             except Exception as e:
@@ -1863,16 +1706,26 @@ class Tracker:
                 if _lock is not None:
                     print(f"tracker error ({self._consecutive_failures}): {e}", file=sys.stderr)
                     if self._consecutive_failures >= TRACKER_MAX_RETRIES:
-                        print("tracker: max retries reached, polling suspended", file=sys.stderr)
+                        print("tracker: repeated failure, retrying with bounded backoff", file=sys.stderr)
                 else:
                     print(f"[{_ts()}] error: {e}")
             wait = wake_interval
-            if _lock is not None and self._consecutive_failures > 0:
-                wait = min(2 ** self._consecutive_failures, TRACKER_MAX_BACKOFF)
-            if stop_event:
+            observer=self.observer
+            if observer is not None and observer.started:
+                if self._status.reason in ('closed','background'):
+                    wait=30.0
+                if self._deadline is not None and self.session_id is not None:
+                    wait=min(wait,max(0.1,self._deadline-time.monotonic()))
+            if self._consecutive_failures>0:
+                wait=min(2**min(self._consecutive_failures,6),TRACKER_MAX_BACKOFF)
+            if observer is not None:
+                observer.wake.wait(wait)
+                observer.wake.clear()
+            elif stop_event:
                 stop_event.wait(wait)
             else:
                 time.sleep(wait)
+        self.shutdown()
 
 
 if __name__ == "__main__":

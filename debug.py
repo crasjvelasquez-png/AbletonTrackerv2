@@ -131,7 +131,7 @@ def _():
     if not m:
         return FAIL, "Could not read HIDIdleTime from ioreg — idle pausing will not work"
     secs = int(m.group(1)) / 1_000_000_000
-    return OK, f"Idle time readable ({secs:.1f}s since last input). 10-minute idle pause will work."
+    return OK, f"Idle time readable ({secs:.1f}s since last input). The policy uses qualifying Live input and a 30-second inactivity allowance."
 
 
 @check("Dashboard port (7421) available")

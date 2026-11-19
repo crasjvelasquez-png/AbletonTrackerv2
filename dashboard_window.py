@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Native desktop window for the Tracker or Planner surface."""
+"""Native desktop Tracker window."""
 
-import argparse
-import subprocess
-import sys
-import time
-import urllib.request
 from datetime import datetime
+import fcntl
 import os
 from pathlib import Path
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -16,22 +17,197 @@ DASHBOARD_PORT = 7421
 DASHBOARD_URL = f"http://127.0.0.1:{DASHBOARD_PORT}"
 LOG_DIR = Path.home() / ".ableton_tracker"
 LOG_PATH = LOG_DIR / "dashboard.log"
+WINDOW_LOCK_PATH = LOG_DIR / "dashboard-window.lock"
+MENUBAR_LOCK_PATH = LOG_DIR / "tracker-app.lock"
+TRACKER_BUNDLE_ID = "com.abletontracker.tracker"
 
 
-def configure_macos_app_icon(app_mode: str) -> bool:
-    """Use the bundle artwork instead of Python's default Dock icon."""
+def python_executable() -> str:
+    """Return the CPython executable for background child processes."""
+    if os.environ.get("ABLETON_TRACKER_IN_BUNDLE") == "1":
+        return sys.executable
+    return os.environ.get("ABLETON_TRACKER_PYTHON") or sys.executable
+
+
+def find_bundle_launcher() -> Path | None:
+    """Locate the compiled Tracker.app Mach-O launcher if built."""
+    candidates = (
+        APP_DIR.parent.parent / "MacOS" / "launcher",
+        APP_DIR / "dist" / "Tracker.app" / "Contents" / "MacOS" / "launcher",
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def is_lock_held(path: Path) -> bool:
+    """Return True if another process holds an exclusive flock on path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = path.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return True
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        lock_file.close()
+    return False
+
+
+def acquire_window_lock(path: Path = WINDOW_LOCK_PATH):
+    """Acquire the single-instance lock for the Tracker desktop window."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = path.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    try:
+        lock_file.seek(0)
+        lock_file.truncate()
+        lock_file.write(f"{os.getpid()}\n")
+        lock_file.flush()
+    except OSError:
+        pass
+    return lock_file
+
+
+def activate_pid(pid: int) -> bool:
+    """Bring a specific macOS GUI process PID to the foreground."""
+    if sys.platform != "darwin" or not pid or pid <= 0:
+        return False
+    try:
+        from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+        app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+        if app is not None:
+            return bool(app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps))
+    except Exception:
+        pass
+    return False
+
+
+def activate_existing_window() -> bool:
+    """Bring an already-running Tracker.app window to the foreground."""
+    if sys.platform != "darwin":
+        return False
+    try:
+        raw_pid = WINDOW_LOCK_PATH.read_text(encoding="utf-8").strip()
+        if raw_pid.isdigit() and activate_pid(int(raw_pid)):
+            return True
+    except OSError:
+        pass
+    try:
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                f'tell application id "{TRACKER_BUNDLE_ID}"\nreopen\nactivate\nend tell',
+            ],
+            timeout=3,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def reexec_in_app_bundle_if_needed() -> None:
+    """Re-exec inside Tracker.app/Contents/MacOS/launcher so Dock owns the window."""
+    if (
+        sys.platform != "darwin"
+        or "unittest" in sys.modules
+        or os.environ.get("ABLETON_TRACKER_IN_BUNDLE") == "1"
+    ):
+        return
+    launcher = find_bundle_launcher()
+    if launcher is None:
+        return
+    try:
+        if Path(sys.executable).resolve() != launcher.resolve():
+            os.environ["ABLETON_TRACKER_IN_BUNDLE"] = "1"
+            os.execv(
+                str(launcher),
+                [str(launcher), str(Path(__file__).resolve()), *sys.argv[1:]],
+            )
+    except OSError as exc:
+        log(f"Could not re-exec into bundle launcher: {exc}")
+
+
+def ensure_menubar_if_needed() -> subprocess.Popen | None:
+    """Ensure the background menu bar tracker daemon is running when launched from Dock."""
+    if "unittest" in sys.modules or is_lock_held(MENUBAR_LOCK_PATH):
+        return None
+    menubar_script = APP_DIR / "menubar.py"
+    if not menubar_script.exists():
+        return None
+    log("Menu bar tracker is not running; starting menubar.py in background")
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = (LOG_DIR / "tracker.log").open("a", encoding="utf-8")
+    env = os.environ.copy()
+    env.pop("ABLETON_TRACKER_OPEN_WINDOW", None)
+    env.pop("ABLETON_TRACKER_IN_BUNDLE", None)
+    launcher = find_bundle_launcher()
+    cmd = [str(launcher), "--background"] if launcher is not None else [python_executable(), str(menubar_script)]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=log_file,
+        stderr=log_file,
+        cwd=APP_DIR,
+        env=env,
+        start_new_session=True,
+    )
+    log_file.close()
+    return proc
+
+
+def configure_macos_app_icon() -> bool:
+    """Configure the bundle artwork and Dock reopen behavior on macOS."""
     if sys.platform != "darwin":
         return False
 
     try:
         from AppKit import NSApplication, NSImage
+        import Foundation
+        try:
+            from AppKit import NSApplicationActivationPolicyRegular
+        except ImportError:
+            NSApplicationActivationPolicyRegular = 0
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyRegular
+        )
     except ImportError:
         log("AppKit unavailable; keeping the default application icon")
         return False
 
-    app_name = "Planner" if app_mode == "planner" else "Tracker"
+    try:
+        import webview.platforms.cocoa as cocoa
+
+        def _handle_reopen(self, app, has_visible):
+            for win in app.windows():
+                if win.isMiniaturized():
+                    win.deminiaturize_(None)
+                win.makeKeyAndOrderFront_(None)
+            return Foundation.YES
+
+        if not hasattr(
+            cocoa.BrowserView.AppDelegate,
+            "applicationShouldHandleReopen_hasVisibleWindows_",
+        ):
+            cocoa.BrowserView.AppDelegate.applicationShouldHandleReopen_hasVisibleWindows_ = (
+                _handle_reopen
+            )
+    except Exception as exc:
+        log(f"Could not register Dock reopen handler: {exc}")
+
     bundled_icon = APP_DIR.parent / "icon.icns"
-    source_icon = APP_DIR / "dist" / f"{app_name}.icns"
+    source_icon = APP_DIR / "dist" / "Tracker.icns"
     icon_path = bundled_icon if bundled_icon.exists() else source_icon
     if not icon_path.exists():
         log(f"Application icon not found: {icon_path}")
@@ -44,6 +220,70 @@ def configure_macos_app_icon(app_mode: str) -> bool:
 
     NSApplication.sharedApplication().setApplicationIconImage_(icon)
     return True
+
+
+def install_native_sidebar(window) -> None:
+    """Swap the window content for a native sidebar + web detail split view."""
+    if sys.platform != "darwin" or getattr(window, "_native_sidebar", None):
+        return
+    log("install_native_sidebar: loaded event received")
+    try:
+        from PyObjCTools import AppHelper
+        import webview.platforms.cocoa as cocoa
+        from native_sidebar import NativeSidebar
+
+        def _install():
+            try:
+                browser = cocoa.BrowserView.instances.get(window.uid)
+                if browser is None or getattr(window, "_native_sidebar", None):
+                    return
+
+                def _select(view_id):
+                    # Never block the UI thread on the web view: run JS off-thread.
+                    threading.Thread(
+                        target=lambda: window.evaluate_js(f"setActiveView({view_id!r})"),
+                        daemon=True,
+                    ).start()
+
+                sidebar = NativeSidebar(browser.window, browser.webview, _select)
+                window._native_sidebar = sidebar
+                browser.webview.removeFromSuperview()
+                sidebar.install()
+                log("Native sidebar installed")
+                browser.window.makeFirstResponder_(browser.webview)
+                def native_nav_sync(view_id):
+                    AppHelper.callAfter(lambda: sidebar.select(view_id))
+
+                def _web_setup():
+                    window.expose(native_nav_sync)
+                    window.evaluate_js(
+                        "document.documentElement.classList.add('native-sidebar');"
+                        "window.__nativeNavSync=v=>window.pywebview?.api?.native_nav_sync?.(v);"
+                        "window.__nativeNavSync(activeView);"
+                    )
+
+                threading.Thread(target=_web_setup, daemon=True).start()
+            except Exception as exc:
+                import traceback
+                log(f"Native sidebar unavailable; using in-page navigation: {exc}\n{traceback.format_exc()}")
+
+        AppHelper.callAfter(_install)
+    except Exception as exc:
+        log(f"Native sidebar not installed: {exc}")
+
+
+def activate_current_app() -> None:
+    """Bring the current Tracker window process to the foreground."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+        NSRunningApplication.currentApplication().activateWithOptions_(
+            NSApplicationActivateIgnoringOtherApps
+        )
+    except Exception:
+        pass
 
 
 def log(message: str) -> None:
@@ -72,7 +312,7 @@ def start_dashboard_if_needed() -> subprocess.Popen | None:
     env = os.environ.copy()
     env["ABLETON_TRACKER_NO_BROWSER"] = "1"
     proc = subprocess.Popen(
-        [sys.executable, str(APP_DIR / "dashboard.py")],
+        [python_executable(), str(APP_DIR / "dashboard.py")],
         stdout=log_file,
         stderr=log_file,
         cwd=APP_DIR,
@@ -93,46 +333,65 @@ def start_dashboard_if_needed() -> subprocess.Popen | None:
     return proc
 
 
-def run_window(app_mode: str = "tracker") -> None:
-    server_proc = start_dashboard_if_needed()
+def run_window() -> None:
+    if is_lock_held(WINDOW_LOCK_PATH):
+        log("Tracker window is already open; activating existing window")
+        activate_existing_window()
+        return
 
-    if not dashboard_ready(timeout=1.0):
-        raise RuntimeError(f"Dashboard server is not responding at {DASHBOARD_URL}")
+    reexec_in_app_bundle_if_needed()
+
+    window_lock = acquire_window_lock()
+    if window_lock is None:
+        log("Tracker window lock already held; activating existing window")
+        activate_existing_window()
+        return
 
     try:
-        import webview
-    except ImportError as exc:
-        log("ERROR: pywebview is not installed. Run: python3 -m pip install --user pywebview")
-        raise RuntimeError("pywebview is not installed") from exc
+        ensure_menubar_if_needed()
+        server_proc = start_dashboard_if_needed()
 
-    app_name = "Planner" if app_mode == "planner" else "Tracker"
-    app_url = f"{DASHBOARD_URL}/?app={app_mode}#{'planner' if app_mode == 'planner' else 'dashboard'}"
-    log(f"Opening embedded {app_name} window")
-    configure_macos_app_icon(app_mode)
-    webview.create_window(
-        app_name,
-        app_url,
-        width=1280,
-        height=860,
-        min_size=(900, 650),
-    )
-    webview.start()
+        if not dashboard_ready(timeout=1.0):
+            raise RuntimeError(f"Dashboard server is not responding at {DASHBOARD_URL}")
 
-    if server_proc and server_proc.poll() is None:
-        log("Dashboard window closed; stopping dashboard server started by this window")
-        server_proc.terminate()
+        try:
+            import webview
+        except ImportError as exc:
+            log("ERROR: pywebview is not installed. Run: python3 -m pip install --user pywebview")
+            raise RuntimeError("pywebview is not installed") from exc
+
+        app_url = f"{DASHBOARD_URL}/#dashboard"
+        log("Opening embedded Tracker window")
+        configure_macos_app_icon()
+        window = webview.create_window(
+            "Tracker",
+            app_url,
+            width=1280,
+            height=860,
+            min_size=(900, 650),
+        )
+        window.events.shown += activate_current_app
+        window.events.loaded += lambda: install_native_sidebar(window)
+        webview.start()
+
+        if server_proc and server_proc.poll() is None:
+            log("Dashboard window closed; stopping dashboard server started by this window")
+            server_proc.terminate()
+    finally:
+        try:
+            fcntl.flock(window_lock.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        window_lock.close()
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("app_mode", nargs="?", choices=("tracker", "planner"), default="tracker")
-    args = parser.parse_args()
     try:
-        run_window(args.app_mode)
+        run_window()
         return 0
     except Exception as exc:
         log(f"ERROR: dashboard window failed: {exc}")
-        print(f"{args.app_mode.title()} window failed: {exc}", file=sys.stderr)
+        print(f"Tracker window failed: {exc}", file=sys.stderr)
         print(f"See log: {LOG_PATH}", file=sys.stderr)
         return 1
 

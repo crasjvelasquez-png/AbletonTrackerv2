@@ -17,7 +17,7 @@
             <span class="section-meta" data-goals-meta>—</span>
           </div>
           <p class="settings-copy">
-            Set daily and weekly targets. Weekly progress resets Friday.
+            Set daily and weekly targets. Choose when your week starts below.
           </p>
 
           <div class="goals-grid">
@@ -60,7 +60,7 @@
             <span class="section-meta" data-week-refresh-meta>—</span>
           </div>
           <p class="settings-copy">
-            Weekly progress and the heatmap align to this day.
+            Weekly progress starts on this day.
           </p>
           <div class="weekday-picker" role="radiogroup" aria-label="Week start day" data-weekday-picker>
           </div>
@@ -73,12 +73,12 @@
             <span class="section-meta">auto-resume</span>
           </div>
           <p class="settings-copy">
-            When you return to the same project within this window, the tracker treats it as one continuous session instead of creating a new entry.
+            Group nearby entries for the same project in your session history. Your recorded time stays the same.
           </p>
           <div class="action-list" style="margin-top: 16px;">
             <div class="action-row" style="flex-direction: column; align-items: flex-start; gap: 12px;">
               <div class="action-row-text" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                <h4 class="action-row-title">Session Condensation Gap</h4>
+                <h4 class="action-row-title">Group nearby sessions</h4>
                 <span class="goal-form-progress" data-gap-value-display>15 mins</span>
               </div>
               <div style="width: 100%; display: flex; gap: 16px; align-items: center;">
@@ -90,30 +90,6 @@
           </div>
         </section>
 
-        <!-- DASHBOARD WIDGETS -->
-        <section class="chart-card settings-card" data-settings-section="dashboard-prefs">
-          <div class="section-head">
-            <h3 class="section-title">Dashboard Widgets</h3>
-            <span class="section-meta">visibility</span>
-          </div>
-          <p class="settings-copy">
-            Toggle which widgets are visible on the main dashboard.
-          </p>
-          <div class="action-list" style="margin-top: 16px;">
-            <div class="action-row">
-              <div class="action-row-text">
-                <h4 class="action-row-title">Show Heatmap</h4>
-              </div>
-              <input type="checkbox" class="toggle-switch" data-widget-toggle="heatmap" checked>
-            </div>
-            <div class="action-row" style="margin-top: 10px;">
-              <div class="action-row-text">
-                <h4 class="action-row-title">Show Daily Rhythm</h4>
-              </div>
-              <input type="checkbox" class="toggle-switch" data-widget-toggle="rhythm" checked>
-            </div>
-          </div>
-        </section>
       </div>
 
       <!-- ───────────────────────────  APPEARANCE TAB  ────────────────────────── -->
@@ -141,42 +117,8 @@
             </button>
           </div>
 
-          <div class="scale-control" style="margin-top: 32px;">
-            <div>
-              <label class="field-label">Accent Color</label>
-              <p class="settings-copy scale-copy">Choose your primary UI color.</p>
-            </div>
-            <div class="color-presets" style="margin-top: 12px; gap: 12px;" data-accent-picker>
-               <button type="button" class="color-preset" style="--color-value:#4f46e5" data-accent-value="#4f46e5" aria-label="Indigo"></button>
-               <button type="button" class="color-preset" style="--color-value:#0ea5e9" data-accent-value="#0ea5e9" aria-label="Sky Blue"></button>
-               <button type="button" class="color-preset" style="--color-value:#10b981" data-accent-value="#10b981" aria-label="Emerald"></button>
-               <button type="button" class="color-preset" style="--color-value:#f59e0b" data-accent-value="#f59e0b" aria-label="Amber"></button>
-               <button type="button" class="color-preset" style="--color-value:#ef4444" data-accent-value="#ef4444" aria-label="Red"></button>
-               <button type="button" class="color-preset" style="--color-value:#8b5cf6" data-accent-value="#8b5cf6" aria-label="Violet"></button>
-            </div>
-          </div>
 
-          <div class="scale-control" style="margin-top: 32px;">
-            <div>
-              <label class="field-label">Typography</label>
-              <p class="settings-copy scale-copy">Choose your interface font.</p>
-            </div>
-            <div style="margin-top: 12px; display: flex; gap: 10px;" data-typography-picker>
-              <button class="btn subtle small" type="button" data-font-value="Inter" style="font-family: 'Inter', sans-serif;">Inter</button>
-              <button class="btn subtle small" type="button" data-font-value="System" style="font-family: -apple-system, sans-serif;">System</button>
-              <button class="btn subtle small" type="button" data-font-value="Mono" style="font-family: 'SF Mono', monospace;">Mono</button>
-            </div>
-          </div>
-
-          <div class="scale-control" style="margin-top: 32px;">
-            <div>
-              <label class="field-label">Lane Header Colors</label>
-              <p class="settings-copy scale-copy">Choose the accent color used by each Project Board lane.</p>
-            </div>
-            <div class="lane-color-settings" data-lane-color-settings></div>
-          </div>
-
-          <div class="scale-control" data-scale-control style="margin-top: 32px;">
+          <div class="scale-control" data-scale-control>
             <div>
               <label class="field-label" for="ui-scale-input">Zoom / Scale</label>
               <p class="settings-copy scale-copy">Adjusts dashboard type size, card spacing, and layout density.</p>
@@ -193,6 +135,45 @@
 
       <!-- ───────────────────────  PROJECTS & CATEGORIES TAB  ───────────────────── -->
       <div class="settings-pane" data-tab-pane="projects">
+        <section class="chart-card settings-card" data-settings-section="project-folders">
+          <div class="section-head">
+            <h3 class="section-title">Open Project</h3>
+            <span class="section-meta">menu bar</span>
+          </div>
+          <p class="settings-copy">Pin folders below your 10 most recently tracked projects. Each folder shows its 25 newest Live sets, including subfolders. Backup folders are skipped. Menu changes appear within 30 seconds.</p>
+          <form class="project-folders-form" data-project-folders-form>
+            <div class="action-list" data-project-folders-list aria-label="Pinned project folders"></div>
+            <div class="field-grid" style="margin-top:20px;">
+              <label class="field">
+                <span class="field-label">Folder path</span>
+                <input class="text-input" data-project-folder-path type="text" placeholder="~/Music/Ableton Projects" autocomplete="off">
+              </label>
+              <label class="field">
+                <span class="field-label">Menu label (optional)</span>
+                <input class="text-input" data-project-folder-label type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button class="btn subtle" type="button" data-project-folder-add disabled>Add folder</button>
+              <button class="btn" type="submit" data-project-folders-save disabled>Save folders</button>
+            </div>
+            <div class="goal-form-feedback" data-project-folders-feedback role="status" aria-live="polite" hidden></div>
+          </form>
+        </section>
+        <section class="chart-card settings-card" data-settings-section="project-templates">
+          <div class="section-head">
+            <h3 class="section-title">New from Template</h3>
+            <span class="section-meta">menu bar</span>
+          </div>
+          <p class="settings-copy">Choose which Live templates appear at the top of Open Project. Templates come from ~/Music/Ableton/User Library/Templates. Choosing one opens the template file itself, so use Save As in Live to keep it unchanged.</p>
+          <form class="project-folders-form" data-project-templates-form>
+            <div class="action-list" data-project-templates-list aria-label="Live templates"></div>
+            <div class="settings-actions">
+              <button class="btn" type="submit" data-project-templates-save disabled>Save templates</button>
+            </div>
+            <div class="goal-form-feedback" data-project-templates-feedback role="status" aria-live="polite" hidden></div>
+          </form>
+        </section>
         <!-- CATEGORIES -->
         <div class="chart-card settings-card" data-settings-section="categories-create">
           <div class="section-head">
@@ -227,126 +208,7 @@
           </div>
         </div>
 
-        <!-- ARTISTS -->
-        <div class="artist-create-grid">
-          <div class="chart-card settings-card" data-settings-section="artists-create">
-            <div class="section-head">
-              <h3 class="section-title">Artists</h3>
-            </div>
-            <form class="artist-form" data-artist-create-form>
-              <div class="field-grid">
-                <label class="field">
-                  <span class="field-label">Name</span>
-                  <input class="text-input" data-artist-name-input name="name" type="text" maxlength="64" placeholder="Ex. Daft Punk" required>
-                </label>
-                <label class="field">
-                  <span class="field-label">Email</span>
-                  <input class="text-input" data-artist-email-input name="email" type="email" placeholder="Ex. info@daftpunk.com">
-                </label>
-                <label class="field">
-                  <span class="field-label">Phone</span>
-                  <input class="text-input" data-artist-phone-input name="phone" type="text" placeholder="Ex. +1 555-0100">
-                </label>
-                <label class="field">
-                  <span class="field-label">Instagram</span>
-                  <input class="text-input" data-artist-ig-input name="instagram" type="text" placeholder="Ex. @daftpunk">
-                </label>
-              </div>
-              <div class="settings-actions">
-                <button class="btn" type="submit" data-artist-submit>Save artist</button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div class="table-card" data-settings-section="artists-library">
-          <div class="section-head">
-            <h3 class="section-title">Library</h3>
-            <span class="section-meta" data-artists-library-meta>0 total</span>
-          </div>
-          <div class="artist-library">
-            <div class="artist-library-grid" data-artist-library-grid></div>
-          </div>
-        </div>
-
-        <!-- MERGE PROJECTS -->
-        <details class="chart-card settings-card settings-disclosure" data-settings-section="merge-projects">
-          <summary>
-            <div class="section-head">
-              <h3 class="section-title">Merge Projects</h3>
-            </div>
-          </summary>
-          <p class="settings-copy">
-            Group alternate versions or exports (e.g. "Song - Mix") into a single project.
-          </p>
-
-          <form class="merge-form" data-merge-form>
-            <label class="field merge-search-field">
-              <span class="field-label">Find projects</span>
-              <input class="text-input" type="search" autocomplete="off" placeholder="Search project names..." data-merge-search>
-            </label>
-            <div class="merge-workspace">
-              <div class="merge-panel">
-                <div class="merge-panel-head">
-                  <span class="field-label">Projects to Merge</span>
-                  <span class="merge-count" data-merge-alias-count>0 selected</span>
-                </div>
-                <div class="merge-project-list" data-merge-source-list></div>
-              </div>
-              <div class="merge-panel">
-                <div class="merge-panel-head">
-                  <span class="field-label">Canonical Target</span>
-                  <span class="merge-count" data-merge-target-count>Choose one</span>
-                </div>
-                <div class="merge-project-list" data-merge-target-list></div>
-              </div>
-            </div>
-            <div class="merge-review" data-merge-summary>
-              <span>Select projects and a canonical target.</span>
-            </div>
-            <div class="settings-actions">
-              <button class="btn danger" type="submit" data-merge-submit disabled>Merge Projects</button>
-            </div>
-            <div class="option-feedback-wrap" style="margin-top: 8px;">
-              <span class="option-feedback" data-merge-feedback hidden>Merged ✓</span>
-            </div>
-          </form>
-        </details>
-
-        <!-- PROJECT METADATA -->
-        <section class="chart-card settings-card" data-settings-section="project-options">
-          <div class="section-head">
-            <h3 class="section-title">Project Options</h3>
-          </div>
-
-          <div class="option-columns">
-            <div class="option-column">
-              <div class="option-column-label">
-                Statuses
-                <span class="option-count" data-option-count="statuses">0</span>
-              </div>
-              <div class="option-list" data-option-list="statuses"></div>
-              <div class="option-add">
-                <input type="text" class="text-input option-add-input" placeholder="Add status..." data-option-add-input="statuses" maxlength="32">
-              </div>
-            </div>
-            <div class="option-column">
-              <div class="option-column-label">
-                Types
-                <span class="option-count" data-option-count="types">0</span>
-              </div>
-              <div class="option-list" data-option-list="types"></div>
-              <div class="option-add">
-                <input type="text" class="text-input option-add-input" placeholder="Add type..." data-option-add-input="types" maxlength="32">
-              </div>
-            </div>
-          </div>
-          <div class="option-feedback-wrap">
-            <span class="option-feedback" data-project-options-feedback hidden>Saved ✓</span>
-          </div>
-        </section>
       </div>
-
       <!-- ─────────────────────────  ADVANCED TAB  ──────────────────────── -->
       <div class="settings-pane" data-tab-pane="advanced">
         <section class="chart-card settings-card" data-settings-section="data">
@@ -389,7 +251,7 @@
             <div class="action-row" data-action-row="consolidate-sessions">
               <div class="action-row-text">
                 <h4 class="action-row-title">Consolidate Sessions</h4>
-                <p class="action-row-desc">Merges same-day fragments of the same project when separated by idle breaks (&le;&thinsp;90&thinsp;min) or brief vibe-check visits to other projects (&le;&thinsp;15&thinsp;min each, &le;&thinsp;20&thinsp;min total, return within 30&thinsp;min). Notes and to-dos are preserved. Active sessions are never touched.</p>
+                <p class="action-row-desc">Merges same-day fragments of the same project when separated by idle breaks (&le;&thinsp;90&thinsp;min) or brief sessions in other projects (&le;&thinsp;15&thinsp;min each, &le;&thinsp;20&thinsp;min total, return within 30&thinsp;min). Notes and to-dos are preserved. Active sessions are never touched.</p>
               </div>
               <button class="btn" type="button" data-action="consolidate-sessions">Consolidate</button>
             </div>

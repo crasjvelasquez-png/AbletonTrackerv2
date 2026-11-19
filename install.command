@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and open the standalone Tracker and Planner apps.
+# Build and open the standalone Tracker app.
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -59,7 +59,7 @@ EOF
 pkill -f "menubar.py" 2>/dev/null || true
 launchctl load "$PLIST_PATH"
 
-echo "Built Tracker.app and Planner.app. Tracker is now open and will start at login."
+echo "Built Tracker.app. Tracker is now open and will start at login."
 echo ""
 echo "Apps: $DIR/dist"
 echo "Log:  $LOG_DIR/tracker.log"

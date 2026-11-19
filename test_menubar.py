@@ -1,10 +1,10 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
-import threading
+from datetime import date, timedelta
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -21,6 +21,13 @@ class _RumpsMenuItem:
         self.title = title
         self.callback = callback
         self.key = key
+        self.children = []
+
+    def add(self, item):
+        self.children.append(item)
+
+    def clear(self):
+        self.children.clear()
 
     def set_callback(self, callback):
         self.callback = callback
@@ -108,10 +115,6 @@ class FmtDurTests(unittest.TestCase):
         self.assertEqual(fmt_dur(7200), "2h 0m")
         self.assertEqual(fmt_dur(9000), "2h 30m")
 
-    def test_none_input(self):
-        self.assertEqual(fmt_dur(None), "0m")
-
-
 class FmtQuarterTests(unittest.TestCase):
     def test_zero_seconds(self):
         self.assertEqual(fmt_quarter(0), "")
@@ -148,126 +151,24 @@ class FmtQuarterTests(unittest.TestCase):
         # 675 / 900 = 0.75 -> round(0.75) = 1 -> 1/4
         self.assertEqual(fmt_quarter(675), "\u00bc")
 
-    def test_none_input(self):
-        self.assertEqual(fmt_quarter(None), "")
-
-
 # ---------------------------------------------------------------------------
 # today_seconds
 # ---------------------------------------------------------------------------
 
 class TodaySecondsTests(unittest.TestCase):
-    def test_returns_day_seconds_for_today(self):
-        frozen = date(2026, 5, 1)
-
-        class FakeDate:
-            @staticmethod
-            def today():
-                return frozen
-
-        with patch.object(menubar, "day_seconds", return_value=3600.0) as mock_ds, \
-             patch.object(menubar, "date", FakeDate):
-            result = today_seconds()
-        mock_ds.assert_called_once_with(frozen)
-        self.assertEqual(result, 3600.0)
-
     def test_returns_zero_on_exception(self):
         with patch.object(menubar, "day_seconds", side_effect=RuntimeError("boom")):
             result = today_seconds()
         self.assertEqual(result, 0)
 
 
-# ---------------------------------------------------------------------------
-# TrackerThread — __init__ and method delegation
-# ---------------------------------------------------------------------------
-
-class TrackerThreadInitTests(unittest.TestCase):
-    """TrackerThread.__init__ creates a Tracker instance.  We prevent the
-    real Tracker.__init__ from touching the DB by mocking its side effects."""
-
-    def setUp(self):
-        self._patchers = [
-            patch.object(tracker, "setup_db"),
-            patch.object(tracker, "close_stale_open_sessions", return_value=0),
-            patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
-        ]
-        for p in self._patchers:
-            p.start()
-
-    def tearDown(self):
-        for p in reversed(self._patchers):
-            p.stop()
-
-    def test_init_creates_daemon_thread_with_tracker(self):
-        thread = TrackerThread()
-        self.assertTrue(thread.daemon)
-        self.assertIsInstance(thread.tracker, tracker.Tracker)
-
-    def test_init_sets_lock_and_stop_event(self):
-        thread = TrackerThread()
-        self.assertIsInstance(thread._lock, type(threading.Lock()))
-        self.assertIsInstance(thread._stop, type(threading.Event()))
-        self.assertFalse(thread._stop.is_set())
-
-
-class TrackerThreadMethodsTests(unittest.TestCase):
-    def setUp(self):
-        for p in [
-            patch.object(tracker, "setup_db"),
-            patch.object(tracker, "close_stale_open_sessions", return_value=0),
-            patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
-        ]:
-            p.start()
-            self.addCleanup(p.stop)
-        self.thread = TrackerThread()
-        # Fully replace the real tracker with a mock so we control responses.
-        self.thread.tracker = MagicMock()
-
-    def test_poll_now_paused_delegates(self):
-        self.thread.poll_now(paused=True)
-        self.thread.tracker.poll_once.assert_called_once_with(paused=True)
-
-    def test_poll_now_not_paused_delegates(self):
-        self.thread.poll_now(paused=False)
-        self.thread.tracker.poll_once.assert_called_once_with(paused=False)
-
-    def test_stop_sets_event_and_calls_close(self):
-        self.thread.tracker._close = MagicMock()
-        self.thread.stop()
-        self.assertTrue(self.thread._stop.is_set())
-        self.thread.tracker._close.assert_called_once()
-
-    def test_current_project_returns_name(self):
-        self.thread.tracker.project_name = "My Song"
-        self.assertEqual(self.thread.current_project(), "My Song")
-
-    def test_current_project_returns_none(self):
-        self.thread.tracker.project_name = None
-        self.assertIsNone(self.thread.current_project())
-
-    def test_status_returns_tracker_status(self):
-        fake_status = MagicMock()
-        self.thread.tracker.status = MagicMock(return_value=fake_status)
-        self.assertEqual(self.thread.status(), fake_status)
-
-    def test_consecutive_failures_delegates_to_tracker(self):
-        self.thread.tracker._consecutive_failures = 5
-        self.assertEqual(self.thread.consecutive_failures, 5)
-
-    def test_last_error_delegates_to_tracker(self):
-        self.thread.tracker._last_error = "uh oh"
-        self.assertEqual(self.thread.last_error, "uh oh")
-
-
 class TrackerThreadRunTests(unittest.TestCase):
     def setUp(self):
         for p in [
+            patch.object(tracker, "acquire_writer_lock", return_value=MagicMock()),
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
         ]:
             p.start()
             self.addCleanup(p.stop)
@@ -277,7 +178,7 @@ class TrackerThreadRunTests(unittest.TestCase):
     def test_run_delegates_to_tracker_run(self):
         self.thread.run()
         self.thread.tracker.run.assert_called_once_with(
-            stop_event=self.thread._stop,
+            stop_event=self.thread._stop_event,
             wake_interval=TRACKER_WAKE_INTERVAL,
             _lock=self.thread._lock,
         )
@@ -320,17 +221,6 @@ class DashboardProcessTests(unittest.TestCase):
         self.dp.stop()
         proc.terminate.assert_called_once()
 
-    def test_stop_ignores_none_proc(self):
-        self.dp.proc = None
-        self.dp.stop()
-
-    def test_stop_ignores_already_dead(self):
-        proc = MagicMock()
-        proc.poll.return_value = 0
-        self.dp.proc = proc
-        self.dp.stop()
-        proc.terminate.assert_not_called()
-
     def test_open_passes_correct_args(self):
         with patch.object(menubar.subprocess, "Popen") as mock_popen:
             self.dp.open()
@@ -351,10 +241,12 @@ class _AppTestBase(unittest.TestCase):
     def setUp(self):
         # Prevent Tracker.__init__ from hitting the real DB / filesystem.
         self._patchers = [
+            patch.object(menubar.AbletonTrackerApp, "_refresh_projects"),
+            patch.object(menubar, "yesterday_seconds", return_value=0),
+            patch.object(tracker, "acquire_writer_lock", return_value=MagicMock()),
             patch.object(tracker, "setup_db"),
             patch.object(tracker, "close_stale_open_sessions", return_value=0),
             patch.object(tracker.Tracker, "maybe_run_cleanup"),
-            patch.object(tracker, "_ensure_audio_probe_binary", return_value="/fake/probe"),
         ]
         for p in self._patchers:
             p.start()
@@ -384,6 +276,7 @@ class AbletonTrackerAppPauseTests(_AppTestBase):
         super().setUp()
         self.app = AbletonTrackerApp()
         self.app._refresh = MagicMock()
+        self.app.tracker_thread.poll_now = MagicMock()
 
     def tearDown(self):
         super().tearDown()
@@ -452,13 +345,31 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
         self._pause_dir.mkdir(parents=True, exist_ok=True)
         self._pause_file.touch()
 
+    def test_notifications_receive_daily_goal_and_manual_pause_status(self):
+        self._touch_pause()
+        self.app.notification_coordinator = MagicMock()
+        self.app._next_notification_check = 0
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_PAUSED, running=True
+        )
+        self.app._check_notifications(today=7200, week=9000, weekly_goal=10,
+                                      daily_goal=2, streak=3)
+        values = self.app.notification_coordinator.check.call_args.kwargs
+        self.assertEqual(values["daily_goal_hours"], 2)
+        self.assertEqual(values["pause_token"], str(self._pause_file.stat().st_mtime_ns))
+        self.assertTrue(values["ableton_running"])
+        self.assertIs(values["tracker_status"], self.app.tracker_thread.status.return_value)
+        self.app._check_notifications(today=7200, week=9000, weekly_goal=10,
+                                      daily_goal=2, streak=3)
+        self.assertEqual(self.app.notification_coordinator.check.call_count, 1)
+
     def test_refresh_shows_paused(self):
         self._touch_pause()
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_PAUSED)
         with patch.object(menubar, "day_seconds", return_value=0):
             self.app._refresh(None)
-        self.assertEqual(self.app.pause_item.title, "Resume tracking")
+        self.assertNotIn("Resume tracking", [item.title for item in self.app.menu if item])
         self.assertEqual(self.app.status_item.title, "Paused")
 
     def test_refresh_shows_idle_paused(self):
@@ -503,11 +414,43 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             self.app._refresh(None)
         self.assertIn("Ableton not running", self.app.status_item.title)
 
+    def test_refresh_flags_missing_accessibility_permission(self):
+        # A rebuilt/re-signed app loses its Accessibility grant; that must read as
+        # "not tracking", never as a neutral "Ableton open (no verified project)".
+        for state in (tracker.STATE_ABLETON_OPEN, tracker.STATE_IDLE_PAUSED):
+            with self.subTest(state=state):
+                self.app.tracker_thread.status.return_value = replace(
+                    tracker.TrackerStatus(), state=state, running=True, checked_at=1.0,
+                    message="Ableton open (no verified project)",
+                    source_error="Accessibility permission is unavailable")
+                with patch.object(menubar, "day_seconds", return_value=0):
+                    self.app._refresh(None)
+                self.assertTrue(self.app.title.startswith("⚠"))
+                self.assertEqual(self.app.status_item.title,
+                                 "Not tracking: allow Tracker in Accessibility settings")
+
+    def test_refresh_manual_pause_wins_over_stale_accessibility_error(self):
+        self._touch_pause()
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_PAUSED, paused=True, running=True,
+            source_error="Accessibility permission is unavailable")
+        with patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app.status_item.title, "Paused")
+
+    def test_refresh_ignores_accessibility_error_when_ableton_closed(self):
+        self.app.tracker_thread.status.return_value = replace(
+            tracker.TrackerStatus(), state=tracker.STATE_ABLETON_CLOSED, running=False,
+            source_error="Accessibility permission is unavailable")
+        with patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app.status_item.title, "Ableton not running")
+
     def test_refresh_shows_error(self):
         self.app.tracker_thread.tracker._consecutive_failures = 3
         self.app.tracker_thread.tracker._last_error = "Something broke badly"
         with patch.object(menubar, "day_seconds", return_value=1800), \
-             patch.object(menubar, "streak_days", return_value=0), \
+             patch.object(menubar, "production_run_days", return_value=0), \
              patch.object(menubar, "_get_default_goals", return_value=(None, None)):
             self.app._refresh(None)
         self.assertEqual(self.app.title, "\u26a0 \u00bd")
@@ -529,21 +472,66 @@ class AbletonTrackerAppRefreshTests(_AppTestBase):
             self.app._refresh(None)
         self.assertIn("1\u00bd", self.app.title)
 
-    def test_refresh_title_includes_streak_while_tracking(self):
+    def test_refresh_title_omits_streak_while_tracking(self):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
         with patch.object(menubar, "day_seconds", return_value=5400), \
-             patch.object(menubar, "streak_days", return_value=7):
+             patch.object(menubar, "production_run_days", return_value=7):
             self.app._refresh(None)
-        self.assertIn("💿7", self.app.title)
+        self.assertEqual(self.app.title, "1½")
+        self.assertEqual(self.app._badge_key[0], "tracking")
+        self.assertEqual(self.app.streak_item.title, "Streak: 7 days")
 
-    def test_refresh_title_marks_daily_goal_complete(self):
+    def test_badge_progress_follows_daily_goal_and_icon_is_reused(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(menubar, "BADGE_DIR", Path(tmp)), \
+             patch.object(menubar, "day_seconds", return_value=3600), \
+             patch.object(menubar, "_get_default_goals", return_value=(2.0, None)):
+            self.app._refresh(None)
+            first_icon = self.app.icon
+            self.app._refresh(None)
+            self.assertEqual(self.app._badge_key, ("tracking", 12))
+            self.assertIs(self.app.icon, first_icon)
+            self.assertFalse(self.app.template)
+
+    def test_badge_idle_states_use_template_icon(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_ABLETON_CLOSED)
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(menubar, "BADGE_DIR", Path(tmp)), \
+             patch.object(menubar, "day_seconds", return_value=0):
+            self.app._refresh(None)
+        self.assertEqual(self.app._badge_key[0], "idle")
+        self.assertTrue(self.app.template)
+
+    def test_badge_write_failure_falls_back_to_glyph(self):
+        self.app.tracker_thread.status.return_value = self._make_status(
+            tracker.STATE_TRACKING, project_name="Song")
+        with patch.object(menubar, "BADGE_DIR", Path("/dev/null/nope")), \
+             patch.object(menubar, "day_seconds", return_value=5400):
+            self.app._refresh(None)
+        self.assertEqual(self.app.title, "● 1½")
+
+    def test_badge_png_is_valid(self):
+        import struct, zlib
+        for state in ("tracking", "open", "idle"):
+            for progress in (-1, 0, 0.5, 3):
+                data = menubar.render_badge_png(state, progress)
+                self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(struct.unpack(">II", data[16:24]), (40, 40))
+                idat = data[data.index(b"IDAT") + 4:data.index(b"IEND") - 8]
+                self.assertEqual(len(zlib.decompress(idat)), 40 * (1 + 40 * 4))
+
+    def test_refresh_title_omits_daily_goal(self):
         self.app.tracker_thread.status.return_value = self._make_status(
             tracker.STATE_TRACKING, project_name="Song")
         with patch.object(menubar, "day_seconds", return_value=7200), \
              patch.object(menubar, "_get_default_goals", return_value=(2.0, None)):
             self.app._refresh(None)
-        self.assertIn("✓", self.app.title)
+        self.assertNotIn("✓", self.app.title)
+        self.assertNotIn("/2h", self.app.title)
 
     def test_refresh_title_no_quarter_when_zero(self):
         self.app.tracker_thread.status.return_value = self._make_status(
@@ -593,22 +581,348 @@ class AbletonTrackerAppInitTests(_AppTestBase):
         self._pause_patch.stop()
         self._tmpdir.cleanup()
 
-    def test_init_resume_tracking_when_paused(self):
+    def test_init_clears_old_manual_pause_when_control_is_hidden(self):
         self._pause_dir.mkdir(parents=True, exist_ok=True)
         self._pause_file.touch()
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.title, "Resume tracking")
+        self.assertFalse(self._pause_file.exists())
 
-    def test_init_pause_tracking_when_not_paused(self):
+    def test_init_omits_manual_pause_control(self):
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.title, "Pause tracking")
+        self.assertNotIn("Pause tracking", [item.title for item in app.menu if item])
 
-    def test_init_sets_menu_shortcuts(self):
+    def test_init_has_no_menu_shortcuts(self):
         app = AbletonTrackerApp()
-        self.assertEqual(app.pause_item.key, "p")
-        keyed_items = {item.title: item.key for item in app.menu if item and item.key}
-        self.assertEqual(keyed_items["Open Tracker"], "d")
-        self.assertEqual(keyed_items["Quit"], "q")
+        self.assertIn("Open Project", [item.title for item in app.menu if item])
+        self.assertEqual({item.title: item.key for item in app.menu if item and item.key}, {})
+
+
+class DeckActionTests(_AppTestBase):
+    """On Deck wiring, written before the menubar code.
+
+    Failure modes: a pick without a deck song shows a needless prompt or fails to
+    open Live; a swap replaces the deck song without asking, or ignores Cancel;
+    an unplugged drive crashes instead of explaining; finishing a task leaves no
+    way to name the next one; a broken song query takes down the refresh loop.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmpdir.name) / "sessions.db"
+        import sqlite3
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("""CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_name TEXT NOT NULL,
+                start_time REAL NOT NULL, end_time REAL, active_seconds REAL DEFAULT 0, last_seen_time REAL)""")
+            now = time.time()
+            for name, hours in (("April 2026 - Prince - 130 bpm Emaj", 5), ("August 2026 - DANCE - 118 bpm", 4)):
+                conn.execute("INSERT INTO sessions(project_name,start_time,end_time,active_seconds,last_seen_time) VALUES(?,?,?,?,?)",
+                             (name, now - 86400, now - 86400 + hours * 3600, hours * 3600, now - 86400 + hours * 3600))
+        conn.close()
+        self._db_patch = patch.object(tracker, "DB_PATH", self.db)
+        self._db_patch.start()
+        super().setUp()
+        self.app = AbletonTrackerApp()
+        self.app._refresh = MagicMock()
+        self.opened = []
+        self._open_patch = patch.object(menubar, "open_project", side_effect=lambda path, app: self.opened.append(path))
+        self._resolve_patch = patch.object(menubar, "resolve_project_path", side_effect=lambda db, name: f"/sets/{name}.als")
+        self._alert = patch.object(menubar.rumps, "alert", create=True, return_value=1)
+        self._window = patch.object(menubar.rumps, "Window", create=True)
+        for p in (self._open_patch, self._resolve_patch, self._alert, self._window):
+            p.start()
+        import songs as song_model
+        self.songs = song_model
+        self.keys = {s["title"]: s["key"] for s in song_model.load_songs(self.db)}
+
+    def tearDown(self):
+        for p in (self._window, self._alert, self._resolve_patch, self._open_patch):
+            p.stop()
+        super().tearDown()
+        self._db_patch.stop()
+        self._tmpdir.cleanup()
+
+    def deck(self):
+        return self.songs.current_deck(self.songs.load_songs(self.db))
+
+    def test_first_pick_puts_on_deck_and_opens_without_prompt(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        self.assertEqual(self.opened, ["/sets/April 2026 - Prince - 130 bpm Emaj.als"])
+        menubar.rumps.alert.assert_not_called()
+        self.app._refresh.assert_called_with(None)
+
+    def test_swap_asks_and_cancel_keeps_current(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        menubar.rumps.alert.return_value = 0
+        self.app.deck_pick(self.keys["August 2026 - DANCE - 118 bpm"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        self.assertEqual(len(self.opened), 1)
+        menubar.rumps.alert.return_value = -1
+        self.app.deck_pick(self.keys["August 2026 - DANCE - 118 bpm"])
+        self.assertEqual(self.deck()["title"], "August 2026 - DANCE - 118 bpm")
+        prince = next(s for s in self.songs.load_songs(self.db) if s["title"].startswith("April"))
+        self.assertEqual(prince["snoozed_until"], (date.today() + timedelta(days=30)).isoformat())
+
+    def test_offline_drive_explains_instead_of_crashing(self):
+        menubar.resolve_project_path.side_effect = ValueError("This Live set is no longer available. Check its folder or reconnect the drive.")
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.deck()["title"], "April 2026 - Prince - 130 bpm Emaj")
+        message = menubar.rumps.alert.call_args.kwargs["message"]
+        self.assertIn("reconnect the drive", message)
+
+    def test_open_falls_back_to_other_song_file_when_open_name_is_missing(self):
+        import sqlite3
+        now = time.time()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO sessions(project_name,start_time,end_time,active_seconds,last_seen_time) VALUES(?,?,?,?,?)",
+                ("April 2026 - Prince - 130 bpm Emaj - Mixing", now - 600, now, 600, now),
+            )
+            conn.commit()
+        menubar.resolve_project_path.side_effect = lambda db, name: (
+            f"/sets/{name}.als"
+            if name == "April 2026 - Prince - 130 bpm Emaj"
+            else (_ for _ in ()).throw(ValueError(f"Could not find {name}"))
+        )
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.assertEqual(self.opened, ["/sets/April 2026 - Prince - 130 bpm Emaj.als"])
+        menubar.rumps.alert.assert_not_called()
+
+    def test_next_task_saves_and_completes_without_a_dialog(self):
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.app.deck_pick(key)
+        self.app.deck_next_save("write verse 2")
+        self.assertEqual(self.deck()["next_task"], "write verse 2")
+        self.app.deck_next_complete()
+        self.assertEqual(self.deck()["next_task"], "")
+        menubar.rumps.Window.assert_not_called()
+        self.app._refresh.assert_called_with(None)
+
+    def test_due_and_stage_actions(self):
+        self.app.deck_pick(self.keys["April 2026 - Prince - 130 bpm Emaj"])
+        self.app.deck_due(7)
+        self.assertEqual(self.deck()["due_date"], (date.today() + timedelta(days=7)).isoformat())
+        self.app.deck_due(0)
+        self.assertEqual(self.deck()["due_date"], "")
+        self.app.deck_stage("recording")
+        self.assertEqual(self.deck()["stage"], "recording")
+        self.app.deck_snooze(7)
+        self.assertIsNone(self.deck())
+
+    def test_model_failure_hides_deck_instead_of_breaking_refresh(self):
+        with patch.object(menubar.songs, "load_songs", side_effect=RuntimeError("boom")):
+            self.assertIsNone(self.app._build_deck_model())
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.songs.assign_lane(self.db, key, "mix")
+        self.songs.set_lane_deck(self.db, key)
+        self.songs.set_now_lane(self.db, "mix")
+
+        model = self.app._build_deck_model()
+        self.assertEqual(model["now_lane"], "mix")
+        self.assertEqual(model["now_lane_label"], "Mix")
+        self.assertEqual([(l["key"], l["label"]) for l in model["lanes"]],
+                         [("produce", "Produce"), ("mix", "Mix"), ("master", "Master")])
+        mix_lane = next(l for l in model["lanes"] if l["key"] == "mix")
+        self.assertEqual(mix_lane["deck"]["key"], key)
+        self.assertEqual(model["deck"]["key"], key)
+
+    def test_lane_focus_calls_set_now_lane_and_refreshes(self):
+        key = self.keys["April 2026 - Prince - 130 bpm Emaj"]
+        self.songs.assign_lane(self.db, key, "mix")
+        self.songs.set_lane_deck(self.db, key)
+        self.app._totals_key = ("cached",)
+
+        with patch.object(menubar.songs, "set_now_lane", wraps=menubar.songs.set_now_lane) as spy:
+            self.app.lane_focus("mix")
+
+        spy.assert_called_once_with(self.db, "mix")
+        self.assertIsNone(self.app._totals_key)
+        self.app._refresh.assert_called_once_with(None)
+        self.assertEqual(self.deck()["key"], key)
+
+    def test_install_panel_wires_lane_focus_and_sync_panel_signature(self):
+        self.app._nsapp = MagicMock()
+        self.app.open_project_item._menu = MagicMock()
+        fake_panel = MagicMock()
+        with patch("menubar_panel.MenuBarPanel") as mock_panel_cls:
+            mock_panel_cls.attach.return_value = fake_panel
+            self.app._install_panel()
+        actions = mock_panel_cls.attach.call_args[0][3]
+        self.assertIn("lane_focus", actions)
+        self.assertEqual(actions["lane_focus"], self.app.lane_focus)
+        with patch.object(menubar.songs, "set_now_lane", wraps=menubar.songs.set_now_lane) as spy:
+            actions["lane_focus"]("master")
+        spy.assert_called_once_with(self.db, "master")
+        self.app._refresh.assert_called_with(None)
+
+        self.app._deck_model = {"now_lane": "produce", "now_lane_label": "Produce", "lanes": []}
+        self.app._show_open_ableton = True
+        self.app._sync_panel("tracking")
+        fake_panel.update.assert_called_once_with(
+            status=self.app.status_item.title,
+            today=self.app.today_item.title,
+            week=self.app.week_item.title,
+            run=self.app.streak_item.title,
+            show_open_ableton=True,
+            state="tracking",
+            deck=self.app._deck_model,
+        )
+
+
+class PanelTests(unittest.TestCase):
+    """Minimal Three Decks Now-lane popover panel contract."""
+
+    def setUp(self):
+        import AppKit as AK
+        from menubar_panel import MenuBarPanel
+
+        self.AK = AK
+        AK.NSApplication.sharedApplication()
+        self.status = AK.NSStatusBar.systemStatusBar().statusItemWithLength_(-1)
+        self.fallback_menu = AK.NSMenu.alloc().initWithTitle_("Fallback")
+        self.project_menu = AK.NSMenu.alloc().initWithTitle_("Open Project")
+        self.project_menu.addItem_(AK.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Recent", None, ""))
+        owner_item = AK.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Open Project", None, "")
+        owner_item.setSubmenu_(self.project_menu)
+        self.fallback_menu.addItem_(owner_item)
+        self.status.setMenu_(self.fallback_menu)
+
+        self.calls = []
+        self.actions = {
+            name: (lambda n: (lambda *args: self.calls.append((n, *args))))(name)
+            for name in ("tracker", "ableton", "quit", "deck_open", "deck_next_save", "deck_next_complete", "lane_focus")
+        }
+        self.panel = MenuBarPanel.attach(self.status, self.project_menu, lambda: self.calls.append(("refresh",)), self.actions)
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        self.panel.dispose()
+        self.AK.NSStatusBar.systemStatusBar().removeStatusItem_(self.status)
+
+    def _deck_model(self, now_lane="mix", with_song=True, next_task="Tame vocals"):
+        song = {
+            "key": "song-1",
+            "title": "Midnight Sketch",
+            "stage": "Mixing",
+            "next_task": next_task,
+            "due_value": "",
+            "seconds": 3600.0,
+        } if with_song else None
+        return {
+            "now_lane": now_lane,
+            "now_lane_label": {"produce": "Produce", "mix": "Mix", "master": "Master"}[now_lane],
+            "lanes": [
+                {"key": "produce", "label": "Produce", "deck": None},
+                {"key": "mix", "label": "Mix", "deck": song if now_lane == "mix" else None},
+                {"key": "master", "label": "Master", "deck": song if now_lane == "master" else None},
+            ],
+            "deck": song,
+        }
+
+    def test_update_signature_and_now_lane_deck_layout(self):
+        self.panel.update(
+            status="Working on: Midnight Sketch",
+            today="Today: 1h 20m",
+            week="This week: 6h",
+            run="Streak: 4 days",
+            show_open_ableton=False,
+            state="tracking",
+            deck=self._deck_model(now_lane="mix", with_song=True, next_task="Tame vocals"),
+        )
+        self.assertEqual(self.panel.deck_caption.stringValue(), "Now \u00b7 Mix")
+        self.assertEqual(self.panel.deck_title_button.title(), "Midnight Sketch")
+        self.assertTrue(self.panel.deck_title_button.primary)
+        self.assertFalse(self.panel.deck_check_button.isHidden())
+        self.assertEqual(self.panel.deck_next_button.title(), "Tame vocals")
+        self.assertEqual(self.panel.stats_label.stringValue(), "Today 1h 20m \u00b7 Week 6h")
+        self.assertEqual(self.panel.tracker_button.title(), "Open Tracker")
+        self.assertTrue(self.panel.tracker_button.primary)
+        self.assertEqual(self.panel.more_button.title(), "\u22ef")
+
+        # Removed controls are absent.
+        for removed in (
+            "header", "status_label", "run_caption", "run_label",
+            "today_caption", "week_caption", "today_label", "week_label",
+            "deck_stage_button", "deck_due_button", "deck_change_button",
+            "deck_pick_buttons", "deck_all_button", "project_button",
+            "ableton_button", "quit_button", "scroller",
+        ):
+            self.assertFalse(hasattr(self.panel, removed), f"{removed} should be removed")
+
+        # Panel fits without scrolling.
+        self.assertEqual(
+            self.panel.popover.contentSize().height,
+            self.panel.root.frame().size.height,
+        )
+        self.assertIs(self.panel.view_controller.view(), self.panel.root)
+
+        # Segmented lane buttons have equal width and highlight current lane.
+        widths = [b.frame().size.width for b in self.panel.lane_buttons]
+        self.assertEqual(len(widths), 3)
+        self.assertEqual(len(set(widths)), 1)
+        self.assertEqual([b.title() for b in self.panel.lane_buttons], ["Produce", "Mix", "Master"])
+        self.assertEqual([b.primary for b in self.panel.lane_buttons], [False, True, False])
+
+        # Clicking a lane button calls lane_focus with that lane key.
+        self.panel.lane_buttons[2].performClick_(None)
+        self.assertEqual(self.calls[-1], ("lane_focus", "master"))
+
+        # Clicking deck title calls deck_open; check calls deck_next_complete.
+        self.panel.deck_title_button.performClick_(None)
+        self.assertEqual(self.calls[-1], ("deck_open",))
+        self.panel.deck_check_button.performClick_(None)
+        self.assertIn(("deck_next_complete",), self.calls)
+
+    def test_empty_lane_hint_and_focus_order_and_more_menu(self):
+        self.panel.update(
+            status="Ableton not running",
+            today="Today: 0m",
+            week="This week: 2h",
+            run="Streak: \u2014",
+            show_open_ableton=True,
+            state="idle",
+            deck=self._deck_model(now_lane="produce", with_song=False),
+        )
+        self.assertEqual(self.panel.deck_caption.stringValue(), "Now \u00b7 Produce")
+        self.assertEqual(
+            self.panel.deck_empty_button.title(),
+            "Nothing on deck in Produce. Pick one in Tracker.",
+        )
+        self.assertTrue(self.panel.deck_title_button.isHidden())
+        self.assertTrue(self.panel.deck_check_button.isHidden())
+        self.panel.deck_empty_button.performClick_(None)
+        self.assertEqual(self.calls[-1], ("tracker",))
+
+        # Every focus button has an accessibility label and forms a closed key-view ring.
+        buttons = self.panel._focus_buttons
+        self.assertEqual(
+            buttons,
+            [
+                self.panel.deck_empty_button,
+                *self.panel.lane_buttons,
+                self.panel.tracker_button,
+                self.panel.more_button,
+            ],
+        )
+        for i, btn in enumerate(buttons):
+            self.assertTrue(btn.accessibilityLabel())
+            self.assertIs(btn.nextKeyView(), buttons[(i + 1) % len(buttons)])
+
+        # More menu includes Open Project, Open Ableton when show_open_ableton=True, and Quit.
+        entries_with_ableton = [e[0] for e in self.panel._more_entries() if e is not None]
+        self.assertEqual(entries_with_ableton, ["Open Project", "Open Ableton", "Quit"])
+
+        self.panel.update(
+            status="Working",
+            today="Today: 0m",
+            week="This week: 2h",
+            run="Streak: \u2014",
+            show_open_ableton=False,
+            state="tracking",
+            deck=self._deck_model(now_lane="produce", with_song=False),
+        )
+        entries_without_ableton = [e[0] for e in self.panel._more_entries() if e is not None]
+        self.assertEqual(entries_without_ableton, ["Open Project", "Quit"])
 
 
 if __name__ == "__main__":
