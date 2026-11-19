@@ -5,7 +5,7 @@ Failure coverage (written before planner.py and the /api/planner routes):
 - A bare database, or one with sessions but no planner tables, crashes GET /api/planner,
   or a GET creates tables / writes anything (the database content must be identical
   before and after every GET).
-- The overview omits a project, misgroups it (active / on_hold / archive), or its
+- The overview omits a project, misgroups it (active / on_hold / archive; shown as Settled), or its
   counts disagree with the agenda and project rows.
 - Hold: reason / back-on date / waiting_on are not stored; hold_since is reset when an
   already-held project is edited; a back-on date that is not in the future is accepted;
@@ -14,10 +14,10 @@ Failure coverage (written before planner.py and the /api/planner routes):
   hold fields behind; an On Deck or Three Decks song loses its deck when put on hold.
 - Held songs are still suggested by songs.suggestions, or an expired hold is not.
 - Priority / notes / due / stage / list actions fail to persist, accept bad input, let a
-  stage below the detected one through, or ignore Released settling a song into Archive.
+  stage below the detected one through, or ignore Released settling a song into Settled.
 - A legacy (older planner) due date is not reported as due_source "legacy".
 - Auto-archive moves a project that has to-dos, notes, a star, a due date or a hold, or
-  list_override does not beat / unbeat the automatic rule; settled songs leave Archive.
+  list_override does not beat / unbeat the automatic rule; settled songs leave Settled.
 - To-dos: add / edit / done / reopen / delete do not round-trip; general (no song)
   to-dos are missing from the agenda; to-dos of settled or orphaned song keys are
   unreachable (agenda omits them, or update / delete reject them); agenda buckets
@@ -70,7 +70,7 @@ SEED_SONGS = (
     ("Planner Bravo - Zed", 3, 3.0),                   # on hold, waiting on Ana Ruiz
     ("Planner Charlie - Zed", 4, 1.5),                 # plain active, no to-dos
     ("Planner Delta - Zed - Mixing", 1, 2.0),          # key "planner delta - zed", mixing, On Deck
-    ("Planner Echo - Zed", 100, 2.0),                  # long untouched -> auto Archive
+    ("Planner Echo - Zed", 100, 2.0),                  # long untouched -> auto Settled
     ("Planner Foxtrot - Zed", 30, 2.0),                # stale (>=21d) but still Active
 )
 K = {name: songs.song_key(title) for name, (title, _, _) in zip(
@@ -443,18 +443,18 @@ def verify(output: Path, source: Path) -> int:
           (inferred, st_s_low, st_s_bad, st_s_ok))
     client.act(action="stage", key=K["delta"], stage="mixing")  # equal to detected is allowed
 
-    # 10. Archive grouping rules.
+    # 10. Settled (archive) grouping rules.
     ov = client.overview()
     projects = {p["key"]: p for p in ov["projects"]}
     echo = projects[K["echo"]]
-    check("auto-archive applies to an untouched plain project", echo["group"] == "archive" and echo["days_idle"] >= 99, echo["group"])
+    check("auto-settle applies to an untouched plain project", echo["group"] == "archive" and echo["days_idle"] >= 99, echo["group"])
     lane_conn = sqlite3.connect(db)
     with lane_conn:
         lane_conn.execute("INSERT INTO song_lanes(song_key, lane, position, is_deck, updated_at) VALUES(?, 'mix', 0, 0, ?)",
                           (K["echo"], time.time()))
     lane_conn.close()
     in_lane = client.project(K["echo"])
-    check("a Three Decks lane keeps an idle, untouched project out of auto-archive",
+    check("a Three Decks lane keeps an idle, untouched project out of auto-settle",
           in_lane.get("group") == "active" and in_lane.get("in_lane") == "mix", in_lane.get("group"))
     lane_conn = sqlite3.connect(db)
     with lane_conn:
@@ -475,12 +475,12 @@ def verify(output: Path, source: Path) -> int:
     client.act(action="hold", key=K["echo"], reason="parked")
     held = client.project(K["echo"])["group"]
     client.act(action="resume", key=K["echo"])
-    check("star, notes, due date, open to-do or hold each keep a stale project out of Archive",
+    check("star, notes, due date, open to-do or hold each keep a stale project out of Settled",
           (starred, noted, dued, todo, held) == ("active", "active", "active", "active", "on_hold"),
           (starred, noted, dued, todo, held))
-    check("project returns to Archive when the reasons are removed", client.project(K["echo"])["group"] == "archive")
+    check("project returns to Settled when the reasons are removed", client.project(K["echo"])["group"] == "archive")
     st_lo, lo = client.act(action="list", key=K["alpha"], value="archive")
-    check("list override archive moves an active project to Archive",
+    check("list override archive moves an active project to Settled",
           st_lo == 200 and lo["project"]["group"] == "archive" and lo["project"]["list_override"] == "archive", lo.get("project"))
     st_la, la = client.act(action="list", key=K["echo"], value="active")
     check("list override active pulls an auto-archived project back",
@@ -491,15 +491,15 @@ def verify(output: Path, source: Path) -> int:
     check("list rejects other values", st_lbad == 400, st_lbad)
     client.act(action="list", key=K["echo"], value="")
 
-    # 11. Released settles into Archive and clears On Deck.
+    # 11. Released settles into Settled and clears On Deck.
     client.call("POST", "/api/on-deck", {"action": "pick", "key": K["charlie"]})
     client.act(action="todo_add", key=K["charlie"], text="Post-release thank-you note", due_date=iso(-1))
     st_rel, rel = client.act(action="stage", key=K["charlie"], stage="released")
     pc = rel.get("project", {})
-    check("Released settles into Archive, clears On Deck, even with a list override of active",
+    check("Released settles into Settled, clears On Deck, even with a list override of active",
           st_rel == 200 and pc.get("settled") is True and pc.get("group") == "archive" and pc.get("on_deck") is False, pc)
     client.act(action="list", key=K["charlie"], value="active")
-    check("settled stays in Archive regardless of list override", client.project(K["charlie"]).get("group") == "archive")
+    check("settled stays in Settled regardless of list override", client.project(K["charlie"]).get("group") == "archive")
     client.act(action="list", key=K["charlie"], value="")
 
     # 12. To-dos: round trip, validation, agenda buckets.

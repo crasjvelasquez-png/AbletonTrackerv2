@@ -213,6 +213,11 @@ window.Planner = (() => {
     return [p.stage_label || stageLabel(p.stage), p.next_todo].filter(Boolean).join(' · ');
   }
 
+  function rowSubHtml(p) {
+    if (p.group === 'archive' && !p.settled) return `${esc(stageLabel(p.stage))} · <span class="pl-mono">idle ${p.days_idle}d</span>`;
+    return esc(rowSub(p));
+  }
+
   function rowHtml(p) {
     const selected = state.view === 'project' && state.key === p.key;
     const held = p.status === 'on_hold' && !p.hold_expired;
@@ -225,7 +230,7 @@ window.Planner = (() => {
     return `<button type="button" class="pl-row${selected ? ' is-active' : ''}" data-pl-project="${esc(p.key)}" title="${esc(p.full_title)}" ${selected ? 'aria-current="true"' : ''}>
       <span class="pl-row-main">
         <span class="pl-row-title">${p.priority ? `<span class="pl-star" aria-label="Starred">${icon('star', { size: 14, filled: true })}</span>` : ''}<span class="pl-trunc">${esc(p.title)}</span></span>
-        <span class="pl-row-sub pl-trunc">${esc(rowSub(p))}</span>
+        <span class="pl-row-sub pl-trunc">${rowSubHtml(p)}</span>
       </span>
       <span class="pl-row-side">${chips.join('')}</span>
     </button>`;
@@ -241,7 +246,7 @@ window.Planner = (() => {
     const overdue = ov.counts?.overdue_todos || 0;
     const filtered = filteredProjects();
     const searching = Boolean(state.query.trim());
-    const groups = [['active', 'Active'], ['on_hold', 'On hold'], ['archive', 'Archive']];
+    const groups = [['active', 'Active'], ['on_hold', 'On hold'], ['archive', 'Settled']];
     let html = `<div class="pl-navgroup">
       <button type="button" class="pl-navrow${state.view === 'agenda' ? ' is-active' : ''}" data-pl-nav="agenda" ${state.view === 'agenda' ? 'aria-current="true"' : ''}>
         <span>Agenda</span>${overdue ? `<span class="pl-badge" title="Overdue to-dos" aria-label="${overdue} overdue">${overdue}</span>` : ''}
@@ -308,7 +313,7 @@ window.Planner = (() => {
   function autosize(el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight + 2, 420)}px`; }
 
   function dateChip(iso, overdue) {
-    return iso ? `<span class="pl-chip${overdue ? ' is-overdue' : ''}">${esc(fmtDate(iso))}</span>` : '';
+    return iso ? `<span class="pl-chip${overdue ? ' is-overdue' : ''}">${esc(fmtDate(iso))}</span>` : '<span class="pl-chip-slot" aria-hidden="true"></span>';
   }
 
   function agendaTodoHtml(item) {
@@ -422,8 +427,12 @@ window.Planner = (() => {
     html += '</div>';
     if (people.length) {
       html += '<ul class="pl-people">' + people.map(c => `<li class="pl-person" data-person-id="${c.id}">
-        <div class="pl-person-main"><span class="pl-person-name">${esc(c.name)}</span>${c.role ? `<span class="pl-muted"> · ${esc(c.role)}</span>` : ''}
-          <div class="pl-person-contact">${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}${c.phone ? `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ''}</div></div>
+        <div class="pl-person-main"><span class="pl-person-name pl-trunc">${esc(c.name)}</span>
+          ${(c.role || c.email || c.phone) ? `<div class="pl-person-meta">${[
+            c.role ? `<span>${esc(c.role)}</span>` : '',
+            c.email ? `<a class="pl-link" href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '',
+            c.phone ? `<a class="pl-link" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : '',
+          ].filter(Boolean).join('<span aria-hidden="true"> · </span>')}</div>` : ''}</div>
         <button type="button" class="pl-icon-btn" data-pl="person-remove" data-id="${c.id}" aria-label="Remove ${esc(c.name)} from this song" title="Remove">${icon('x')}</button>
       </li>`).join('') + '</ul>';
     } else if (!state.personOpen) {
@@ -464,19 +473,24 @@ window.Planner = (() => {
     if (p.in_lane) badges.push(`<span class="pl-badge-pill">Three Decks · ${esc(LANE_LABELS[p.in_lane] || p.in_lane)}</span>`);
     if (p.hold_expired) badges.push('<span class="pl-badge-pill is-accent">Back from hold</span>');
     if (p.settled) badges.push('<span class="pl-badge-pill">Released</span>');
-    else if (p.group === 'archive') badges.push('<span class="pl-badge-pill">Archive</span>');
+    else if (p.group === 'archive') badges.push('<span class="pl-badge-pill">Settled</span>');
     if (p.stale && p.group !== 'archive') badges.push(`<span class="pl-badge-pill is-warn">Idle ${p.days_idle} days</span>`);
 
-    const stageOptions = STAGES.map(([k, label], i) => {
-      const locked = k !== 'released' && inferredIdx >= 0 && i < inferredIdx;
-      return `<option value="${k}"${p.stage === k ? ' selected' : ''}${locked ? ` disabled title="Detected from your ${esc(stageLabel(p.inferred_stage))} file"` : ''}>${label}</option>`;
-    }).join('');
+    const TRACK = STAGES.slice(0, 5);
+    const currentIdx = p.stage === 'released' ? TRACK.length : TRACK.findIndex(([k]) => k === p.stage);
+    const stageTrack = `<ol class="deck-stages" aria-label="Stage">${TRACK.map(([k, label], i) => {
+      const cls = i < currentIdx ? ' is-done' : i === currentIdx ? ' is-current' : '';
+      const locked = inferredIdx >= 0 && i < inferredIdx;
+      const attrs = i === currentIdx ? ' aria-current="step"' : '';
+      const lock = locked ? ` aria-disabled="true" title="Detected from your ${esc(stageLabel(p.inferred_stage))} file"` : ` title="${esc(label)}"`;
+      return `<li><button class="deck-stage${cls}" type="button" data-pl="stage" data-stage="${k}"${attrs}${lock}><i aria-hidden="true"></i><span>${esc(label)}</span></button></li>`;
+    }).join('')}</ol>`;
 
     const canMove = !p.settled;
     const moveTo = p.group === 'archive' ? 'active' : 'archive';
     const menu = canMove ? `<div class="pl-menu-wrap">
         <button type="button" class="pl-icon-btn is-boxed" data-pl="more" aria-label="More actions" aria-haspopup="menu" aria-expanded="${state.menuOpen}">${icon('more')}</button>
-        ${state.menuOpen ? `<div class="pl-menu" role="menu"><button type="button" role="menuitem" data-pl="list-set" data-value="${moveTo}">${moveTo === 'archive' ? 'Move to Archive' : 'Move to Active'}</button></div>` : ''}
+        ${state.menuOpen ? `<div class="pl-menu" role="menu"><button type="button" role="menuitem" data-pl="list-set" data-value="${moveTo}">${moveTo === 'archive' ? 'Move to Settled' : 'Move to Active'}</button><button type="button" role="menuitem" data-pl="release">Mark released…</button></div>` : ''}
       </div>` : '';
 
     const open = (d.todos || []).filter(t => !t.done);
@@ -493,9 +507,8 @@ window.Planner = (() => {
         </div>
         <button type="button" class="pl-star-btn${p.priority ? ' is-on' : ''}" data-pl="star" aria-pressed="${p.priority ? 'true' : 'false'}" aria-label="${p.priority ? 'Remove star' : 'Star this song'}" title="${p.priority ? 'Starred' : 'Star'}"><span aria-hidden="true">${icon('star', { filled: !!p.priority })}</span></button>
       </div>
+      ${stageTrack}
       <div class="pl-toolbar">
-        <label class="pl-inline"><span class="pl-muted">Stage</span>
-          <select class="text-input pl-select" id="plStage" aria-label="Stage">${stageOptions}</select></label>
         <button type="button" class="btn small" data-pl="open-live">Open in Live</button>
         ${held ? `<button type="button" class="btn small" data-pl="resume">${p.hold_expired ? 'Clear hold' : 'Resume'}</button>`
           : (state.holdOpen || p.settled) ? '' : '<button type="button" class="btn small" data-pl="hold">Put on hold</button>'}
@@ -508,7 +521,7 @@ window.Planner = (() => {
           ${p.due_source === 'song' ? `<button type="button" class="pl-icon-btn" data-pl="due-clear" aria-label="Clear due date" title="Clear">${icon('x')}</button>` : ''}
           ${p.due_value ? `<span class="pl-chip${p.overdue && p.group !== 'archive' ? ' is-overdue' : ''}">${esc(p.due)}</span>` : ''}</dd></div>
         <div class="pl-fact"><dt>Activity</dt><dd>${esc(worked)}</dd></div>
-        <div class="pl-fact"><dt>To-dos</dt><dd>${total ? `${p.todo_done}/${total} done` : 'None yet'}</dd></div>
+        <div class="pl-fact"><dt>To-dos</dt><dd>${total ? `<span class="pl-mono">${p.todo_done}/${total} done</span>` : 'None yet'}</dd></div>
         ${p.next_task ? `<div class="pl-fact"><dt>On Deck next step</dt><dd>${esc(p.next_task)}</dd></div>` : ''}
       </dl>
       ${dueNote}
@@ -717,10 +730,27 @@ window.Planner = (() => {
         break;
       }
       case 'more': state.menuOpen = !state.menuOpen; drawDetail(); q('[data-pl="more"]')?.focus(); break;
+      case 'stage': {
+        if (!p || button.getAttribute('aria-disabled') === 'true' || button.getAttribute('aria-current') === 'step') break;
+        const stage = button.dataset.stage;
+        const res = await act({ action: 'stage', key: p.key, stage });
+        if (res) { drawDetail(); q(`[data-stage="${stage}"]`)?.focus(); }
+        break;
+      }
+      case 'release': {
+        if (!p) break;
+        state.menuOpen = false;
+        const ok = await confirm({ title: 'Mark as released?', body: `<p>“${esc(p.title)}” leaves On Deck and moves to Settled. Its tracked time is kept.</p>`, confirmLabel: 'Mark released' });
+        if (!ok) { drawDetail(); q('[data-pl="more"]')?.focus(); break; }
+        const res = await act({ action: 'stage', key: p.key, stage: 'released' });
+        drawDetail();
+        if (res) notify(`${p.title} is released`);
+        break;
+      }
       case 'list-set': {
         state.menuOpen = false;
         const res = await act({ action: 'list', key: state.key, value: button.dataset.value });
-        if (res) { drawDetail(); notify(button.dataset.value === 'archive' ? 'Moved to Archive' : 'Moved to Active'); }
+        if (res) { drawDetail(); notify(button.dataset.value === 'archive' ? 'Moved to Settled' : 'Moved to Active'); }
         break;
       }
       case 'due-clear': {
@@ -819,19 +849,7 @@ window.Planner = (() => {
 
   async function onChange(event) {
     const t = event.target;
-    if (t.id === 'plStage') {
-      const stage = t.value;
-      const p = state.detail?.project;
-      if (!p || stage === p.stage) return;
-      if (stage === 'released') {
-        const ok = await confirm({ title: 'Mark as released?', body: `<p>“${esc(p.title)}” leaves On Deck and moves to Archive. Its tracked time is kept.</p>`, confirmLabel: 'Mark released' });
-        if (!ok) { drawDetail(); q('#plStage')?.focus(); return; }
-      }
-      const res = await act({ action: 'stage', key: p.key, stage });
-      drawDetail();
-      q('#plStage')?.focus();
-      if (res && stage === 'released') notify(`${p.title} is released`);
-    } else if (t.id === 'plDue') {
+    if (t.id === 'plDue') {
       const res = await act({ action: 'due', key: state.key, date: t.value || '' });
       drawDetail();
       if (res) q('#plDue')?.focus();
@@ -867,6 +885,15 @@ window.Planner = (() => {
       if (state.menuOpen) { state.menuOpen = false; drawDetail(); q('[data-pl="more"]')?.focus(); return; }
       if (t.closest?.('.pl-todo-edit')) { state.editingTodo = null; drawDetail(); return; }
       if (t.closest?.('[data-pl-form="hold"]')) { state.holdOpen = false; state.holdEdit = false; drawDetail(); return; }
+    }
+    if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && t.matches?.('.deck-stage')) {
+      const steps = [...(t.closest('.deck-stages')?.querySelectorAll('.deck-stage:not([aria-disabled="true"])') || [])];
+      const i = steps.indexOf(t);
+      if (i >= 0) {
+        event.preventDefault();
+        steps[Math.max(0, Math.min(steps.length - 1, i + (event.key === 'ArrowRight' ? 1 : -1)))]?.focus();
+      }
+      return;
     }
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && navEl && (navEl.contains(t) || t.id === 'plSearch')) {
       const items = [searchEl, ...navEl.querySelectorAll('button')].filter(Boolean);

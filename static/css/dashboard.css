@@ -58,7 +58,7 @@ input,textarea {caret-color:var(--accent);accent-color:var(--accent)}
 ::placeholder {color:var(--ink-4);opacity:1}
 button,input,select,textarea {font-family:inherit}
 :focus-visible {outline:2px solid var(--accent)!important;outline-offset:3px;box-shadow:none!important}
-header,.nav-tab.is-active {box-shadow:none}
+header {box-shadow:none}
 .page-bg {display:none}
 .page {padding-top:28px}
 .intro {margin-bottom:24px}
@@ -199,8 +199,6 @@ button,summary,a,input,select,textarea {transition-duration:150ms}
 @media(max-width:520px) {
   header {padding:0 16px;gap:8px}
   .header-right {gap:6px}
-  .header-nav {gap:2px;padding:3px}
-  .nav-tab {padding:8px;font-size:12px}
   .logo-icon {width:32px;height:32px}
   .command-trigger {min-width:36px;padding:6px 8px}
   .command-trigger kbd {display:none}

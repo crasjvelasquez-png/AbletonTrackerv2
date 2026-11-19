@@ -4,7 +4,7 @@
  *
  * Failure modes this run is written to catch (listed before the planner UI code existed):
  *  - Choosing Released and pressing Cancel still changes the stage (UI or server); Confirm does not
- *    release the song or leave it outside Archive; the confirm dialog stays open after either button.
+ *    release the song or leave it outside Settled; the confirm dialog stays open after either button.
  *  - Contact Delete skips the confirm, Cancel still deletes, or Confirm leaves the contact in the list,
  *    on a song's People, or leaves "Waiting on <name>" on a project that was waiting on them.
  *  - Native window mode (html.native-sidebar, 52px top bar): the left list scrolls away with the page,
@@ -14,11 +14,14 @@
  *  - Quick-adding a general to-do does not appear in the agenda, loses its text on error, or the
  *    Enter key does nothing.
  *  - Project rows are missing, grouped wrongly (held rows outside "On hold", archived rows outside
- *    the collapsed Archive), or clicking / keyboard Enter does not open the detail pane.
+ *    the collapsed Settled group), or clicking / keyboard Enter does not open the detail pane.
  *  - Star, hold (reason + back-on date + waiting-on), resume, to-do add / check, inline new contact
  *    + link, and notes (save on blur) look saved but are not persisted after a full reload.
  *  - A checked to-do stays in the open list, or is not reachable under "Done".
- *  - Stage select allows stages below the detected one; Released skips the confirm dialog.
+ *  - The stage track lets a click change a stage below the detected one, marks the wrong segments done /
+ *    current, loses arrow-key movement among enabled stages, or does not persist a click; releasing
+ *    (from the ... menu) skips the confirm dialog, and clicking an earlier segment does not un-release.
+ *  - The top pill navigation is still in the DOM, or the Cmd+K palette cannot open the Planner page.
  *  - User text is injected as HTML (an XSS title / reason renders as markup).
  *  - The Contacts view omits the new contact or its linked song; Save / Delete do not round-trip.
  *  - Narrow layout (700px) keeps two columns, hides the detail "Back" button, or Back fails to
@@ -190,8 +193,11 @@ async function main() {
     check('Agenda nav row is the current selection', await ev(`${q('[data-pl-nav="agenda"]')}.getAttribute('aria-current') === 'true'`));
     check('On Deck reminder shows the deck song', (await text('.pl-deck')) ?.includes('Planner Delta'), await text('.pl-deck'));
     check('Overdue bucket is shown with seeded overdue to-do', await ev(`[...document.querySelectorAll('#plannerRoot .pl-bucket h3')].some(h => /overdue/i.test(h.textContent))`));
-    check('Archive group exists and is collapsed', await ev(`(() => { const t = ${q('[data-pl-group="archive"]')}; return !!t && t.getAttribute('aria-expanded') === 'false' && !${q(row('planner echo - zed'))}; })()`));
-    check('every list group head computes 12px (Archive toggle matches)', await ev(`(() => { const h = [...document.querySelectorAll('#plannerRoot .pl-group-head')]; return h.length >= 2 && h.every(e => getComputedStyle(e).fontSize === '12px' && getComputedStyle(e).fontWeight === '600'); })()`));
+    check('Settled group exists and is collapsed', await ev(`(() => { const t = ${q('[data-pl-group="archive"]')}; return !!t && t.getAttribute('aria-expanded') === 'false' && !${q(row('planner echo - zed'))}; })()`));
+    check('every list group head computes 12px (Settled toggle matches)', await ev(`(() => { const h = [...document.querySelectorAll('#plannerRoot .pl-group-head')]; return h.length >= 2 && h.every(e => getComputedStyle(e).fontSize === '12px' && getComputedStyle(e).fontWeight === '600'); })()`));
+    check('group head text says Settled (not Archive)', (await text('[data-pl-group="archive"] span:nth-of-type(2)')) === 'Settled', await text('[data-pl-group="archive"]'));
+    check('no top pill nav (.header-nav) in the DOM', await ev(`!document.querySelector('.header-nav, .nav-tab, [data-view-tab]')`));
+    check('every list group head shares one text colour', await ev(`(() => { const c = [...document.querySelectorAll('#plannerRoot .pl-group-head')].map(e => getComputedStyle(e).color); return c.length >= 2 && c.every(x => x === c[0]); })()`));
     check('held project sits in On hold group', await ev(`!!${q(`[data-pl-list="on_hold"] ${row(HELD_KEY)}`)}`));
     check('starred project is in Active group', await ev(`!!${q(`[data-pl-list="active"] ${row('planner alpha - zed')}`)}`));
     await shot('agenda-light');
@@ -224,12 +230,60 @@ async function main() {
     check('clicking a project row opens its detail pane', true);
   });
 
-  // 4. Stage rules + XSS-safe title rendering.
-  await step('stage select respects detected stage', async () => {
-    const info = await ev(`(() => { const s = ${q('#plStage')}; return s ? { value: s.value, disabled: [...s.options].filter(o => o.disabled).map(o => o.value) } : null; })()`);
-    check('stage select exists and locks nothing below detection for a fresh idea song', info && Array.isArray(info.disabled), JSON.stringify(info));
+  // 4. Stage track: segments, locking, arrow keys, persistence, XSS-safe title rendering.
+  const stageState = () => ev(`[...document.querySelectorAll('[data-pl-pane="project"] [data-pl="stage"]')].map(b => ({
+    stage: b.dataset.stage, done: b.classList.contains('is-done'), current: b.getAttribute('aria-current') === 'step',
+    locked: b.getAttribute('aria-disabled') === 'true', disabled: b.disabled }))`);
+  const apiProject = key => ev(`fetch('/api/planner?key=' + encodeURIComponent(${JSON.stringify(key)})).then(r => r.json()).then(d => d.project)`);
+  await step('stage track', async () => {
+    const segs = await stageState();
+    const inferred = (await apiProject(KEY)).inferred_stage;
+    const order = ['idea', 'production', 'recording', 'mixing', 'mastering'];
+    const lockedExpected = order.slice(0, order.indexOf(inferred));
+    check('stage track has five buttons idea..mastering in order', JSON.stringify(segs.map(x => x.stage)) === JSON.stringify(order), JSON.stringify(segs));
+    check('stage track is an ordered list labelled Stage', await ev(`document.querySelector('[data-pl-pane="project"] ol.deck-stages')?.getAttribute('aria-label') === 'Stage' && !document.querySelector('#plStage')`));
+    check('locked stages (below detected) use aria-disabled, stay focusable, and match the detected stage',
+      JSON.stringify(segs.filter(x => x.locked).map(x => x.stage)) === JSON.stringify(lockedExpected) && segs.every(x => !x.disabled), JSON.stringify(segs));
+    check('exactly one segment is current (aria-current=step) and earlier ones are done',
+      segs.filter(x => x.current).length === 1 && segs.every((x, i) => x.done === (i < segs.findIndex(y => y.current))), JSON.stringify(segs));
+    check('locked segment explains itself in its title', await ev(`(() => { const b = document.querySelector('[data-pl="stage"][aria-disabled="true"]'); return !b || /Detected from your/.test(b.title); })()`));
+    check('segments are 5 Tab stops minus locked ones (none have tabindex=-1)', await ev(`[...document.querySelectorAll('[data-pl="stage"]')].every(b => b.tabIndex === 0)`));
     const delta = await ev(`fetch('/api/planner?key=' + encodeURIComponent('planner delta - zed')).then(r => r.json()).then(d => d.project.inferred_stage)`);
     check('backend reports inferred stage for locking', typeof delta === 'string', delta);
+    await shot('stage-track');
+
+    // Locked click is a no-op (UI and server).
+    const lockedStage = segs.find(x => x.locked)?.stage;
+    const beforeLocked = (await apiProject(KEY)).stage;
+    if (lockedStage) {
+      await click(`[data-pl="stage"][data-stage="${lockedStage}"]`);
+      await sleep(250);
+      check('clicking a locked stage is a no-op in the UI and on the server', (await stageState()).find(x => x.current)?.stage === beforeLocked && (await apiProject(KEY)).stage === beforeLocked);
+    } else {
+      check('clicking a locked stage is a no-op (no locked stage on this song)', false, 'seed has no locked stage');
+    }
+
+    // Arrow keys: focus moves among enabled stages, clamped, locked skipped.
+    const cur = segs.find(x => x.current).stage;
+    const enabled = segs.filter(x => !x.locked).map(x => x.stage);
+    const ci = enabled.indexOf(cur);
+    await ev(`document.querySelector('[data-pl="stage"][data-stage="${cur}"]').focus(); true`);
+    await press('ArrowRight');
+    check('ArrowRight moves focus to the next enabled stage', (await ev(`document.activeElement?.dataset?.stage`)) === enabled[Math.min(ci + 1, enabled.length - 1)], await ev(`document.activeElement?.dataset?.stage`));
+    for (let i = 0; i < 6; i += 1) await press('ArrowLeft');
+    check('ArrowLeft clamps at the first enabled stage (locked ones are skipped)', (await ev(`document.activeElement?.dataset?.stage`)) === enabled[0], await ev(`document.activeElement?.dataset?.stage`));
+    for (let i = 0; i < 6; i += 1) await press('ArrowRight');
+    check('ArrowRight clamps at mastering', (await ev(`document.activeElement?.dataset?.stage`)) === 'mastering', await ev(`document.activeElement?.dataset?.stage`));
+
+    // Click persists and keeps focus.
+    const target = enabled.find(st => st !== cur && order.indexOf(st) > order.indexOf(cur)) || enabled.find(st => st !== cur);
+    await click(`[data-pl="stage"][data-stage="${target}"]`);
+    await waitFor(`document.querySelector('[data-pl="stage"][aria-current="step"]')?.dataset.stage === ${JSON.stringify(target)}`, 'clicked stage becomes current');
+    const saved = await apiProject(KEY);
+    check('clicking a stage persists through /api/planner', saved.stage === target, JSON.stringify(saved.stage));
+    check('focus returns to the clicked stage after redraw', (await ev(`document.activeElement?.dataset?.stage`)) === target);
+    await click(`[data-pl="stage"][data-stage="${cur}"]`);
+    await waitFor(`document.querySelector('[data-pl="stage"][aria-current="step"]')?.dataset.stage === ${JSON.stringify(cur)}`, 'stage restored');
   });
 
   // 5. Star.
@@ -341,21 +395,23 @@ async function main() {
     await shot('contacts');
   });
 
-  // 12b. Richer project (starred, overdue to-do, due date, linked person) with Archive expanded.
-  await step('project with Archive open', async () => {
+  // 12b. Richer project (starred, overdue to-do, due date, linked person) with Settled expanded.
+  await step('project with Settled open', async () => {
     await click('[data-pl-group="archive"]');
     await waitFor(`${q(row('planner echo - zed'))}`, 'archive rows');
-    check('Archive group expands on click', true);
+    check('Settled group expands on click', true);
     await click(row('planner alpha - zed'));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Alpha') && document.querySelectorAll('.pl-todos-open .pl-todo').length ${ALLOW_REAL ? '>= 2' : '=== 2'}`, 'alpha detail');
     await shot('project-alpha');
     await click(row('planner echo - zed'));
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Echo')`, 'echo detail');
-    check('archived project offers Move to Active', await ev(`(async () => { document.querySelector('[data-pl="more"]').click(); await new Promise(r => setTimeout(r, 50)); return /Move to Active/.test(document.querySelector('.pl-menu')?.textContent || ''); })()`));
+    check('settled-list project offers Move to Active', await ev(`(async () => { document.querySelector('[data-pl="more"]').click(); await new Promise(r => setTimeout(r, 50)); return /Move to Active/.test(document.querySelector('.pl-menu')?.textContent || ''); })()`));
     await shot('project-archived');
+    await shot('settled');
+    check('auto-settled project shows a Settled pill (not Archive)', await ev(`[...document.querySelectorAll('[data-pl-pane="project"] .pl-badge-pill')].some(b => b.textContent.trim() === 'Settled') && ![...document.querySelectorAll('#plannerRoot *')].some(e => e.children.length === 0 && /archive/i.test(e.textContent))`));
   });
 
-  // 12c. Released confirm: Cancel leaves the stage alone, Confirm releases and archives.
+  // 12c. Released confirm (from the ... menu): Cancel leaves the stage alone, Confirm releases and settles.
   const REL = 'planner foxtrot - zed';   // seeded, active, not On Deck, not in a lane: safe to release
   const apiStage = key => ev(`fetch('/api/planner?key=' + encodeURIComponent(${JSON.stringify(key)})).then(r => r.json()).then(d => ({ stage: d.project.stage, settled: d.project.settled, group: d.project.group }))`);
   const modalOpen = () => ev(`document.getElementById('modal').classList.contains('show')`);
@@ -364,29 +420,42 @@ async function main() {
     await waitFor(`${q('#plTitle')}?.textContent.includes('Planner Foxtrot')`, 'foxtrot detail');
     const before = await apiStage(REL);
     check('release target is not yet released', !before.settled && before.stage !== 'released', JSON.stringify(before));
-    await setValue('#plStage', 'released');
+    check('active song menu offers Move to Settled and Mark released', await ev(`(async () => { document.querySelector('[data-pl="more"]').click(); await new Promise(r => setTimeout(r, 50)); const t = document.querySelector('.pl-menu')?.textContent || ''; return /Move to Settled/.test(t) && /Mark released/.test(t) && !/Archive/.test(t); })()`));
+    await shot('release-menu');
+    await click('[data-pl="release"]');
     await waitFor(`document.getElementById('modal').classList.contains('show')`, 'confirm dialog');
-    check('choosing Released opens the confirm dialog', /released/i.test(await text('#modalTitle')), await text('#modalTitle'));
+    check('Mark released opens the confirm dialog', /released/i.test(await text('#modalTitle')), await text('#modalTitle'));
+    check('confirm body says it moves to Settled', /moves to Settled/.test(await text('#modalBody')), await text('#modalBody'));
     await shot('release-confirm');
     await click('#modalCancel');
     await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Cancel');
     await sleep(250);
-    const ui = await ev(`${q('#plStage')}.value`);
+    const ui = (await stageState()).find(x => x.current)?.stage;
     const after = await apiStage(REL);
     check('Cancel keeps the stage in the UI', ui === before.stage, `${ui} vs ${before.stage}`);
     check('Cancel keeps the stage on the server', after.stage === before.stage && !after.settled, JSON.stringify(after));
-    await setValue('#plStage', 'released');
+    check('Cancel closes the menu and focuses the ... button', await ev(`!document.querySelector('.pl-menu') && document.activeElement === document.querySelector('[data-pl="more"]')`));
+    await click('[data-pl="more"]');
+    await click('[data-pl="release"]');
     await waitFor(`document.getElementById('modal').classList.contains('show')`, 'confirm dialog again');
     await click('#modalConfirm');
     await waitFor(`!document.getElementById('modal').classList.contains('show')`, 'dialog closed after Confirm');
     await waitFor(`[...document.querySelectorAll('[data-pl-pane="project"] .pl-badge-pill')].some(b => b.textContent.trim() === 'Released')`, 'Released badge');
     check('Confirm shows the project as Released', true);
     const done = await apiStage(REL);
-    check('Confirm releases the song on the server and moves it to Archive', done.stage === 'released' && done.settled && done.group === 'archive', JSON.stringify(done));
-    await waitFor(`${q(`[data-pl-list="archive"] ${row(REL)}`)}`, 'row in Archive');
-    check('released project row sits in the Archive group', true);
+    check('Confirm releases the song on the server and moves it to Settled', done.stage === 'released' && done.settled && done.group === 'archive', JSON.stringify(done));
+    await waitFor(`${q(`[data-pl-list="archive"] ${row(REL)}`)}`, 'row in Settled');
+    check('released project row sits in the Settled group', true);
     check('released row is no longer in Active', await ev(`!${q(`[data-pl-list="active"] ${row(REL)}`)}`));
     await shot('project-released');
+    const rel = await stageState();
+    check('released song shows all five stages done, none current, no menu', rel.length === 5 && rel.every(x => x.done && !x.current) && !(await exists('[data-pl="more"]')), JSON.stringify(rel));
+    await click('[data-pl="stage"][data-stage="mixing"]');
+    await waitFor(`document.querySelector('[data-pl="stage"][aria-current="step"]')?.dataset.stage === 'mixing'`, 'earlier segment un-releases');
+    check('clicking an earlier segment un-releases without a dialog', !(await modalOpen()));
+    const un = await apiStage(REL);
+    check('un-release persists: stage mixing, no longer settled', un.stage === 'mixing' && !un.settled, JSON.stringify(un));
+    check('Released badge is gone after un-release', await ev(`![...document.querySelectorAll('[data-pl-pane="project"] .pl-badge-pill')].some(b => b.textContent.trim() === 'Released')`));
   });
 
   // 12d. Contact delete: Cancel keeps, Confirm removes everywhere (list, People, Waiting on).
@@ -454,7 +523,10 @@ async function main() {
     check('left list stays on screen (sticky) after scrolling', m.listTop > 0 && m.listTop < 400 && m.listBottom > 200, JSON.stringify(m));
     check('left list is not hidden under the 52px top offset or header', m.listTop >= 52 && m.listTop >= m.headerBottom - 1, JSON.stringify(m));
     check('search box and a visible list row are the topmost elements at their position', m.searchHit && m.navHit, JSON.stringify(m));
-    await ev(`window.scrollTo(0, 0); document.documentElement.classList.remove('native-sidebar'); true`);
+    await ev(`window.scrollTo(0, 0); true`);
+    await waitFor(`window.scrollY === 0`, 'scrolled back to top', 4000).catch(() => {});
+    await shot('native');
+    await ev(`document.documentElement.classList.remove('native-sidebar'); true`);
   });
 
   // 13. Dark mode + reduced motion + overflow.
@@ -498,6 +570,45 @@ async function main() {
     check('Back returns to the list', await ev(`${q('#plSearch')}.getBoundingClientRect().width > 0`));
     await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
   });
+
+  // 15. Dashboard header without pills, and the Cmd+K palette as the way to reach Planner.
+  await step('dashboard header and palette', async () => {
+    await ev(`location.hash = '#dashboard'; true`);
+    await waitFor(`!document.getElementById('appDashboard').hidden && document.getElementById('pageTitle').textContent === 'Dashboard'`, 'dashboard view');
+    await sleep(600);
+    check('Dashboard view has no top pill nav and keeps the search trigger visible', await ev(`!document.querySelector('.header-nav, .nav-tab, [data-view-tab]') && document.getElementById('commandTrigger').getBoundingClientRect().width > 0`));
+    check('header does not overflow horizontally on Dashboard', !(await overflowX()));
+    await shot('dashboard');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'k', code: 'KeyK', modifiers: 4, windowsVirtualKeyCode: 75 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'k', code: 'KeyK', modifiers: 4, windowsVirtualKeyCode: 75 });
+    await waitFor(`document.getElementById('commandDialog').open`, 'palette opens on Cmd+K');
+    await setValue('#commandSearch', 'planner');
+    const entry = await waitFor(`(() => { const b = [...document.querySelectorAll('#commandResults [data-command-index]')].find(x => x.querySelector('small')?.textContent === 'Page' && x.querySelector('span')?.textContent === 'Planner'); return b ? b.dataset.commandIndex : false; })()`, 'Planner page entry in the palette');
+    check('Cmd+K palette lists a Planner page entry', entry !== false);
+    await shot('palette');
+    await click(`#commandResults [data-command-index="${entry}"]`);
+    await waitFor(`!document.getElementById('appPlanner').hidden && document.getElementById('pageTitle').textContent === 'Planner'`, 'Planner opened from the palette');
+    check('running the Planner palette entry opens the Planner view', true);
+    check('search trigger stays visible on Planner', await ev(`document.getElementById('commandTrigger').getBoundingClientRect().width > 0`));
+  });
+
+  // 16. Stage track and rows at narrow widths (layout unchanged, current label never clipped).
+  for (const w of [700, 375]) {
+    await step(`stage track at ${w}px`, async () => {
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile: false });
+      await waitFor(`window.innerWidth === ${w}`, `viewport ${w}`);
+      await ev(`location.hash = '#planner'; true`);
+      await waitFor(`${q(row(KEY))}`, 'planner list');
+      await click(row(KEY));
+      await waitFor(`${q('[data-pl="stage"]')}`, 'stage track');
+      const m = await ev(`(() => { const c = document.querySelector('.deck-stage.is-current span'); const t = document.querySelector('.deck-stages').getBoundingClientRect();
+        const b = document.querySelector('.deck-stage.is-current').getBoundingClientRect();
+        return { clipped: c.scrollWidth > c.clientWidth + 1, overflow: document.documentElement.scrollWidth > window.innerWidth + 1, within: b.right <= t.right + 1 }; })()`);
+      check(`current stage label is not truncated and nothing overflows at ${w}px`, !m.clipped && !m.overflow, JSON.stringify(m));
+      await shot(`stage-track-${w}`);
+    });
+  }
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
 
   check('zero console errors or uncaught exceptions', consoleErrors.length === 0, consoleErrors.join(' | '));
 }
